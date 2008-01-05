@@ -1,0 +1,330 @@
+// Microsoft Visual C++ generated resource script.
+//
+#include "resource.h"
+
+#define APSTUDIO_READONLY_SYMBOLS
+/////////////////////////////////////////////////////////////////////////////
+//
+// Generated from the TEXTINCLUDE 2 resource.
+//
+#include "afxres.h"
+
+/////////////////////////////////////////////////////////////////////////////
+#undef APSTUDIO_READONLY_SYMBOLS
+
+/////////////////////////////////////////////////////////////////////////////
+// English (U.S.) resources
+
+#if !defined(AFX_RESOURCE_DLL) || defined(AFX_TARG_ENU)
+#ifdef _WIN32
+LANGUAGE LANG_ENGLISH, SUBLANG_ENGLISH_US
+#pragma code_page(1252)
+#endif //_WIN32
+
+/////////////////////////////////////////////////////////////////////////////
+//
+// Dialog
+//
+
+IDD_ABOUT DIALOGEX 0, 0, 213, 130
+STYLE DS_SETFONT | DS_MODALFRAME | WS_POPUP | WS_CAPTION | WS_SYSMENU
+CAPTION "About x264vfw"
+FONT 8, "MS Sans Serif", 0, 0, 0x0
+BEGIN
+    DEFPUSHBUTTON   "OK",IDOK,158,109,48,14
+    CTEXT           "x264vfw - H.264/MPEG-4 AVC encoder",IDC_X264,6,6,199,8
+    CTEXT           "BUILD",IDC_BUILD,6,18,199,18
+    CTEXT           "Copyright 2005-2008 Laurent Aimar, Justin Clay, Min Chen,\nEric Petit, Måns Rullgård, Loren Merritt,\nAnton Mitrofanov (a.k.a. BugMaster)",IDC_STATIC,6,42,199,30
+    CTEXT           "This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation.",IDC_STATIC,6,78,199,26
+    PUSHBUTTON      "Visit Homepage",IDC_HOMEPAGE,7,109,77,14
+END
+
+IDD_ERRCONSOLE DIALOG  0, 0, 264, 130
+STYLE DS_SETFONT | DS_MODALFRAME | DS_CENTER | WS_POPUP | WS_CAPTION
+CAPTION "x264vfw log console"
+FONT 8, "MS Sans Serif"
+BEGIN
+    DEFPUSHBUTTON   "OK",IDOK,68,110,48,14
+    PUSHBUTTON      "Copy",IDC_COPYCLIP,148,110,48,14
+    LISTBOX         IDC_CONSOLE,6,8,251,95,LBS_HASSTRINGS | LBS_NOINTEGRALHEIGHT | LBS_NOSEL | WS_VSCROLL
+END
+
+IDD_MAINCONFIG DIALOGEX 0, 0, 204, 222
+STYLE DS_SETFONT | DS_MODALFRAME | WS_POPUP | WS_CAPTION | WS_SYSMENU
+CAPTION "x264vfw configuration"
+FONT 8, "MS Sans Serif", 400, 0, 0x0
+BEGIN
+    DEFPUSHBUTTON   "OK",IDOK,156,204,42,14
+    CONTROL         "",IDC_TABCONTROL,"SysTabControl32",TCS_MULTILINE | WS_TABSTOP,0,0,204,200
+    PUSHBUTTON      "Load Defaults",IDC_DEFAULTS,6,204,54,14
+    PUSHBUTTON      "Cancel",IDCANCEL,108,204,42,14
+END
+
+IDD_TAB_BITRATE DIALOGEX 0, 0, 200, 188
+STYLE DS_SETFONT | DS_FIXEDSYS | WS_CHILD
+FONT 8, "MS Shell Dlg", 0, 0, 0x0
+BEGIN
+    CONTROL         IDB_LOGO,IDC_LOGO,"Static",SS_BITMAP,31,12,136,39,WS_EX_CLIENTEDGE
+    CTEXT           "BUILD",IDC_BUILDREV,7,52,186,18,WS_DISABLED
+    COMBOBOX        IDC_BITRATEMODE,30,72,138,66,CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
+    LTEXT           "Average bitrate (kbit/s)",IDC_BITRATELABEL,30,90,109,12,SS_CENTERIMAGE
+    EDITTEXT        IDC_BITRATEEDIT,144,90,24,12,ES_AUTOHSCROLL
+    CONTROL         "",IDC_BITRATESLIDER,"msctls_trackbar32",TBS_BOTH | TBS_NOTICKS | WS_TABSTOP,24,104,150,18
+    LTEXT           "0",IDC_BITRATELOW,30,122,66,12,SS_CENTERIMAGE
+    RTEXT           "9999",IDC_BITRATEHIGH,108,122,60,12,SS_CENTERIMAGE
+    CONTROL         "Update statsfile",IDC_UPDATESTATS,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,12,144,173,12
+    LTEXT           "Statsfile name",IDC_STATIC,12,162,48,12,SS_CENTERIMAGE
+    EDITTEXT        IDC_STATSFILE,60,162,102,12,ES_AUTOHSCROLL
+    PUSHBUTTON      "...",IDC_STATSFILE_BROWSE,168,162,18,12
+END
+
+IDD_TAB_RATECONTROL DIALOGEX 0, 0, 200, 188
+STYLE DS_SETFONT | DS_FIXEDSYS | WS_CHILD
+FONT 8, "MS Shell Dlg", 0, 0, 0x0
+BEGIN
+    GROUPBOX        "Bitrate",IDC_STATIC,6,2,186,53,WS_DISABLED
+    LTEXT           "Keyframe boost (%)",IDC_STATIC,42,10,78,12,SS_CENTERIMAGE
+    LTEXT           "B-frames reduction (%)",IDC_STATIC,42,24,78,12,SS_CENTERIMAGE
+    LTEXT           "Bitrate variability (%)",IDC_STATIC,42,38,78,12,SS_CENTERIMAGE
+    EDITTEXT        IDC_IPRATIO,126,10,24,12,ES_AUTOHSCROLL | ES_NUMBER
+    EDITTEXT        IDC_PBRATIO,126,24,24,12,ES_AUTOHSCROLL | ES_NUMBER
+    EDITTEXT        IDC_CURVECOMP,126,38,24,12,ES_AUTOHSCROLL | ES_NUMBER
+    GROUPBOX        "Quantization limits",IDC_STATIC,6,56,186,52,WS_DISABLED
+    LTEXT           "Min QP",IDC_STATIC,42,64,78,12,SS_CENTERIMAGE
+    LTEXT           "Max QP",IDC_STATIC,42,78,78,12,SS_CENTERIMAGE
+    LTEXT           "Max QP step",IDC_STATIC,42,92,78,12,SS_CENTERIMAGE
+    EDITTEXT        IDC_QPMIN,126,64,24,12,ES_AUTOHSCROLL | ES_NUMBER
+    EDITTEXT        IDC_QPMAX,126,78,24,12,ES_AUTOHSCROLL | ES_NUMBER
+    EDITTEXT        IDC_QPSTEP,126,92,24,12,ES_AUTOHSCROLL | ES_NUMBER
+    GROUPBOX        "Scene-cut",IDC_STATIC,6,110,186,56,WS_DISABLED
+    LTEXT           "Scene-cut threshold",IDC_STATIC,42,119,78,12,SS_CENTERIMAGE
+    LTEXT           "Min IDR-frame interval",IDC_STATIC,42,133,78,12,SS_CENTERIMAGE
+    LTEXT           "Max IDR-frame interval",IDC_STATIC,42,147,78,12,SS_CENTERIMAGE
+    EDITTEXT        IDC_SCENECUT,126,119,24,12,ES_AUTOHSCROLL
+    EDITTEXT        IDC_KEYINTMIN,126,133,24,12,ES_AUTOHSCROLL | ES_NUMBER
+    EDITTEXT        IDC_KEYINTMAX,126,147,24,12,ES_AUTOHSCROLL | ES_NUMBER
+END
+
+IDD_TAB_IPFRAMES DIALOGEX 0, 0, 200, 188
+STYLE DS_SETFONT | DS_FIXEDSYS | WS_CHILD
+FONT 8, "MS Shell Dlg", 0, 0, 0x0
+BEGIN
+    GROUPBOX        "Partitions",IDC_STATIC,6,2,186,90,WS_DISABLED
+    CONTROL         "8x8 transform",IDC_DCT8X8,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,30,11,147,12
+    CONTROL         "8x8 Intra search",IDC_I8X8,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,30,24,147,12
+    CONTROL         "4x4 Intra search",IDC_I4X4,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,30,37,147,12
+    CONTROL         "8x8, 8x16 and 16x8 P-frame search",IDC_P8X8,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,30,50,147,12
+    CONTROL         "4x4, 4x8 and 8x4 P-frame search",IDC_P4X4,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,30,63,147,12
+    CONTROL         "8x8, 8x16 and 16x8 B-frame search",IDC_B8X8,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,30,76,147,12
+    GROUPBOX        "B-frames",IDC_STATIC,6,94,186,86,WS_DISABLED
+    LTEXT           "Max consecutive",IDC_STATIC,17,103,90,12,SS_CENTERIMAGE
+    EDITTEXT        IDC_BFRAME,113,103,24,12,ES_AUTOHSCROLL | ES_NUMBER
+    CONTROL         "VD hack",IDC_VDHACK,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,141,103,45,12
+    LTEXT           "Bias",IDC_STATIC,17,117,14,12,SS_CENTERIMAGE
+    CONTROL         "",IDC_BBIASSLIDER,"msctls_trackbar32",TBS_BOTH | TBS_NOTICKS | WS_TABSTOP,35,117,72,12
+    EDITTEXT        IDC_BBIAS,113,117,24,12,ES_AUTOHSCROLL
+    CONTROL         "Adaptive",IDC_BADAPT,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,141,117,45,12
+    CONTROL         "Use as references",IDC_BREFS,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,17,133,76,12
+    CONTROL         "Weighted prediction",IDC_WBPRED,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,97,133,89,12
+    CONTROL         "Bidirectional motion estimation",IDC_BIDIR_ME,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,17,145,169,12
+    LTEXT           "Direct MV prediction",IDC_STATIC,30,161,65,12,SS_CENTERIMAGE
+    COMBOBOX        IDC_DIRECTPRED,97,161,71,67,CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
+END
+
+IDD_TAB_MISC DIALOGEX 0, 0, 200, 188
+STYLE DS_SETFONT | DS_FIXEDSYS | WS_CHILD
+FONT 8, "MS Shell Dlg", 0, 0, 0x0
+BEGIN
+    GROUPBOX        "Motion estimation",IDC_STATIC,7,2,186,82,WS_DISABLED
+    LTEXT           "Partition decision",IDC_STATIC,24,12,62,12,SS_CENTERIMAGE
+    COMBOBOX        IDC_SUBPEL,90,12,51,77,CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
+    CONTROL         "B-RDO",IDC_BRDO,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,146,12,40,12
+    LTEXT           "Method",IDC_STATIC,24,30,62,12,SS_CENTERIMAGE
+    COMBOBOX        IDC_ME_METHOD,90,30,90,67,CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
+    LTEXT           "Range",IDC_STATIC,24,48,62,12,SS_CENTERIMAGE
+    EDITTEXT        IDC_MERANGE,90,48,24,12,ES_AUTOHSCROLL | ES_NUMBER
+    CONTROL         "Chroma ME",IDC_CHROMAME,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,126,48,60,12
+    LTEXT           "Max frame refs",IDC_STATIC,24,66,62,12,SS_CENTERIMAGE
+    EDITTEXT        IDC_FRAMEREFS,90,66,24,12,ES_AUTOHSCROLL | ES_NUMBER
+    CONTROL         "Mixed refs",IDC_MIXEDREF,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,126,66,60,12
+    GROUPBOX        "Debug",IDC_STATIC,94,91,96,46,WS_DISABLED
+    LTEXT           "Log level",IDC_STATIC,100,101,36,12,SS_CENTERIMAGE
+    COMBOBOX        IDC_LOG,136,101,48,67,CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
+    LTEXT           "FourCC",IDC_STATIC,100,119,36,12,SS_CENTERIMAGE
+    COMBOBOX        IDC_FOURCC,136,119,48,60,CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
+    GROUPBOX        "Misc. options",IDC_STATIC,7,86,186,95,WS_DISABLED
+    LTEXT           "SAR",IDC_STATIC,10,101,28,12,SS_CENTERIMAGE
+    CTEXT           ":",IDC_STATIC,60,101,12,12,SS_CENTERIMAGE
+    EDITTEXT        IDC_SAR_W,39,101,24,12,ES_AUTOHSCROLL | ES_NUMBER
+    EDITTEXT        IDC_SAR_H,68,101,24,12,ES_AUTOHSCROLL | ES_NUMBER
+    LTEXT           "Threads",IDC_THREADLABEL,10,119,28,12,SS_CENTERIMAGE
+    EDITTEXT        IDC_THREADEDIT,39,119,24,12,ES_AUTOHSCROLL | ES_NUMBER
+    CONTROL         "CABAC",IDC_CABAC,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,15,140,44,12
+    CONTROL         "Trellis",IDC_TRELLIS,"Button",BS_AUTO3STATE | WS_TABSTOP,65,140,39,12
+    LTEXT           "Noise reduction",IDC_STATIC,111,140,53,12,SS_CENTERIMAGE
+    EDITTEXT        IDC_NR,166,140,24,12,ES_AUTOHSCROLL | ES_NUMBER
+    CONTROL         "Deblocking filter:",IDC_LOOPFILTER,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,15,154,66,12
+    LTEXT           "Strength",IDC_STATIC,87,154,36,12,SS_CENTERIMAGE
+    CONTROL         "",IDC_INLOOP_A,"msctls_trackbar32",TBS_NOTICKS | WS_TABSTOP,123,155,42,12
+    LTEXT           "0",IDC_LOOPA_TXT,171,154,12,12,SS_CENTERIMAGE
+    LTEXT           "Threshold",IDC_STATIC,87,167,36,12,SS_CENTERIMAGE
+    CONTROL         "",IDC_INLOOP_B,"msctls_trackbar32",TBS_NOTICKS | WS_TABSTOP,123,167,42,12
+    LTEXT           "0",IDC_LOOPB_TXT,171,167,12,12,SS_CENTERIMAGE
+    CONTROL         "Interlaced",IDC_INTERLACED,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,15,167,66,12
+END
+
+
+/////////////////////////////////////////////////////////////////////////////
+//
+// DESIGNINFO
+//
+
+#ifdef APSTUDIO_INVOKED
+GUIDELINES DESIGNINFO 
+BEGIN
+    IDD_MAINCONFIG, DIALOG
+    BEGIN
+        LEFTMARGIN, 7
+        RIGHTMARGIN, 197
+        TOPMARGIN, 7
+        BOTTOMMARGIN, 215
+    END
+
+    IDD_TAB_BITRATE, DIALOG
+    BEGIN
+        LEFTMARGIN, 7
+        RIGHTMARGIN, 193
+        TOPMARGIN, 7
+        BOTTOMMARGIN, 181
+    END
+
+    IDD_TAB_RATECONTROL, DIALOG
+    BEGIN
+        LEFTMARGIN, 7
+        RIGHTMARGIN, 193
+        TOPMARGIN, 7
+        BOTTOMMARGIN, 181
+    END
+
+    IDD_TAB_IPFRAMES, DIALOG
+    BEGIN
+        LEFTMARGIN, 7
+        RIGHTMARGIN, 193
+        TOPMARGIN, 7
+        BOTTOMMARGIN, 181
+    END
+
+    IDD_TAB_MISC, DIALOG
+    BEGIN
+        LEFTMARGIN, 7
+        RIGHTMARGIN, 193
+        TOPMARGIN, 7
+        BOTTOMMARGIN, 181
+        HORZGUIDE, 179
+    END
+END
+#endif    // APSTUDIO_INVOKED
+
+
+/////////////////////////////////////////////////////////////////////////////
+//
+// Bitmap
+//
+
+IDB_LOGO                BITMAP                  "x264.bmp"
+
+#ifdef APSTUDIO_INVOKED
+/////////////////////////////////////////////////////////////////////////////
+//
+// TEXTINCLUDE
+//
+
+1 TEXTINCLUDE 
+BEGIN
+    "resource.h\0"
+END
+
+2 TEXTINCLUDE 
+BEGIN
+    "#include ""afxres.h""\r\n"
+    "\0"
+END
+
+3 TEXTINCLUDE 
+BEGIN
+    "\r\n"
+    "\0"
+END
+
+#endif    // APSTUDIO_INVOKED
+
+
+/////////////////////////////////////////////////////////////////////////////
+//
+// String Table
+//
+
+STRINGTABLE 
+BEGIN
+    IDC_DEFAULTS            "Reset all settings to default values."
+END
+
+STRINGTABLE 
+BEGIN
+    IDC_IPRATIO             "QP (quantizer parameter) boost of I-frames relatively to P-frames."
+    IDC_PBRATIO             "QP (quantizer parameter) reduction of B-frames relatively to P-frames."
+    IDC_CURVECOMP           "QP (quantizer parameter) curve compression (0% -> CBR and 100% -> CQP)."
+    IDC_QPMIN               "Minimum QP (quantizer parameter)."
+    IDC_QPMAX               "Maximum QP (quantizer parameter)."
+    IDC_QPSTEP              "Maximum QP (quantizer parameter) step between frames."
+    IDC_SCENECUT            "Scene-cut detection. Controls how aggressively to insert extra I-frames. With small values of scenecut, encoder often has to force an I-frame when it would exceed keyint. Good values of scenecut may find a better location for the I-frame. Large values use more I-frames than necessary, thus wasting bits. -1 disables scene-cut detection, so I-frames are inserted only every other keyint frames, which probably leads to ugly encoding artifacts."
+    IDC_KEYINTMIN           "Minimum GOP size. Sets minimum interval between IDR-frames. In H.264, I-frames do not necessarily bound a closed GOP because it is allowable for a P-frame to be predicted from more frames than just the one frame before it (also see reference frame option). Therefore, I-frames are not necessarily seekable. IDR-frames restrict subsequent P-frames from referring to any frame prior to the IDR-frame. If scenecuts appear within this interval, they are still encoded as I-frames, but do not start a new GOP."
+    IDC_KEYINTMAX           "Maximum GOP size. Sets maximum interval between IDR-frames. Larger values save bits, thus improving quality for a given bitrate at the cost of seeking precision."
+END
+
+STRINGTABLE 
+BEGIN
+    IDC_BFRAME              "Maximum number of consecutive B-frames between I and P-frames."
+    IDC_VDHACK              "VirtualDub hack for fixing B-frames lag (also multithreading lag). CAUTION! Use only with VirtualDub otherwise encoder can produce invalid bitstream."
+    IDC_BBIAS               "Bias the choice to use B-frames. Positive values cause more B-frames, negative values cause less B-frames."
+    IDC_BADAPT              "Adaptive B-frames decision."
+    IDC_BREFS               "Allows B-frames to be used as references for predicting other frames. Keeps the middle of 2+ consecutive B-frames as a reference, and reorders frame appropriately."
+    IDC_WBPRED              "Weighted prediction for B-frames."
+    IDC_BIDIR_ME            "Jointly optimize both MVs (motion vectors) in B-frames."
+    IDC_DIRECTPRED          "Direct MV (motion vector) prediction mode."
+END
+
+STRINGTABLE 
+BEGIN
+    IDC_SUBPEL              "This parameter controls quality versus speed tradeoffs involved in the motion estimation decision process (lower = quicker and higher = better quality)."
+    IDC_BRDO                "RD (rate-distortion) based mode decision for B-frames."
+    IDC_ME_METHOD           "Selects the ME (motion estimation) algorithm:\n - dia: diamond search, radius 1 (fast)\n - hex: hexagonal search, radius 2\n - umh: uneven multi-hexagon search (better but slower)\n - esa: exhaustive search (extremely slow, primarily for testing)"
+    IDC_MERANGE             "Maximum distance to search for ME (motion estimation), measured from predicted position(s). Default of 16 is good for most footage, high motion sequences may benefit from settings between 24 and 32."
+    IDC_CHROMAME            "Chroma ME (motion estimation) for subpel and mode decision in P-frames."
+    IDC_FRAMEREFS           "Number of previous frames used as predictors. This is effective in Anime, but seems to make little difference in live-action source material."
+    IDC_MIXEDREF            "Allows each 8x8 or 16x8 partition to independently select a reference frame, as opposed to only one ref per MB (macroblock)."
+    IDC_SAR_W               "Sample Aspect Ratio: width."
+    IDC_SAR_H               "Sample Aspect Ratio: height."
+    IDC_THREADEDIT          "Number of threads for parallel encoding (0 = Auto)."
+    IDC_CABAC               "CABAC (Context-Adaptive Binary Arithmetic Coding). Slightly slows down encoding and decoding, but should save 10% to 15% bitrate."
+    IDC_TRELLIS             "Trellis RD (rate-distortion) quantization: \n - unchecked: disabled\n - checked: enabled only on the final encode of a MB (macroblock)\n - indeterminate: enabled on all mode decisions (only with RDO)"
+    IDC_NR                  "DCT-domain noise reduction. Adaptive pseudo-deadzone. 10 to 1000 seems to be a useful range."
+    IDC_LOOPFILTER          "Activate the deblocking loop filter (increases quality)."
+    IDC_INTERLACED          "Pure-interlaced mode."
+END
+
+#endif    // English (U.S.) resources
+/////////////////////////////////////////////////////////////////////////////
+
+
+
+#ifndef APSTUDIO_INVOKED
+/////////////////////////////////////////////////////////////////////////////
+//
+// Generated from the TEXTINCLUDE 3 resource.
+//
+
+
+/////////////////////////////////////////////////////////////////////////////
+#endif    // not APSTUDIO_INVOKED
+
