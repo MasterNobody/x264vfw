@@ -35,6 +35,7 @@
 #include "x264vfw.h"
 #include <stdio.h> /* sprintf */
 #include <commctrl.h>
+#include <assert.h>
 
 #ifdef _MSC_VER
 #define X264_VERSION ""
@@ -87,70 +88,74 @@ static const fourcc_str fcc_str_table[] =
 static const reg_int_t reg_int_table[] =
 {
     /* Bitrate */
-    { "encoding_type",   &reg.i_encoding_type,      4 }, /* take into account GordianKnot workaround */
-    { "quantizer",       &reg.i_qp,                26 },
-    { "ratefactor",      &reg.i_rf_constant,      260 },
-    { "passbitrate",     &reg.i_passbitrate,      800 },
-    { "pass_number",     &reg.i_pass,               1 },
-    { "fast1pass",       &reg.b_fast1pass,          0 },
-    { "updatestats",     &reg.b_updatestats,        1 },
+    { "encoding_type",   &reg.i_encoding_type,      4   }, /* take into account GordianKnot workaround */
+    { "quantizer",       &reg.i_qp,                 26  },
+    { "ratefactor",      &reg.i_rf_constant,        260 },
+    { "passbitrate",     &reg.i_passbitrate,        800 },
+    { "pass_number",     &reg.i_pass,               1   },
+    { "fast1pass",       &reg.b_fast1pass,          0   },
+    { "updatestats",     &reg.b_updatestats,        1   },
 
     /* Rate Control */
-    { "key_boost",       &reg.i_key_boost,          40 },
-    { "b_red",           &reg.i_b_red,              30 },
-    { "curve_comp",      &reg.i_curve_comp,         60 },
-    { "qp_min",          &reg.i_qp_min,             10 },
-    { "qp_max",          &reg.i_qp_max,             51 },
-    { "qp_step",         &reg.i_qp_step,             4 },
-    { "scenecut",        &reg.i_scenecut_threshold, 40 },
-    { "keyint_min",      &reg.i_keyint_min,         25 },
-    { "keyint_max",      &reg.i_keyint_max,        250 },
+    { "key_boost",       &reg.i_key_boost,          40  },
+    { "b_red",           &reg.i_b_red,              30  },
+    { "curve_comp",      &reg.i_curve_comp,         60  },
+    { "qp_min",          &reg.i_qp_min,             10  },
+    { "qp_max",          &reg.i_qp_max,             51  },
+    { "qp_step",         &reg.i_qp_step,            4   },
+    { "scenecut",        &reg.i_scenecut_threshold, 40  },
+    { "keyint_min",      &reg.i_keyint_min,         25  },
+    { "keyint_max",      &reg.i_keyint_max,         250 },
 
     /* MBs & Frames */
-    { "dct8x8",          &reg.b_dct8x8,              1 },
-    { "i8x8",            &reg.b_i8x8,                1 },
-    { "i4x4",            &reg.b_i4x4,                1 },
-    { "psub16x16",       &reg.b_psub16x16,           1 },
-    { "psub8x8",         &reg.b_psub8x8,             0 },
-    { "bsub16x16",       &reg.b_bsub16x16,           1 },
-    { "bmax",            &reg.i_bframe,              0 },
-    { "vd_hack",         &reg.b_vd_hack,             0 },
-    { "b_bias",          &reg.i_bframe_bias,         0 },
-    { "b_adapt",         &reg.b_bframe_adaptive,     1 },
-    { "b_refs",          &reg.b_b_refs,              1 },
-    { "b_wpred",         &reg.b_b_wpred,             1 },
-    { "b_bidir_me",      &reg.b_bidir_me,            1 },
-    { "direct_pred",     &reg.i_direct_mv_pred,      1 },
+    { "dct8x8",          &reg.b_dct8x8,             1   },
+    { "i8x8",            &reg.b_i8x8,               1   },
+    { "i4x4",            &reg.b_i4x4,               1   },
+    { "psub16x16",       &reg.b_psub16x16,          1   },
+    { "psub8x8",         &reg.b_psub8x8,            0   },
+    { "bsub16x16",       &reg.b_bsub16x16,          1   },
+    { "bmax",            &reg.i_bframe,             0   },
+    { "vd_hack",         &reg.b_vd_hack,            0   },
+    { "b_bias",          &reg.i_bframe_bias,        0   },
+    { "b_adapt",         &reg.b_bframe_adaptive,    1   },
+    { "b_refs",          &reg.b_b_refs,             1   },
+    { "b_wpred",         &reg.b_b_wpred,            1   },
+    { "b_bidir_me",      &reg.b_bidir_me,           1   },
+    { "direct_pred",     &reg.i_direct_mv_pred,     1   },
 
     /* More... */
-    { "subpel",          &reg.i_subpel_refine,       5 },
-    { "brdo",            &reg.b_brdo,                1 },
-    { "me_method",       &reg.i_me_method,           2 },
-    { "me_range",        &reg.i_me_range,           16 },
-    { "chroma_me",       &reg.b_chroma_me,           1 },
-    { "refmax",          &reg.i_refmax,              1 },
-    { "mixedref",        &reg.b_mixedref,            1 },
-    { "log_level",       &reg.i_log_level,           1 },
-    { "fourcc_num",      &reg.i_fcc_num,             0 },
-    { "sar_width",       &reg.i_sar_width,           1 },
-    { "sar_height",      &reg.i_sar_height,          1 },
-    { "threads",         &reg.i_threads,             1 },
-    { "cabac",           &reg.b_cabac,               1 },
-    { "trellis",         &reg.i_trellis,             1 },
-    { "noise_reduction", &reg.i_noise_reduction,     0 },
-    { "loop_filter",     &reg.b_filter,              1 },
-    { "inloop_a",        &reg.i_inloop_a,            0 },
-    { "inloop_b",        &reg.i_inloop_b,            0 },
-    { "interlaced",      &reg.b_interlaced,          0 }
+    { "subpel",          &reg.i_subpel_refine,      5   },
+    { "brdo",            &reg.b_brdo,               1   },
+    { "me_method",       &reg.i_me_method,          2   },
+    { "me_range",        &reg.i_me_range,           16  },
+    { "chroma_me",       &reg.b_chroma_me,          1   },
+    { "refmax",          &reg.i_refmax,             1   },
+    { "mixedref",        &reg.b_mixedref,           1   },
+    { "log_level",       &reg.i_log_level,          2   },
+    { "fourcc_num",      &reg.i_fcc_num,            0   },
+    { "sar_width",       &reg.i_sar_width,          1   },
+    { "sar_height",      &reg.i_sar_height,         1   },
+    { "threads",         &reg.i_threads,            1   },
+    { "cabac",           &reg.b_cabac,              1   },
+    { "trellis",         &reg.i_trellis,            1   },
+    { "noise_reduction", &reg.i_noise_reduction,    0   },
+    { "loop_filter",     &reg.b_filter,             1   },
+    { "inloop_a",        &reg.i_inloop_a,           0   },
+    { "inloop_b",        &reg.i_inloop_b,           0   },
+    { "interlaced",      &reg.b_interlaced,         0   },
+
+    /* Command Line */
+    { "use_cmdline",     &reg.b_use_cmdline,        0   }
 };
 
 // -5 because x264 add ".temp" for temp file
-#define STATS_PATH_SIZE MAX_PATH - 5
+#define STATS_PATH_SIZE (MAX_PATH - 5)
 
 static const reg_str_t reg_str_table[] =
 {
-    { "statsfile", reg.stats, ".\\x264.stats",              STATS_PATH_SIZE },
-    { "fourcc",    reg.fcc,   (char *)&fcc_str_table[0], sizeof(fourcc_str) }
+    { "statsfile", reg.stats,   ".\\x264.stats",           STATS_PATH_SIZE    },
+    { "fourcc",    reg.fcc,     (char *)&fcc_str_table[0], sizeof(fourcc_str) },
+    { "cmdline",   reg.cmdline, "",                        MAX_PATH           }
 };
 
 double GetDlgItemDouble(HWND hDlg, int nIDDlgItem)
@@ -188,6 +193,9 @@ void SetDlgItemDouble(HWND hDlg, int nIDDlgItem, double dblValue)
         case 4:\
           encoding_type = 2;\
           break;\
+        default:\
+          assert(0);\
+          break;\
     }\
 }
 
@@ -213,7 +221,7 @@ void config_reg_load(CONFIG *config)
     {
         i_size = reg_str_table[i].max_len;
         if (RegQueryValueEx(hKey, reg_str_table[i].reg_value, 0, 0, (LPBYTE)reg_str_table[i].config_str, &i_size) != ERROR_SUCCESS)
-            lstrcpy(reg_str_table[i].config_str, reg_str_table[i].default_str);
+            strcpy(reg_str_table[i].config_str, reg_str_table[i].default_str);
     }
 
     RegCloseKey(hKey);
@@ -240,7 +248,7 @@ void config_reg_save(CONFIG *config)
 
     /* Save strings */
     for (i = 0; i < sizeof(reg_str_table) / sizeof(reg_str_t); i++)
-        RegSetValueEx(hKey, reg_str_table[i].reg_value, 0, REG_SZ, (LPBYTE)reg_str_table[i].config_str, lstrlen(reg_str_table[i].config_str) + 1);
+        RegSetValueEx(hKey, reg_str_table[i].reg_value, 0, REG_SZ, (LPBYTE)reg_str_table[i].config_str, strlen(reg_str_table[i].config_str) + 1);
 
     RegCloseKey(hKey);
 }
@@ -255,7 +263,7 @@ void config_defaults(CONFIG *config)
 
     /* Read strings */
     for (i = 0; i < sizeof(reg_str_table) / sizeof(reg_str_t); i++)
-        lstrcpy(reg_str_table[i].config_str, reg_str_table[i].default_str);
+        strcpy(reg_str_table[i].config_str, reg_str_table[i].default_str);
 
     GordianKnotWorkaround(reg.i_encoding_type);
     memcpy(config, &reg, sizeof(CONFIG));
@@ -308,6 +316,10 @@ void tabs_enable_items(HWND hDlg, CONFIG *config)
             SetDlgItemText(hTabs[0], IDC_BITRATELOW, "1");
             sprintf(szTmp, "%d", X264_BITRATE_MAX);
             SetDlgItemText(hTabs[0], IDC_BITRATEHIGH, szTmp);
+            break;
+
+        default:
+            assert(0);
             break;
     }
 
@@ -384,6 +396,9 @@ void tabs_enable_items(HWND hDlg, CONFIG *config)
     EnableWindow(GetDlgItem(hTabs[3], IDC_INLOOP_A), config->i_encoding_type > 0 && config->b_filter);
     EnableWindow(GetDlgItem(hTabs[3], IDC_INLOOP_B), config->i_encoding_type > 0 && config->b_filter);
 //    EnableWindow(GetDlgItem(hTabs[3], IDC_INTERLACED), TRUE);
+
+//    EnableWindow(GetDlgItem(hDlg, IDC_USE_CMDLINE), TRUE);
+    EnableWindow(GetDlgItem(hDlg, IDC_CMDLINE), config->b_use_cmdline);
 }
 
 void tabs_update_items(HWND hDlg, CONFIG *config)
@@ -434,6 +449,10 @@ void tabs_update_items(HWND hDlg, CONFIG *config)
                 SendDlgItemMessage(hTabs[0], IDC_BITRATEMODE, CB_SETCURSEL, 4, 0);
             SetDlgItemInt(hTabs[0], IDC_BITRATEEDIT, config->i_passbitrate, FALSE);
             SendDlgItemMessage(hTabs[0], IDC_BITRATESLIDER, TBM_SETPOS, TRUE, config->i_passbitrate);
+            break;
+
+        default:
+            assert(0);
             break;
     }
     CheckDlgButton(hTabs[0], IDC_UPDATESTATS, config->b_updatestats);
@@ -551,6 +570,10 @@ void tabs_update_items(HWND hDlg, CONFIG *config)
     SendDlgItemMessage(hTabs[3], IDC_INLOOP_B, TBM_SETPOS, TRUE, config->i_inloop_b);
     SetDlgItemInt(hTabs[3], IDC_LOOPB_TXT, config->i_inloop_b, TRUE);
     CheckDlgButton(hTabs[3], IDC_INTERLACED, config->b_interlaced);
+
+    CheckDlgButton(hDlg, IDC_USE_CMDLINE, config->b_use_cmdline);
+    SendMessage(GetDlgItem(hDlg, IDC_CMDLINE), EM_LIMITTEXT, MAX_PATH - 1, 0);
+    SetDlgItemText(hDlg, IDC_CMDLINE, config->cmdline);
 }
 
 /* Assigns tooltips */
@@ -604,12 +627,12 @@ BOOL CALLBACK callback_main(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lParam)
             hTabs[1] = CreateDialogParam(g_hInst, MAKEINTRESOURCE(IDD_TAB_RATECONTROL), hDlg, (DLGPROC)callback_tabs, lParam);
             hTabs[2] = CreateDialogParam(g_hInst, MAKEINTRESOURCE(IDD_TAB_IPFRAMES),    hDlg, (DLGPROC)callback_tabs, lParam);
             hTabs[3] = CreateDialogParam(g_hInst, MAKEINTRESOURCE(IDD_TAB_MISC),        hDlg, (DLGPROC)callback_tabs, lParam);
-            GetClientRect(hDlg, &rect);
+            GetClientRect(hTabCtrl, &rect);
             TabCtrl_AdjustRect(hTabCtrl, FALSE, &rect);
-            MoveWindow(hTabs[0], rect.left, rect.top, rect.right - rect.left, rect.bottom - rect.top - 40, TRUE);
-            MoveWindow(hTabs[1], rect.left, rect.top, rect.right - rect.left, rect.bottom - rect.top - 40, TRUE);
-            MoveWindow(hTabs[2], rect.left, rect.top, rect.right - rect.left, rect.bottom - rect.top - 40, TRUE);
-            MoveWindow(hTabs[3], rect.left, rect.top, rect.right - rect.left, rect.bottom - rect.top - 40, TRUE);
+            MoveWindow(hTabs[0], rect.left, rect.top, rect.right - rect.left + 1, rect.bottom - rect.top + 1, TRUE);
+            MoveWindow(hTabs[1], rect.left, rect.top, rect.right - rect.left + 1, rect.bottom - rect.top + 1, TRUE);
+            MoveWindow(hTabs[2], rect.left, rect.top, rect.right - rect.left + 1, rect.bottom - rect.top + 1, TRUE);
+            MoveWindow(hTabs[3], rect.left, rect.top, rect.right - rect.left + 1, rect.bottom - rect.top + 1, TRUE);
 
             if ((hTooltip = CreateWindow(TOOLTIPS_CLASS, NULL, TTS_ALWAYSTIP, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, NULL, NULL, g_hInst, NULL)))
             {
@@ -677,9 +700,29 @@ BOOL CALLBACK callback_main(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lParam)
                             if (MessageBox(hDlg, X264_DEF_TEXT, X264_NAME, MB_YESNO) == IDYES)
                             {
                                 config_defaults(config);
+                                b_tabs_updated = FALSE;
                                 tabs_enable_items(hDlg, config);
                                 tabs_update_items(hDlg, config);
+                                b_tabs_updated = TRUE;
                             }
+                            break;
+
+                        case IDC_USE_CMDLINE:
+                            config->b_use_cmdline = IsDlgButtonChecked(hDlg, IDC_USE_CMDLINE);
+                            EnableWindow(GetDlgItem(hDlg, IDC_CMDLINE), config->b_use_cmdline);
+                            break;
+
+                        default:
+                            return FALSE;
+                    }
+                    break;
+
+                case EN_CHANGE:
+                    switch (LOWORD(wParam))
+                    {
+                        case IDC_CMDLINE:
+                            if (GetDlgItemText(hDlg, IDC_CMDLINE, config->cmdline, MAX_PATH) == 0)
+                                strcpy(config->cmdline, "");
                             break;
 
                         default:
@@ -870,8 +913,14 @@ BOOL CALLBACK callback_tabs(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lParam)
                                     config->i_encoding_type = 4;
                                     config->i_pass = 2;
                                     break;
+
+                                default:
+                                    assert(0);
+                                    break;
                             }
+                            b_tabs_updated = FALSE;
                             tabs_update_items(hDlg, config);
+                            b_tabs_updated = TRUE;
                             break;
 
                         case IDC_DIRECTPRED:
@@ -900,7 +949,7 @@ BOOL CALLBACK callback_tabs(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lParam)
                             {
                                 config->i_fcc_num = sizeof(fcc_str_table) / sizeof(fourcc_str) - 1;
                             }
-                            lstrcpy(config->fcc, fcc_str_table[config->i_fcc_num]);
+                            strcpy(config->fcc, fcc_str_table[config->i_fcc_num]);
                             break;
 
                         default:
@@ -1054,12 +1103,16 @@ BOOL CALLBACK callback_tabs(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lParam)
                                     CHECKED_SET_MAX_INT(config->i_passbitrate, hTabs[0], IDC_BITRATEEDIT, FALSE, 1, X264_BITRATE_MAX);
                                     SendDlgItemMessage(hTabs[0], IDC_BITRATESLIDER, TBM_SETPOS, TRUE, config->i_passbitrate);
                                     break;
+
+                                default:
+                                    assert(0);
+                                    break;
                             }
                             break;
 
                         case IDC_STATSFILE:
                             if (GetDlgItemText(hTabs[0], IDC_STATSFILE, config->stats, STATS_PATH_SIZE) == 0)
-                                lstrcpy(config->stats, ".\\x264.stats");
+                                strcpy(config->stats, ".\\x264.stats");
                             break;
 
                         case IDC_IPRATIO:
@@ -1167,12 +1220,16 @@ BOOL CALLBACK callback_tabs(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lParam)
                                     CHECKED_SET_SHOW_INT(config->i_passbitrate, hTabs[0], IDC_BITRATEEDIT, FALSE, 1, X264_BITRATE_MAX);
                                     SendDlgItemMessage(hTabs[0], IDC_BITRATESLIDER, TBM_SETPOS, TRUE, config->i_passbitrate);
                                     break;
+
+                                default:
+                                    assert(0);
+                                    break;
                             }
                             break;
 
                         case IDC_STATSFILE:
                             if (GetDlgItemText(hTabs[0], IDC_STATSFILE, config->stats, STATS_PATH_SIZE) == 0)
-                                lstrcpy(config->stats, ".\\x264.stats");
+                                strcpy(config->stats, ".\\x264.stats");
                             SetDlgItemText(hTabs[0], IDC_STATSFILE, config->stats);
                             break;
 
@@ -1277,6 +1334,10 @@ BOOL CALLBACK callback_tabs(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lParam)
                     case 4:
                         config->i_passbitrate = SendDlgItemMessage(hTabs[0], IDC_BITRATESLIDER, TBM_GETPOS, 0, 0);
                         SetDlgItemInt(hTabs[0], IDC_BITRATEEDIT, config->i_passbitrate, FALSE);
+                        break;
+
+                    default:
+                        assert(0);
                         break;
                 }
             }

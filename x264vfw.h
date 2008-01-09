@@ -101,6 +101,10 @@ typedef struct
     int i_inloop_a;
     int i_inloop_b;
     int b_interlaced;
+
+    /* Command Line */
+    int b_use_cmdline;
+    char cmdline[MAX_PATH];
 } CONFIG;
 
 /* CODEC: vfw codec instance */
@@ -127,6 +131,7 @@ typedef struct
 #ifdef VIRTUALDUB_HACK
     int i_frame_remain;
 #endif
+    int b_use_vd_hack;
 } CODEC;
 
 /* Compress functions */

@@ -27,6 +27,9 @@
 
 #include <stdio.h>
 #include <io.h>
+#include <assert.h>
+#define _GNU_SOURCE
+#include <getopt.h>
 
 #define X264_MAX(a, b) ((a)>(b) ? (a) : (b))
 #define X264_MIN(a, b) ((a)<(b) ? (a) : (b))
@@ -154,8 +157,32 @@ static void x264_log_vfw(void *p_private, int i_level, const char *psz_fmt, va_l
     char  error_msg[1024];
     int   idx;
     CODEC *codec = p_private;
+    char  *psz_prefix;
 
-    vsprintf(error_msg, psz_fmt, arg);
+    switch (i_level)
+    {
+        case X264_LOG_ERROR:
+            psz_prefix = "error";
+            break;
+
+        case X264_LOG_WARNING:
+            psz_prefix = "warning";
+            break;
+
+        case X264_LOG_INFO:
+            psz_prefix = "info";
+            break;
+
+        case X264_LOG_DEBUG:
+            psz_prefix = "debug";
+            break;
+
+        default:
+            psz_prefix = "unknown";
+            break;
+    }
+    sprintf(error_msg, "x264vfw [%s]: ", psz_prefix);
+    vsprintf(error_msg+strlen(error_msg), psz_fmt, arg);
 
     /* Strip final linefeeds (required) */
     idx = strlen(error_msg) - 1;
@@ -174,11 +201,341 @@ static void x264_log_vfw(void *p_private, int i_level, const char *psz_fmt, va_l
         SendDlgItemMessage(codec->hCons, IDC_CONSOLE, LB_SETTOPINDEX, (WPARAM)idx, 0);
 }
 
+static void x264vfw_log(CODEC *codec, int i_level, const char *psz_fmt, ... )
+{
+    if (i_level <= codec->config.i_log_level)
+    {
+        va_list arg;
+        va_start(arg, psz_fmt);
+        x264_log_vfw(codec, i_level, psz_fmt, arg);
+        va_end(arg);
+    }
+}
+
+/*****************************************************************************
+ * Parse:
+ *****************************************************************************/
+static int Parse(const char *cmdline, x264_param_t *param, CODEC *codec)
+{
+
+#define MAX_ARG_NUM (MAX_PATH / 2 + 1)
+
+    int  argc = 1;
+    char *argv[MAX_ARG_NUM];
+    char temp[MAX_PATH];
+    char *p, *q;
+    int  s = 0;
+
+    memset(&argv, 0, sizeof(char *) * MAX_ARG_NUM);
+    /* Split command line (for quote in parameter it must be tripled) */
+    argv[0] = "x264vfw";
+    p = (char *)&temp;
+    q = (char *)cmdline;
+    while (*q != 0)
+    {
+        switch (s)
+        {
+            case 0:
+                switch (*q)
+                {
+                    case '\t':
+                    case '\r':
+                    case '\n':
+                    case ' ':
+                        break;
+
+                    case '"':
+                        s = 2;
+                        argv[argc] = p;
+                        argc++;
+                        break;
+
+                    default:
+                        s = 1;
+                        argv[argc] = p;
+                        argc++;
+                        *p = *q;
+                        p++;
+                        break;
+                }
+                break;
+
+            case 1:
+                switch (*q)
+                {
+                    case '\t':
+                    case '\r':
+                    case '\n':
+                    case ' ':
+                        s = 0;
+                        *p = 0;
+                        p++;
+                        break;
+
+                    case '"':
+                        s = 2;
+                        break;
+
+                    default:
+                        *p = *q;
+                        p++;
+                        break;
+                }
+                break;
+
+            case 2:
+                switch (*q)
+                {
+                    case '"':
+                        s = 3;
+                        break;
+
+                    default:
+                        *p = *q;
+                        p++;
+                        break;
+                }
+                break;
+
+            case 3:
+                switch (*q)
+                {
+                    case '\t':
+                    case '\r':
+                    case '\n':
+                    case ' ':
+                        s = 0;
+                        *p = 0;
+                        p++;
+                        break;
+
+                    default:
+                        s = 1;
+                        *p = *q;
+                        p++;
+                        break;
+                }
+                break;
+
+            default:
+                assert(0);
+                break;
+        }
+        q++;
+    }
+    *p = 0;
+
+    opterr = 0; /* Suppress error messages printing in getopt */
+    optind = 0; /* Initialize getopt */
+
+    /* Parse command line options */
+    for (;;)
+    {
+        int b_error = 0;
+        int long_options_index = -1;
+
+#define OPT_FRAMES 256
+#define OPT_SEEK 257
+#define OPT_QPFILE 258
+#define OPT_THREAD_INPUT 259
+#define OPT_QUIET 260
+#define OPT_PROGRESS 261
+#define OPT_VISUALIZE 262
+#define OPT_LONGHELP 263
+#define OPT_FPS 264
+#define OPT_VD_HACK 265
+
+        static struct option long_options[] =
+        {
+            { "help",              no_argument,       NULL, 'h'              },
+            { "longhelp",          no_argument,       NULL, OPT_LONGHELP     },
+            { "version",           no_argument,       NULL, 'V'              },
+            { "bitrate",           required_argument, NULL, 'B'              },
+            { "bframes",           required_argument, NULL, 'b'              },
+            { "no-b-adapt",        no_argument,       NULL, 0                },
+            { "b-bias",            required_argument, NULL, 0                },
+            { "b-pyramid",         no_argument,       NULL, 0                },
+            { "min-keyint",        required_argument, NULL, 'i'              },
+            { "keyint",            required_argument, NULL, 'I'              },
+            { "scenecut",          required_argument, NULL, 0                },
+            { "pre-scenecut",      no_argument,       NULL, 0                },
+            { "nf",                no_argument,       NULL, 0                },
+            { "no-deblock",        no_argument,       NULL, 0                },
+            { "filter",            required_argument, NULL, 0                },
+            { "deblock",           required_argument, NULL, 'f'              },
+            { "interlaced",        no_argument,       NULL, 0                },
+            { "no-cabac",          no_argument,       NULL, 0                },
+            { "qp",                required_argument, NULL, 'q'              },
+            { "qpmin",             required_argument, NULL, 0                },
+            { "qpmax",             required_argument, NULL, 0                },
+            { "qpstep",            required_argument, NULL, 0                },
+            { "crf",               required_argument, NULL, 0                },
+            { "ref",               required_argument, NULL, 'r'              },
+            { "no-asm",            no_argument,       NULL, 0                },
+            { "sar",               required_argument, NULL, 0                },
+            { "fps",               required_argument, NULL, OPT_FPS          },
+            { "frames",            required_argument, NULL, OPT_FRAMES       },
+            { "seek",              required_argument, NULL, OPT_SEEK         },
+            { "output",            required_argument, NULL, 'o'              },
+            { "analyse",           required_argument, NULL, 0                },
+            { "partitions",        required_argument, NULL, 'A'              },
+            { "direct",            required_argument, NULL, 0                },
+            { "direct-8x8",        required_argument, NULL, 0                },
+            { "weightb",           no_argument,       NULL, 'w'              },
+            { "me",                required_argument, NULL, 0                },
+            { "merange",           required_argument, NULL, 0                },
+            { "mvrange",           required_argument, NULL, 0                },
+            { "mvrange-thread",    required_argument, NULL, 0                },
+            { "subme",             required_argument, NULL, 'm'              },
+            { "b-rdo",             no_argument,       NULL, 0                },
+            { "mixed-refs",        no_argument,       NULL, 0                },
+            { "no-chroma-me",      no_argument,       NULL, 0                },
+            { "bime",              no_argument,       NULL, 0                },
+            { "8x8dct",            no_argument,       NULL, '8'              },
+            { "trellis",           required_argument, NULL, 't'              },
+            { "no-fast-pskip",     no_argument,       NULL, 0                },
+            { "no-dct-decimate",   no_argument,       NULL, 0                },
+            { "aq-strength",       required_argument, NULL, 0                },
+            { "aq-sensitivity",    required_argument, NULL, 0                },
+            { "deadzone-inter",    required_argument, NULL, 0                },
+            { "deadzone-intra",    required_argument, NULL, 0                },
+            { "level",             required_argument, NULL, 0                },
+            { "ratetol",           required_argument, NULL, 0                },
+            { "vbv-maxrate",       required_argument, NULL, 0                },
+            { "vbv-bufsize",       required_argument, NULL, 0                },
+            { "vbv-init",          required_argument, NULL, 0                },
+            { "ipratio",           required_argument, NULL, 0                },
+            { "pbratio",           required_argument, NULL, 0                },
+            { "chroma-qp-offset",  required_argument, NULL, 0                },
+            { "pass",              required_argument, NULL, 'p'              },
+            { "stats",             required_argument, NULL, 0                },
+            { "rceq",              required_argument, NULL, 0                },
+            { "qcomp",             required_argument, NULL, 0                },
+            { "qblur",             required_argument, NULL, 0                },
+            { "cplxblur",          required_argument, NULL, 0                },
+            { "zones",             required_argument, NULL, 0                },
+            { "qpfile",            required_argument, NULL, OPT_QPFILE       },
+            { "threads",           required_argument, NULL, 0                },
+            { "thread-queue",      required_argument, NULL, 0                },
+            { "thread-input",      no_argument,       NULL, OPT_THREAD_INPUT },
+            { "non-deterministic", no_argument,       NULL, 0                },
+            { "no-psnr",           no_argument,       NULL, 0                },
+            { "no-ssim",           no_argument,       NULL, 0                },
+            { "quiet",             no_argument,       NULL, OPT_QUIET        },
+            { "verbose",           no_argument,       NULL, 'v'              },
+            { "progress",          no_argument,       NULL, OPT_PROGRESS     },
+            { "visualize",         no_argument,       NULL, OPT_VISUALIZE    },
+            { "sps-id",            required_argument, NULL, 0                },
+            { "aud",               no_argument,       NULL, 0                },
+            { "nr",                required_argument, NULL, 0                },
+            { "cqm",               required_argument, NULL, 0                },
+            { "cqmfile",           required_argument, NULL, 0                },
+            { "cqm4",              required_argument, NULL, 0                },
+            { "cqm4i",             required_argument, NULL, 0                },
+            { "cqm4iy",            required_argument, NULL, 0                },
+            { "cqm4ic",            required_argument, NULL, 0                },
+            { "cqm4p",             required_argument, NULL, 0                },
+            { "cqm4py",            required_argument, NULL, 0                },
+            { "cqm4pc",            required_argument, NULL, 0                },
+            { "cqm8",              required_argument, NULL, 0                },
+            { "cqm8i",             required_argument, NULL, 0                },
+            { "cqm8p",             required_argument, NULL, 0                },
+            { "overscan",          required_argument, NULL, 0                },
+            { "videoformat",       required_argument, NULL, 0                },
+            { "fullrange",         required_argument, NULL, 0                },
+            { "colorprim",         required_argument, NULL, 0                },
+            { "transfer",          required_argument, NULL, 0                },
+            { "colormatrix",       required_argument, NULL, 0                },
+            { "chromaloc",         required_argument, NULL, 0                },
+            { "vd-hack",           no_argument,       NULL, OPT_VD_HACK      },
+            { 0,                   0,                 0,    0                }
+        };
+
+        int checked_optind = optind > 0 ? optind : 1;
+        int c = getopt_long(argc, argv, "8A:B:b:f:hI:i:m:o:p:q:r:t:Vvw", long_options, &long_options_index);
+
+        if (c == -1)
+            break;
+
+        switch( c )
+        {
+            case 'h':
+            case OPT_LONGHELP:
+            case 'V':
+            case OPT_FRAMES:
+            case OPT_SEEK:
+            case 'o':
+            case OPT_QPFILE:
+            case OPT_THREAD_INPUT:
+            case OPT_PROGRESS:
+            case OPT_VISUALIZE:
+            case OPT_FPS:
+                x264vfw_log(codec, X264_LOG_WARNING, "not supported option: %s\n", argv[checked_optind]);
+                break;
+
+            case OPT_QUIET:
+                param->i_log_level = X264_LOG_NONE;
+                break;
+
+            case 'v':
+                param->i_log_level = X264_LOG_DEBUG;
+                break;
+
+            case OPT_VD_HACK:
+                codec->b_use_vd_hack = TRUE;
+                break;
+
+            default:
+                if (long_options_index < 0)
+                {
+                    int i;
+
+                    for (i = 0; long_options[i].name; i++)
+                        if (long_options[i].val == c)
+                        {
+                            long_options_index = i;
+                            break;
+                        }
+                    if (long_options_index < 0)
+                    {
+                        x264vfw_log(codec, X264_LOG_ERROR, "unknown option or absent argument: %s\n", argv[checked_optind]);
+                        return -1;
+                    }
+                }
+                b_error = x264_param_parse(param, long_options[long_options_index].name, optarg);
+                break;
+        }
+
+        if (b_error)
+        {
+            switch (b_error)
+            {
+                case X264_PARAM_BAD_NAME:
+                    x264vfw_log(codec, X264_LOG_ERROR, "unknown option: %s\n", argv[checked_optind]);
+                    break;
+
+                case X264_PARAM_BAD_VALUE:
+                    x264vfw_log(codec, X264_LOG_ERROR, "invalid argument: %s = %s\n", argv[checked_optind], optarg);
+                    break;
+
+                default:
+                    x264vfw_log(codec, X264_LOG_ERROR, "unknown error with option: %s\n", argv[checked_optind]);
+                    break;
+            }
+            return -1;
+        }
+    }
+
+    return 0;
+}
+
 /* Prepare to compress data */
 LRESULT compress_begin(CODEC *codec, BITMAPINFO *lpbiInput, BITMAPINFO *lpbiOutput)
 {
     CONFIG *config = &codec->config;
     x264_param_t param;
+    char stat_out[MAX_PATH];
+    char stat_in[MAX_PATH];
 
     /* Destroy previous handle */
     compress_end(codec);
@@ -196,167 +553,175 @@ LRESULT compress_begin(CODEC *codec, BITMAPINFO *lpbiInput, BITMAPINFO *lpbiOutp
 
     /* Get default param */
     x264_param_default(&param);
-
-    /* CPU flags */
-#ifdef HAVE_PTHREAD
-    param.i_threads = config->i_threads;
-#else
-    param.i_threads = 1;
-#endif
+    codec->b_use_vd_hack = FALSE; /* Don't use "VD hack" by default */
 
     /* Video Properties */
     param.i_width  = lpbiInput->bmiHeader.biWidth;
     param.i_height = lpbiInput->bmiHeader.biHeight < 0 ? -lpbiInput->bmiHeader.biHeight : lpbiInput->bmiHeader.biHeight;
     param.i_frame_total = codec->i_frame_total;
-    param.vui.i_sar_width = config->i_sar_width;
-    param.vui.i_sar_height = config->i_sar_height;
     param.i_fps_num = codec->i_fps_num;
     param.i_fps_den = codec->i_fps_den;
-
-    /* Bitstream parameters */
-    param.i_frame_reference = config->i_refmax;
-    param.i_keyint_min = config->i_keyint_min;
-    param.i_keyint_max = config->i_keyint_max;
-    param.i_scenecut_threshold = config->i_scenecut_threshold;
-    param.i_bframe = config->i_bframe;
-    param.b_bframe_adaptive = config->i_bframe > 0 && config->b_bframe_adaptive;
-    param.i_bframe_bias = config->i_bframe > 0 && config->b_bframe_adaptive ? config->i_bframe_bias : 0;
-    param.b_bframe_pyramid = config->i_bframe > 1 && config->b_b_refs;
-
-    param.b_deblocking_filter = config->i_encoding_type > 0 && config->b_filter;
-    param.i_deblocking_filter_alphac0 = config->i_encoding_type > 0 && config->b_filter ? config->i_inloop_a : 0;
-    param.i_deblocking_filter_beta = config->i_encoding_type > 0 && config->b_filter ? config->i_inloop_b : 0;
-
-    param.b_cabac = config->b_cabac;
-
-    param.b_interlaced = config->b_interlaced;
 
     /* Log */
     x264_log_vfw_create(codec);
     param.pf_log = x264_log_vfw;
     param.p_log_private = codec;
-    param.i_log_level = config->i_log_level - 1;
 
-    /* Encoder analyser parameters */
-    param.analyse.intra = 0;
-    param.analyse.inter = 0;
-    if (config->i_encoding_type > 0 && config->b_dct8x8 && config->b_i8x8)
+    if (config->b_use_cmdline)
     {
-        param.analyse.intra |= X264_ANALYSE_I8x8;
-        param.analyse.inter |= X264_ANALYSE_I8x8;
+        /* Parse command line */
+        if (Parse(config->cmdline, &param, codec) < 0)
+            return ICERR_ERROR;
     }
-    if (config->b_i4x4)
+    else
     {
-        param.analyse.intra |= X264_ANALYSE_I4x4;
-        param.analyse.inter |= X264_ANALYSE_I4x4;
-    }
-    if (config->b_psub16x16)
-    {
-        param.analyse.inter |= X264_ANALYSE_PSUB16x16;
-        if (config->b_psub8x8)
-            param.analyse.inter |= X264_ANALYSE_PSUB8x8;
-    }
-    if (config->i_bframe > 0 && config->b_bsub16x16)
-        param.analyse.inter |= X264_ANALYSE_BSUB16x16;
+        codec->b_use_vd_hack = codec->config.b_vd_hack;
 
-    param.analyse.b_transform_8x8 = config->i_encoding_type > 0 && config->b_dct8x8;
-    param.analyse.b_weighted_bipred = config->i_bframe > 0 && config->b_b_wpred;
-    param.analyse.i_direct_mv_pred = config->i_bframe > 0 ? config->i_direct_mv_pred : 0;
+        /* CPU flags */
+#ifdef HAVE_PTHREAD
+        param.i_threads = config->i_threads;
+#else
+        param.i_threads = 1;
+#endif
 
-    param.analyse.i_me_method = config->i_me_method;
-    param.analyse.i_me_range = config->i_me_range;
-    param.analyse.i_subpel_refine = config->i_subpel_refine + 1; /* 0..6 -> 1..7 */
-    param.analyse.b_bidir_me = config->i_bframe > 0 && config->b_bidir_me;
-    param.analyse.b_chroma_me = config->i_subpel_refine >= 4 && config->b_chroma_me;
-    param.analyse.b_bframe_rdo = config->i_bframe > 0 && config->i_subpel_refine >= 5 && config->b_brdo;
-    param.analyse.b_mixed_references = config->i_refmax > 1 && config->b_mixedref;
-    param.analyse.i_trellis = config->i_encoding_type > 0 && config->b_cabac ? config->i_trellis : 0;
-    param.analyse.i_noise_reduction = config->i_encoding_type > 0 ? config->i_noise_reduction : 0;
+        /* Video Properties */
+        param.vui.i_sar_width = config->i_sar_width;
+        param.vui.i_sar_height = config->i_sar_height;
 
-    param.analyse.b_psnr = config->i_log_level >= 3;
-    param.analyse.b_ssim = config->i_log_level >= 3;
+        /* Bitstream parameters */
+        param.i_frame_reference = config->i_refmax;
+        param.i_keyint_min = config->i_keyint_min;
+        param.i_keyint_max = config->i_keyint_max;
+        param.i_scenecut_threshold = config->i_scenecut_threshold;
+        param.i_bframe = config->i_bframe;
+        param.b_bframe_adaptive = config->i_bframe > 0 && config->b_bframe_adaptive;
+        param.i_bframe_bias = config->i_bframe > 0 && config->b_bframe_adaptive ? config->i_bframe_bias : 0;
+        param.b_bframe_pyramid = config->i_bframe > 1 && config->b_b_refs;
 
-    /* Rate control parameters */
-    param.rc.i_qp_min = config->i_encoding_type > 1 ? config->i_qp_min : 0;
-    param.rc.i_qp_max = config->i_encoding_type > 1 ? config->i_qp_max : X264_QUANT_MAX;
-    param.rc.i_qp_step = config->i_encoding_type > 1 ? config->i_qp_step : X264_QUANT_MAX;
+        param.b_deblocking_filter = config->i_encoding_type > 0 && config->b_filter;
+        param.i_deblocking_filter_alphac0 = config->i_encoding_type > 0 && config->b_filter ? config->i_inloop_a : 0;
+        param.i_deblocking_filter_beta = config->i_encoding_type > 0 && config->b_filter ? config->i_inloop_b : 0;
 
-    param.rc.f_ip_factor = config->i_encoding_type > 0 ? 1.0 + (float)config->i_key_boost / 100.0 : 1.0;
-    param.rc.f_pb_factor = config->i_encoding_type > 0 && config->i_bframe > 0 ? 1.0 + (float)config->i_b_red / 100.0 : 1.0;
-    param.rc.f_qcompress = config->i_encoding_type > 1 ? (float)config->i_curve_comp / 100.0 : 1.0;
+        param.b_cabac = config->b_cabac;
 
-    param.rc.psz_stat_out = malloc(MAX_PATH);
-    param.rc.psz_stat_in = malloc(MAX_PATH);
+        param.b_interlaced = config->b_interlaced;
 
-    switch (config->i_encoding_type)
-    {
-        case 0: /* 1 PASS LOSSLESS */
-            param.rc.i_rc_method = X264_RC_CQP;
-            param.rc.i_qp_constant = 0;
-            param.rc.b_stat_read = FALSE;
-            param.rc.b_stat_write = FALSE;
-            break;
+        /* Log */
+        param.i_log_level = config->i_log_level - 1;
 
-        case 1: /* 1 PASS CQP */
-            param.rc.i_rc_method = X264_RC_CQP;
-            param.rc.i_qp_constant = config->i_qp;
-            param.rc.b_stat_read = FALSE;
-            param.rc.b_stat_write = FALSE;
-            break;
-
-        case 2: /* 1 PASS VBR */
-            param.rc.i_rc_method = X264_RC_CRF;
-            param.rc.f_rf_constant = (float)config->i_rf_constant * 0.1;
-            param.rc.b_stat_read = FALSE;
-            param.rc.b_stat_write = FALSE;
-            break;
-
-        case 3: /* 1 PASS ABR */
-            param.rc.i_rc_method = X264_RC_ABR;
-            param.rc.i_bitrate = config->i_passbitrate;
-            param.rc.b_stat_read = FALSE;
-            param.rc.b_stat_write = FALSE;
-            break;
-
-        case 4: /* 2 PASS */
+        /* Encoder analyser parameters */
+        param.analyse.intra = 0;
+        param.analyse.inter = 0;
+        if (config->i_encoding_type > 0 && config->b_dct8x8 && config->b_i8x8)
         {
-            param.rc.i_rc_method = X264_RC_ABR;
-            param.rc.i_bitrate = config->i_passbitrate;
-            strcpy(param.rc.psz_stat_in, config->stats);
-            strcpy(param.rc.psz_stat_out, config->stats);
-            if (config->i_pass <= 1)
-            {
-                param.rc.b_stat_read = FALSE;
-                param.rc.b_stat_write = TRUE;
-                param.rc.f_rate_tolerance = 4.0;
-                if (config->b_fast1pass)
+            param.analyse.intra |= X264_ANALYSE_I8x8;
+            param.analyse.inter |= X264_ANALYSE_I8x8;
+        }
+        if (config->b_i4x4)
+        {
+            param.analyse.intra |= X264_ANALYSE_I4x4;
+            param.analyse.inter |= X264_ANALYSE_I4x4;
+        }
+        if (config->b_psub16x16)
+        {
+            param.analyse.inter |= X264_ANALYSE_PSUB16x16;
+            if (config->b_psub8x8)
+                param.analyse.inter |= X264_ANALYSE_PSUB8x8;
+        }
+        if (config->i_bframe > 0 && config->b_bsub16x16)
+            param.analyse.inter |= X264_ANALYSE_BSUB16x16;
+
+        param.analyse.b_transform_8x8 = config->i_encoding_type > 0 && config->b_dct8x8;
+        param.analyse.b_weighted_bipred = config->i_bframe > 0 && config->b_b_wpred;
+        param.analyse.i_direct_mv_pred = config->i_bframe > 0 ? config->i_direct_mv_pred : 0;
+
+        param.analyse.i_me_method = config->i_me_method;
+        param.analyse.i_me_range = config->i_me_range;
+        param.analyse.i_subpel_refine = config->i_subpel_refine + 1; /* 0..6 -> 1..7 */
+        param.analyse.b_bidir_me = config->i_bframe > 0 && config->b_bidir_me;
+        param.analyse.b_chroma_me = config->i_subpel_refine >= 4 && config->b_chroma_me;
+        param.analyse.b_bframe_rdo = config->i_bframe > 0 && config->i_subpel_refine >= 5 && config->b_brdo;
+        param.analyse.b_mixed_references = config->i_refmax > 1 && config->b_mixedref;
+        param.analyse.i_trellis = config->i_encoding_type > 0 && config->b_cabac ? config->i_trellis : 0;
+        param.analyse.i_noise_reduction = config->i_encoding_type > 0 ? config->i_noise_reduction : 0;
+
+        param.analyse.b_psnr = config->i_log_level >= 3;
+        param.analyse.b_ssim = config->i_log_level >= 3;
+
+        /* Rate control parameters */
+        param.rc.i_qp_min = config->i_encoding_type > 1 ? config->i_qp_min : 0;
+        param.rc.i_qp_max = config->i_encoding_type > 1 ? config->i_qp_max : X264_QUANT_MAX;
+        param.rc.i_qp_step = config->i_encoding_type > 1 ? config->i_qp_step : X264_QUANT_MAX;
+
+        param.rc.f_ip_factor = config->i_encoding_type > 0 ? 1.0 + (float)config->i_key_boost / 100.0 : 1.0;
+        param.rc.f_pb_factor = config->i_encoding_type > 0 && config->i_bframe > 0 ? 1.0 + (float)config->i_b_red / 100.0 : 1.0;
+        param.rc.f_qcompress = config->i_encoding_type > 1 ? (float)config->i_curve_comp / 100.0 : 1.0;
+
+        strcpy(stat_out, config->stats);
+        strcpy(stat_in, config->stats);
+        param.rc.b_stat_write = FALSE;
+        param.rc.psz_stat_out = (char *)&stat_out;
+        param.rc.b_stat_read = FALSE;
+        param.rc.psz_stat_in = (char *)&stat_in;
+
+        switch (config->i_encoding_type)
+        {
+            case 0: /* 1 PASS LOSSLESS */
+                param.rc.i_rc_method = X264_RC_CQP;
+                param.rc.i_qp_constant = 0;
+                break;
+
+            case 1: /* 1 PASS CQP */
+                param.rc.i_rc_method = X264_RC_CQP;
+                param.rc.i_qp_constant = config->i_qp;
+                break;
+
+            case 2: /* 1 PASS VBR */
+                param.rc.i_rc_method = X264_RC_CRF;
+                param.rc.f_rf_constant = (float)config->i_rf_constant * 0.1;
+                break;
+
+            case 3: /* 1 PASS ABR */
+                param.rc.i_rc_method = X264_RC_ABR;
+                param.rc.i_bitrate = config->i_passbitrate;
+                break;
+
+            case 4: /* 2 PASS */
+                param.rc.i_rc_method = X264_RC_ABR;
+                param.rc.i_bitrate = config->i_passbitrate;
+                if (config->i_pass <= 1)
                 {
-                    /* Adjust or turn off some flags to gain speed, if needed */
-                    param.i_frame_reference = 1;
-                    param.analyse.intra = 0;
-                    param.analyse.inter = 0;
-                    param.analyse.b_transform_8x8 = FALSE;
-                    param.analyse.i_me_method = X264_ME_DIA;
-                    param.analyse.i_subpel_refine = X264_MIN(2, param.analyse.i_subpel_refine); //subme=1 may lead for significant quality decrease
-                    param.analyse.b_chroma_me = FALSE;
-                    param.analyse.b_bframe_rdo = FALSE;
-                    param.analyse.b_mixed_references = FALSE;
+                    param.rc.b_stat_write = TRUE;
+                    param.rc.f_rate_tolerance = 4.0;
+                    if (config->b_fast1pass)
+                    {
+                        /* Adjust or turn off some flags to gain speed, if needed */
+                        param.i_frame_reference = 1;
+                        param.analyse.intra = 0;
+                        param.analyse.inter = 0;
+                        param.analyse.b_transform_8x8 = FALSE;
+                        param.analyse.i_me_method = X264_ME_DIA;
+                        param.analyse.i_subpel_refine = X264_MIN(2, param.analyse.i_subpel_refine); //subme=1 may lead for significant quality decrease
+                        param.analyse.b_chroma_me = FALSE;
+                        param.analyse.b_bframe_rdo = FALSE;
+                        param.analyse.b_mixed_references = FALSE;
+                    }
                 }
-            }
-            else
-            {
-                param.rc.b_stat_read = TRUE;
-                param.rc.b_stat_write = config->b_updatestats;
-            }
-            break;
+                else
+                {
+                    param.rc.b_stat_write = config->b_updatestats;
+                    param.rc.b_stat_read = TRUE;
+                }
+                break;
+
+            default:
+                assert(0);
+                break;
         }
     }
 
     /* Open the encoder */
     codec->h = x264_encoder_open(&param);
-
-    free(param.rc.psz_stat_out);
-    free(param.rc.psz_stat_in);
 
     if (codec->h == NULL)
         return ICERR_ERROR;
@@ -461,7 +826,7 @@ LRESULT compress(CODEC *codec, ICCOMPRESS *icc)
     }
 
 #ifdef VIRTUALDUB_HACK
-    if (codec->config.b_vd_hack && i_nal == 0)
+    if (codec->b_use_vd_hack && i_nal == 0)
     {
         *icc->lpdwFlags = 0;
         ((char *)icc->lpOutput)[0] = 0x7f;

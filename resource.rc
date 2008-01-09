@@ -49,15 +49,17 @@ BEGIN
     LISTBOX         IDC_CONSOLE,6,8,251,95,LBS_HASSTRINGS | LBS_NOINTEGRALHEIGHT | LBS_NOSEL | WS_VSCROLL
 END
 
-IDD_MAINCONFIG DIALOGEX 0, 0, 204, 222
+IDD_MAINCONFIG DIALOGEX 0, 0, 204, 250
 STYLE DS_SETFONT | DS_MODALFRAME | WS_POPUP | WS_CAPTION | WS_SYSMENU
 CAPTION "x264vfw configuration"
 FONT 8, "MS Sans Serif", 400, 0, 0x0
 BEGIN
-    DEFPUSHBUTTON   "OK",IDOK,156,204,42,14
+    DEFPUSHBUTTON   "OK",IDOK,156,234,42,14
     CONTROL         "",IDC_TABCONTROL,"SysTabControl32",TCS_MULTILINE | WS_TABSTOP,0,0,204,200
-    PUSHBUTTON      "Load Defaults",IDC_DEFAULTS,6,204,54,14
-    PUSHBUTTON      "Cancel",IDCANCEL,108,204,42,14
+    PUSHBUTTON      "Load Defaults",IDC_DEFAULTS,6,234,54,14
+    PUSHBUTTON      "Cancel",IDCANCEL,108,234,42,14
+    CONTROL         "Use command line:",IDC_USE_CMDLINE,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,6,204,192,8
+    EDITTEXT        IDC_CMDLINE,6,216,192,12,ES_AUTOHSCROLL
 END
 
 IDD_TAB_BITRATE DIALOGEX 0, 0, 200, 188
@@ -66,7 +68,7 @@ FONT 8, "MS Shell Dlg", 0, 0, 0x0
 BEGIN
     CONTROL         IDB_LOGO,IDC_LOGO,"Static",SS_BITMAP,31,12,136,39,WS_EX_CLIENTEDGE
     CTEXT           "BUILD",IDC_BUILDREV,7,52,186,18,WS_DISABLED
-    COMBOBOX        IDC_BITRATEMODE,30,72,138,66,CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
+    COMBOBOX        IDC_BITRATEMODE,30,72,138,80,CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
     LTEXT           "Average bitrate (kbit/s)",IDC_BITRATELABEL,30,90,109,12,SS_CENTERIMAGE
     EDITTEXT        IDC_BITRATEEDIT,144,90,24,12,ES_AUTOHSCROLL
     CONTROL         "",IDC_BITRATESLIDER,"msctls_trackbar32",TBS_BOTH | TBS_NOTICKS | WS_TABSTOP,24,104,150,18
@@ -83,7 +85,7 @@ STYLE DS_SETFONT | DS_FIXEDSYS | WS_CHILD
 FONT 8, "MS Shell Dlg", 0, 0, 0x0
 BEGIN
     GROUPBOX        "Bitrate",IDC_STATIC,6,2,186,53,WS_DISABLED
-    LTEXT           "Keyframe boost (%)",IDC_STATIC,42,10,78,12,SS_CENTERIMAGE
+    LTEXT           "I-frames boost (%)",IDC_STATIC,42,10,78,12,SS_CENTERIMAGE
     LTEXT           "B-frames reduction (%)",IDC_STATIC,42,24,78,12,SS_CENTERIMAGE
     LTEXT           "Bitrate variability (%)",IDC_STATIC,42,38,78,12,SS_CENTERIMAGE
     EDITTEXT        IDC_IPRATIO,126,10,24,12,ES_AUTOHSCROLL | ES_NUMBER
@@ -128,7 +130,7 @@ BEGIN
     CONTROL         "Weighted prediction",IDC_WBPRED,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,97,133,89,12
     CONTROL         "Bidirectional motion estimation",IDC_BIDIR_ME,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,17,145,169,12
     LTEXT           "Direct MV prediction",IDC_STATIC,30,161,65,12,SS_CENTERIMAGE
-    COMBOBOX        IDC_DIRECTPRED,97,161,71,67,CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
+    COMBOBOX        IDC_DIRECTPRED,97,161,71,80,CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
 END
 
 IDD_TAB_MISC DIALOGEX 0, 0, 200, 188
@@ -137,10 +139,10 @@ FONT 8, "MS Shell Dlg", 0, 0, 0x0
 BEGIN
     GROUPBOX        "Motion estimation",IDC_STATIC,7,2,186,82,WS_DISABLED
     LTEXT           "Partition decision",IDC_STATIC,24,12,62,12,SS_CENTERIMAGE
-    COMBOBOX        IDC_SUBPEL,90,12,51,77,CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
+    COMBOBOX        IDC_SUBPEL,90,12,51,80,CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
     CONTROL         "B-RDO",IDC_BRDO,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,146,12,40,12
     LTEXT           "Method",IDC_STATIC,24,30,62,12,SS_CENTERIMAGE
-    COMBOBOX        IDC_ME_METHOD,90,30,90,67,CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
+    COMBOBOX        IDC_ME_METHOD,90,30,90,80,CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
     LTEXT           "Range",IDC_STATIC,24,48,62,12,SS_CENTERIMAGE
     EDITTEXT        IDC_MERANGE,90,48,24,12,ES_AUTOHSCROLL | ES_NUMBER
     CONTROL         "Chroma ME",IDC_CHROMAME,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,126,48,60,12
@@ -149,9 +151,9 @@ BEGIN
     CONTROL         "Mixed refs",IDC_MIXEDREF,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,126,66,60,12
     GROUPBOX        "Debug",IDC_STATIC,94,91,96,46,WS_DISABLED
     LTEXT           "Log level",IDC_STATIC,100,101,36,12,SS_CENTERIMAGE
-    COMBOBOX        IDC_LOG,136,101,48,67,CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
+    COMBOBOX        IDC_LOG,136,101,48,80,CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
     LTEXT           "FourCC",IDC_STATIC,100,119,36,12,SS_CENTERIMAGE
-    COMBOBOX        IDC_FOURCC,136,119,48,60,CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
+    COMBOBOX        IDC_FOURCC,136,119,48,80,CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
     GROUPBOX        "Misc. options",IDC_STATIC,7,86,186,95,WS_DISABLED
     LTEXT           "SAR",IDC_STATIC,10,101,28,12,SS_CENTERIMAGE
     CTEXT           ":",IDC_STATIC,60,101,12,12,SS_CENTERIMAGE
@@ -187,7 +189,7 @@ BEGIN
         LEFTMARGIN, 7
         RIGHTMARGIN, 197
         TOPMARGIN, 7
-        BOTTOMMARGIN, 215
+        BOTTOMMARGIN, 243
     END
 
     IDD_TAB_BITRATE, DIALOG
@@ -266,6 +268,8 @@ END
 
 STRINGTABLE 
 BEGIN
+    IDC_USE_CMDLINE         "Ignore all other options and use command line instead of them."
+    IDC_CMDLINE             "x264-style command line options."
     IDC_DEFAULTS            "Reset all settings to default values."
 END
 
@@ -286,6 +290,7 @@ STRINGTABLE
 BEGIN
     IDC_BFRAME              "Maximum number of consecutive B-frames between I and P-frames."
     IDC_VDHACK              "VirtualDub hack for fixing B-frames lag (also multithreading lag). CAUTION! Use only with VirtualDub otherwise encoder can produce invalid bitstream."
+    IDC_BBIASSLIDER         "Bias the choice to use B-frames. Positive values cause more B-frames, negative values cause less B-frames."
     IDC_BBIAS               "Bias the choice to use B-frames. Positive values cause more B-frames, negative values cause less B-frames."
     IDC_BADAPT              "Adaptive B-frames decision."
     IDC_BREFS               "Allows B-frames to be used as references for predicting other frames. Keeps the middle of 2+ consecutive B-frames as a reference, and reorders frame appropriately."
