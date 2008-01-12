@@ -52,6 +52,7 @@ typedef struct
     int b_fast1pass;    /* turns off some flags during 1st pass */
     int b_updatestats;  /* updates the statsfile during 2nd pass */
     char stats[MAX_PATH];
+    char extra_cmdline[MAX_PATH];
 
     /* Rate Control */
     int i_key_boost;

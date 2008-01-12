@@ -548,7 +548,7 @@ LRESULT compress_begin(CODEC *codec, BITMAPINFO *lpbiInput, BITMAPINFO *lpbiOutp
     codec->prev_output_biSizeImage = 0;
 #endif
 #ifdef VIRTUALDUB_HACK
-    codec->i_frame_remain = codec->i_frame_total;
+    codec->i_frame_remain = codec->i_frame_total ? codec->i_frame_total : -1;
 #endif
 
     /* Get default param */
@@ -718,6 +718,10 @@ LRESULT compress_begin(CODEC *codec, BITMAPINFO *lpbiInput, BITMAPINFO *lpbiOutp
                 assert(0);
                 break;
         }
+
+        /* Parse extra command line options */
+        if (Parse(config->extra_cmdline, &param, codec) < 0)
+            return ICERR_ERROR;
     }
 
     /* Open the encoder */

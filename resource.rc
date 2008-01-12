@@ -74,10 +74,12 @@ BEGIN
     CONTROL         "",IDC_BITRATESLIDER,"msctls_trackbar32",TBS_BOTH | TBS_NOTICKS | WS_TABSTOP,24,104,150,18
     LTEXT           "0",IDC_BITRATELOW,30,122,66,12,SS_CENTERIMAGE
     RTEXT           "9999",IDC_BITRATEHIGH,108,122,60,12,SS_CENTERIMAGE
-    CONTROL         "Update statsfile",IDC_UPDATESTATS,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,12,144,173,12
-    LTEXT           "Statsfile name",IDC_STATIC,12,162,48,12,SS_CENTERIMAGE
-    EDITTEXT        IDC_STATSFILE,60,162,102,12,ES_AUTOHSCROLL
-    PUSHBUTTON      "...",IDC_STATSFILE_BROWSE,168,162,18,12
+    CONTROL         "Update statsfile",IDC_UPDATESTATS,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,12,138,173,8
+    LTEXT           "Statsfile name",IDC_STATIC,12,150,48,12,SS_CENTERIMAGE
+    EDITTEXT        IDC_STATSFILE,60,150,102,12,ES_AUTOHSCROLL
+    PUSHBUTTON      "...",IDC_STATSFILE_BROWSE,168,150,18,12
+    LTEXT           "Extra options",IDC_STATIC,12,168,48,12,SS_CENTERIMAGE
+    EDITTEXT        IDC_EXTRA_CMDLINE,60,168,126,12,ES_AUTOHSCROLL
 END
 
 IDD_TAB_RATECONTROL DIALOGEX 0, 0, 200, 188
@@ -271,6 +273,11 @@ BEGIN
     IDC_USE_CMDLINE         "Ignore all other options and use command line instead of them."
     IDC_CMDLINE             "x264-style command line options."
     IDC_DEFAULTS            "Reset all settings to default values."
+END
+
+STRINGTABLE 
+BEGIN
+    IDC_EXTRA_CMDLINE       "Extra x264-style command line options which will be applied after standard options."
 END
 
 STRINGTABLE 

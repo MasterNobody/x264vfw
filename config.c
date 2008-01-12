@@ -153,9 +153,10 @@ static const reg_int_t reg_int_table[] =
 
 static const reg_str_t reg_str_table[] =
 {
-    { "statsfile", reg.stats,   ".\\x264.stats",           STATS_PATH_SIZE    },
-    { "fourcc",    reg.fcc,     (char *)&fcc_str_table[0], sizeof(fourcc_str) },
-    { "cmdline",   reg.cmdline, "",                        MAX_PATH           }
+    { "statsfile",     reg.stats,         ".\\x264.stats",           STATS_PATH_SIZE    },
+    { "extra_cmdline", reg.extra_cmdline, "",                        MAX_PATH           },
+    { "fourcc",        reg.fcc,           (char *)&fcc_str_table[0], sizeof(fourcc_str) },
+    { "cmdline",       reg.cmdline,       "",                        MAX_PATH           }
 };
 
 double GetDlgItemDouble(HWND hDlg, int nIDDlgItem)
@@ -272,57 +273,6 @@ void config_defaults(CONFIG *config)
 /* Tabs */
 void tabs_enable_items(HWND hDlg, CONFIG *config)
 {
-    char szTmp[1024];
-
-    sprintf(szTmp, "Build date: %s %s\nlibx264 core %d%s", __DATE__, __TIME__, X264_BUILD, X264_VERSION);
-    SetDlgItemText(hTabs[0], IDC_BUILDREV, szTmp);
-
-    switch (config->i_encoding_type)
-    {
-        case 0: /* 1 pass, lossless */
-            SetDlgItemText(hTabs[0], IDC_BITRATELABEL, "");
-            SendDlgItemMessage(hTabs[0], IDC_BITRATESLIDER, TBM_SETRANGE, TRUE, (LPARAM)MAKELONG(0, 0));
-            SetDlgItemText(hTabs[0], IDC_BITRATELOW, "");
-            SetDlgItemText(hTabs[0], IDC_BITRATEHIGH, "");
-            break;
-
-        case 1: /* 1 pass, quantizer-based (CQP) */
-            SetDlgItemText(hTabs[0], IDC_BITRATELABEL, "Quantizer");
-            SendDlgItemMessage(hTabs[0], IDC_BITRATESLIDER, TBM_SETRANGE, TRUE, (LPARAM)MAKELONG(1, X264_QUANT_MAX));
-            SetDlgItemText(hTabs[0], IDC_BITRATELOW, "1 (High quality)");
-            sprintf(szTmp, "(Low quality) %d", X264_QUANT_MAX);
-            SetDlgItemText(hTabs[0], IDC_BITRATEHIGH, szTmp);
-            break;
-
-        case 2: /* 1 pass, ratefactor-based (CRF) */
-            SetDlgItemText(hTabs[0], IDC_BITRATELABEL, "Ratefactor");
-            SendDlgItemMessage(hTabs[0], IDC_BITRATESLIDER, TBM_SETRANGE, TRUE, (LPARAM)MAKELONG(10, X264_QUANT_MAX * 10));
-            SetDlgItemText(hTabs[0], IDC_BITRATELOW, "1.0 (High quality)");
-            sprintf(szTmp, "(Low quality) %d.0", X264_QUANT_MAX);
-            SetDlgItemText(hTabs[0], IDC_BITRATEHIGH, szTmp);
-            break;
-
-        case 3: /* 1 pass, bitrate-based (ABR) */
-            SetDlgItemText(hTabs[0], IDC_BITRATELABEL, "Average bitrate (kbit/s)");
-            SendDlgItemMessage(hTabs[0], IDC_BITRATESLIDER, TBM_SETRANGE, TRUE, (LPARAM)MAKELONG(1, X264_BITRATE_MAX));
-            SetDlgItemText(hTabs[0], IDC_BITRATELOW, "1");
-            sprintf(szTmp, "%d", X264_BITRATE_MAX);
-            SetDlgItemText(hTabs[0], IDC_BITRATEHIGH, szTmp);
-            break;
-
-        case 4: /* 2 pass */
-            SetDlgItemText(hTabs[0], IDC_BITRATELABEL, "Target bitrate (kbit/s)");
-            SendDlgItemMessage(hTabs[0], IDC_BITRATESLIDER, TBM_SETRANGE, TRUE, (LPARAM)MAKELONG(1, X264_BITRATE_MAX));
-            SetDlgItemText(hTabs[0], IDC_BITRATELOW, "1");
-            sprintf(szTmp, "%d", X264_BITRATE_MAX);
-            SetDlgItemText(hTabs[0], IDC_BITRATEHIGH, szTmp);
-            break;
-
-        default:
-            assert(0);
-            break;
-    }
-
     ShowWindow(GetDlgItem(hTabs[0], IDC_BITRATELABEL), config->i_encoding_type > 0);
     ShowWindow(GetDlgItem(hTabs[0], IDC_BITRATEEDIT), config->i_encoding_type > 0);
     ShowWindow(GetDlgItem(hTabs[0], IDC_BITRATESLIDER), config->i_encoding_type > 0);
@@ -332,6 +282,8 @@ void tabs_enable_items(HWND hDlg, CONFIG *config)
     EnableWindow(GetDlgItem(hTabs[0], IDC_UPDATESTATS), config->i_encoding_type == 4 && config->i_pass > 1);
     EnableWindow(GetDlgItem(hTabs[0], IDC_STATSFILE), config->i_encoding_type == 4);
     EnableWindow(GetDlgItem(hTabs[0], IDC_STATSFILE_BROWSE), config->i_encoding_type == 4);
+
+//    EnableWindow(GetDlgItem(hTabs[0], IDC_EXTRA_CMDLINE), TRUE);
 
     EnableWindow(GetDlgItem(hTabs[1], IDC_IPRATIO), config->i_encoding_type > 0);
     EnableWindow(GetDlgItem(hTabs[1], IDC_PBRATIO), config->i_encoding_type > 0 && config->i_bframe > 0);
@@ -403,6 +355,11 @@ void tabs_enable_items(HWND hDlg, CONFIG *config)
 
 void tabs_update_items(HWND hDlg, CONFIG *config)
 {
+    char szTmp[1024];
+
+    sprintf(szTmp, "Build date: %s %s\nlibx264 core %d%s", __DATE__, __TIME__, X264_BUILD, X264_VERSION);
+    SetDlgItemText(hTabs[0], IDC_BUILDREV, szTmp);
+
     if (SendMessage(GetDlgItem(hTabs[0], IDC_BITRATEMODE), CB_GETCOUNT, 0, 0) == 0)
     {
         SendDlgItemMessage(hTabs[0], IDC_BITRATEMODE, CB_ADDSTRING, 0, (LPARAM)"Single pass - lossless");
@@ -418,25 +375,44 @@ void tabs_update_items(HWND hDlg, CONFIG *config)
     {
         case 0: /* 1 pass, lossless */
             SendDlgItemMessage(hTabs[0], IDC_BITRATEMODE, CB_SETCURSEL, 0, 0);
+            SetDlgItemText(hTabs[0], IDC_BITRATELABEL, "");
+            SetDlgItemText(hTabs[0], IDC_BITRATELOW, "");
+            SetDlgItemText(hTabs[0], IDC_BITRATEHIGH, "");
             SetDlgItemInt(hTabs[0], IDC_BITRATEEDIT, 0, FALSE);
+            SendDlgItemMessage(hTabs[0], IDC_BITRATESLIDER, TBM_SETRANGE, TRUE, (LPARAM)MAKELONG(0, 0));
             SendDlgItemMessage(hTabs[0], IDC_BITRATESLIDER, TBM_SETPOS, TRUE, 0);
             break;
 
         case 1: /* 1 pass, quantizer-based (CQP) */
             SendDlgItemMessage(hTabs[0], IDC_BITRATEMODE, CB_SETCURSEL, 1, 0);
+            SetDlgItemText(hTabs[0], IDC_BITRATELABEL, "Quantizer");
+            SetDlgItemText(hTabs[0], IDC_BITRATELOW, "1 (High quality)");
+            sprintf(szTmp, "(Low quality) %d", X264_QUANT_MAX);
+            SetDlgItemText(hTabs[0], IDC_BITRATEHIGH, szTmp);
             SetDlgItemInt(hTabs[0], IDC_BITRATEEDIT, config->i_qp, FALSE);
+            SendDlgItemMessage(hTabs[0], IDC_BITRATESLIDER, TBM_SETRANGE, TRUE, (LPARAM)MAKELONG(1, X264_QUANT_MAX));
             SendDlgItemMessage(hTabs[0], IDC_BITRATESLIDER, TBM_SETPOS, TRUE, config->i_qp);
             break;
 
         case 2: /* 1 pass, ratefactor-based (CRF) */
             SendDlgItemMessage(hTabs[0], IDC_BITRATEMODE, CB_SETCURSEL, 2, 0);
+            SetDlgItemText(hTabs[0], IDC_BITRATELABEL, "Ratefactor");
+            SetDlgItemText(hTabs[0], IDC_BITRATELOW, "1.0 (High quality)");
+            sprintf(szTmp, "(Low quality) %d.0", X264_QUANT_MAX);
+            SetDlgItemText(hTabs[0], IDC_BITRATEHIGH, szTmp);
             SetDlgItemDouble(hTabs[0], IDC_BITRATEEDIT, config->i_rf_constant * 0.1);
+            SendDlgItemMessage(hTabs[0], IDC_BITRATESLIDER, TBM_SETRANGE, TRUE, (LPARAM)MAKELONG(10, X264_QUANT_MAX * 10));
             SendDlgItemMessage(hTabs[0], IDC_BITRATESLIDER, TBM_SETPOS, TRUE, config->i_rf_constant);
             break;
 
         case 3: /* 1 pass, bitrate-based (ABR) */
             SendDlgItemMessage(hTabs[0], IDC_BITRATEMODE, CB_SETCURSEL, 3, 0);
+            SetDlgItemText(hTabs[0], IDC_BITRATELABEL, "Average bitrate (kbit/s)");
+            SetDlgItemText(hTabs[0], IDC_BITRATELOW, "1");
+            sprintf(szTmp, "%d", X264_BITRATE_MAX);
+            SetDlgItemText(hTabs[0], IDC_BITRATEHIGH, szTmp);
             SetDlgItemInt(hTabs[0], IDC_BITRATEEDIT, config->i_passbitrate, FALSE);
+            SendDlgItemMessage(hTabs[0], IDC_BITRATESLIDER, TBM_SETRANGE, TRUE, (LPARAM)MAKELONG(1, X264_BITRATE_MAX));
             SendDlgItemMessage(hTabs[0], IDC_BITRATESLIDER, TBM_SETPOS, TRUE, config->i_passbitrate);
             break;
 
@@ -447,7 +423,12 @@ void tabs_update_items(HWND hDlg, CONFIG *config)
                 SendDlgItemMessage(hTabs[0], IDC_BITRATEMODE, CB_SETCURSEL, 5, 0);
             else
                 SendDlgItemMessage(hTabs[0], IDC_BITRATEMODE, CB_SETCURSEL, 4, 0);
+            SetDlgItemText(hTabs[0], IDC_BITRATELABEL, "Target bitrate (kbit/s)");
+            SetDlgItemText(hTabs[0], IDC_BITRATELOW, "1");
+            sprintf(szTmp, "%d", X264_BITRATE_MAX);
+            SetDlgItemText(hTabs[0], IDC_BITRATEHIGH, szTmp);
             SetDlgItemInt(hTabs[0], IDC_BITRATEEDIT, config->i_passbitrate, FALSE);
+            SendDlgItemMessage(hTabs[0], IDC_BITRATESLIDER, TBM_SETRANGE, TRUE, (LPARAM)MAKELONG(1, X264_BITRATE_MAX));
             SendDlgItemMessage(hTabs[0], IDC_BITRATESLIDER, TBM_SETPOS, TRUE, config->i_passbitrate);
             break;
 
@@ -458,6 +439,9 @@ void tabs_update_items(HWND hDlg, CONFIG *config)
     CheckDlgButton(hTabs[0], IDC_UPDATESTATS, config->b_updatestats);
     SendMessage(GetDlgItem(hTabs[0], IDC_STATSFILE), EM_LIMITTEXT, STATS_PATH_SIZE - 1, 0);
     SetDlgItemText(hTabs[0], IDC_STATSFILE, config->stats);
+
+    SendMessage(GetDlgItem(hTabs[0], IDC_EXTRA_CMDLINE), EM_LIMITTEXT, MAX_PATH - 1, 0);
+    SetDlgItemText(hTabs[0], IDC_EXTRA_CMDLINE, config->extra_cmdline);
 
     SendMessage(GetDlgItem(hTabs[1], IDC_IPRATIO), EM_LIMITTEXT, 4, 0);
     SetDlgItemInt(hTabs[1], IDC_IPRATIO, config->i_key_boost, FALSE);
@@ -1115,6 +1099,11 @@ BOOL CALLBACK callback_tabs(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lParam)
                                 strcpy(config->stats, ".\\x264.stats");
                             break;
 
+                        case IDC_EXTRA_CMDLINE:
+                            if (GetDlgItemText(hTabs[0], IDC_EXTRA_CMDLINE, config->extra_cmdline, MAX_PATH) == 0)
+                                strcpy(config->extra_cmdline, "");
+                            break;
+
                         case IDC_IPRATIO:
                             CHECKED_SET_MAX_INT(config->i_key_boost, hTabs[1], IDC_IPRATIO, FALSE, 0, 100);
                             break;
@@ -1231,6 +1220,12 @@ BOOL CALLBACK callback_tabs(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lParam)
                             if (GetDlgItemText(hTabs[0], IDC_STATSFILE, config->stats, STATS_PATH_SIZE) == 0)
                                 strcpy(config->stats, ".\\x264.stats");
                             SetDlgItemText(hTabs[0], IDC_STATSFILE, config->stats);
+                            break;
+
+                        case IDC_EXTRA_CMDLINE:
+                            if (GetDlgItemText(hTabs[0], IDC_EXTRA_CMDLINE, config->extra_cmdline, MAX_PATH) == 0)
+                                strcpy(config->extra_cmdline, "");
+                            SetDlgItemText(hTabs[0], IDC_EXTRA_CMDLINE, config->extra_cmdline);
                             break;
 
                         case IDC_IPRATIO:
