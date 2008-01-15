@@ -148,15 +148,12 @@ static const reg_int_t reg_int_table[] =
     { "use_cmdline",     &reg.b_use_cmdline,        0   }
 };
 
-// -5 because x264 add ".temp" for temp file
-#define STATS_PATH_SIZE (MAX_PATH - 5)
-
 static const reg_str_t reg_str_table[] =
 {
-    { "statsfile",     reg.stats,         ".\\x264.stats",           STATS_PATH_SIZE    },
-    { "extra_cmdline", reg.extra_cmdline, "",                        MAX_PATH           },
+    { "statsfile",     reg.stats,         ".\\x264.stats",           MAX_STATS_PATH     },
+    { "extra_cmdline", reg.extra_cmdline, "",                        MAX_CMDLINE        },
     { "fourcc",        reg.fcc,           (char *)&fcc_str_table[0], sizeof(fourcc_str) },
-    { "cmdline",       reg.cmdline,       "",                        MAX_PATH           }
+    { "cmdline",       reg.cmdline,       "",                        MAX_CMDLINE        }
 };
 
 double GetDlgItemDouble(HWND hDlg, int nIDDlgItem)
@@ -437,10 +434,10 @@ void tabs_update_items(HWND hDlg, CONFIG *config)
             break;
     }
     CheckDlgButton(hTabs[0], IDC_UPDATESTATS, config->b_updatestats);
-    SendMessage(GetDlgItem(hTabs[0], IDC_STATSFILE), EM_LIMITTEXT, STATS_PATH_SIZE - 1, 0);
+    SendMessage(GetDlgItem(hTabs[0], IDC_STATSFILE), EM_LIMITTEXT, MAX_STATS_PATH - 1, 0);
     SetDlgItemText(hTabs[0], IDC_STATSFILE, config->stats);
 
-    SendMessage(GetDlgItem(hTabs[0], IDC_EXTRA_CMDLINE), EM_LIMITTEXT, MAX_PATH - 1, 0);
+    SendMessage(GetDlgItem(hTabs[0], IDC_EXTRA_CMDLINE), EM_LIMITTEXT, MAX_CMDLINE - 1, 0);
     SetDlgItemText(hTabs[0], IDC_EXTRA_CMDLINE, config->extra_cmdline);
 
     SendMessage(GetDlgItem(hTabs[1], IDC_IPRATIO), EM_LIMITTEXT, 4, 0);
@@ -556,7 +553,7 @@ void tabs_update_items(HWND hDlg, CONFIG *config)
     CheckDlgButton(hTabs[3], IDC_INTERLACED, config->b_interlaced);
 
     CheckDlgButton(hDlg, IDC_USE_CMDLINE, config->b_use_cmdline);
-    SendMessage(GetDlgItem(hDlg, IDC_CMDLINE), EM_LIMITTEXT, MAX_PATH - 1, 0);
+    SendMessage(GetDlgItem(hDlg, IDC_CMDLINE), EM_LIMITTEXT, MAX_CMDLINE - 1, 0);
     SetDlgItemText(hDlg, IDC_CMDLINE, config->cmdline);
 }
 
@@ -705,8 +702,22 @@ BOOL CALLBACK callback_main(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lParam)
                     switch (LOWORD(wParam))
                     {
                         case IDC_CMDLINE:
-                            if (GetDlgItemText(hDlg, IDC_CMDLINE, config->cmdline, MAX_PATH) == 0)
+                            if (GetDlgItemText(hDlg, IDC_CMDLINE, config->cmdline, MAX_CMDLINE) == 0)
                                 strcpy(config->cmdline, "");
+                            break;
+
+                        default:
+                            return FALSE;
+                    }
+                    break;
+
+                case EN_KILLFOCUS:
+                    switch (LOWORD(wParam))
+                    {
+                        case IDC_CMDLINE:
+                            if (GetDlgItemText(hDlg, IDC_CMDLINE, config->cmdline, MAX_CMDLINE) == 0)
+                                strcpy(config->cmdline, "");
+                            SetDlgItemText(hDlg, IDC_CMDLINE, config->cmdline);
                             break;
 
                         default:
@@ -951,9 +962,9 @@ BOOL CALLBACK callback_tabs(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lParam)
                         case IDC_STATSFILE_BROWSE:
                             {
                                 OPENFILENAME ofn;
-                                char tmp[MAX_PATH];
+                                char tmp[MAX_STATS_SIZE];
 
-                                GetDlgItemText(hTabs[0], IDC_STATSFILE, tmp, STATS_PATH_SIZE);
+                                GetDlgItemText(hTabs[0], IDC_STATSFILE, tmp, MAX_STATS_SIZE);
 
                                 memset(&ofn, 0, sizeof(OPENFILENAME));
                                 ofn.lStructSize = sizeof(OPENFILENAME);
@@ -961,7 +972,7 @@ BOOL CALLBACK callback_tabs(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lParam)
                                 ofn.hwndOwner = hDlg;
                                 ofn.lpstrFilter = "Statsfile (*.stats)\0*.stats\0All files (*.*)\0*.*\0\0";
                                 ofn.lpstrFile = tmp;
-                                ofn.nMaxFile = STATS_PATH_SIZE;
+                                ofn.nMaxFile = MAX_STATS_SIZE;
                                 ofn.Flags = OFN_PATHMUSTEXIST;
 
                                 if (config->i_pass <= 1)
@@ -1095,12 +1106,12 @@ BOOL CALLBACK callback_tabs(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lParam)
                             break;
 
                         case IDC_STATSFILE:
-                            if (GetDlgItemText(hTabs[0], IDC_STATSFILE, config->stats, STATS_PATH_SIZE) == 0)
+                            if (GetDlgItemText(hTabs[0], IDC_STATSFILE, config->stats, MAX_STATS_PATH) == 0)
                                 strcpy(config->stats, ".\\x264.stats");
                             break;
 
                         case IDC_EXTRA_CMDLINE:
-                            if (GetDlgItemText(hTabs[0], IDC_EXTRA_CMDLINE, config->extra_cmdline, MAX_PATH) == 0)
+                            if (GetDlgItemText(hTabs[0], IDC_EXTRA_CMDLINE, config->extra_cmdline, MAX_CMDLINE) == 0)
                                 strcpy(config->extra_cmdline, "");
                             break;
 
@@ -1217,13 +1228,13 @@ BOOL CALLBACK callback_tabs(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lParam)
                             break;
 
                         case IDC_STATSFILE:
-                            if (GetDlgItemText(hTabs[0], IDC_STATSFILE, config->stats, STATS_PATH_SIZE) == 0)
+                            if (GetDlgItemText(hTabs[0], IDC_STATSFILE, config->stats, MAX_STATS_PATH) == 0)
                                 strcpy(config->stats, ".\\x264.stats");
                             SetDlgItemText(hTabs[0], IDC_STATSFILE, config->stats);
                             break;
 
                         case IDC_EXTRA_CMDLINE:
-                            if (GetDlgItemText(hTabs[0], IDC_EXTRA_CMDLINE, config->extra_cmdline, MAX_PATH) == 0)
+                            if (GetDlgItemText(hTabs[0], IDC_EXTRA_CMDLINE, config->extra_cmdline, MAX_CMDLINE) == 0)
                                 strcpy(config->extra_cmdline, "");
                             SetDlgItemText(hTabs[0], IDC_EXTRA_CMDLINE, config->extra_cmdline);
                             break;

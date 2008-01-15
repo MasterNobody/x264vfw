@@ -31,9 +31,6 @@
 #define _GNU_SOURCE
 #include <getopt.h>
 
-#define X264_MAX(a, b) ((a)>(b) ? (a) : (b))
-#define X264_MIN(a, b) ((a)<(b) ? (a) : (b))
-
 /* Return a valid x264 colorspace or X264_CSP_NONE if unsuported */
 static int get_csp(BITMAPINFOHEADER *hdr)
 {
@@ -218,11 +215,11 @@ static void x264vfw_log(CODEC *codec, int i_level, const char *psz_fmt, ... )
 static int Parse(const char *cmdline, x264_param_t *param, CODEC *codec)
 {
 
-#define MAX_ARG_NUM (MAX_PATH / 2 + 1)
+#define MAX_ARG_NUM (MAX_CMDLINE / 2 + 1)
 
     int  argc = 1;
     char *argv[MAX_ARG_NUM];
-    char temp[MAX_PATH];
+    char temp[MAX_CMDLINE];
     char *p, *q;
     int  s = 0;
 
@@ -534,8 +531,8 @@ LRESULT compress_begin(CODEC *codec, BITMAPINFO *lpbiInput, BITMAPINFO *lpbiOutp
 {
     CONFIG *config = &codec->config;
     x264_param_t param;
-    char stat_out[MAX_PATH];
-    char stat_in[MAX_PATH];
+    char stat_out[MAX_STATS_SIZE];
+    char stat_in[MAX_STATS_SIZE];
 
     /* Destroy previous handle */
     compress_end(codec);

@@ -9,6 +9,7 @@
 
   !include "MUI.nsh"
   !include "Sections.nsh"
+  !include "x64.nsh"
 
 ;--------------------------------
 ;General
@@ -72,8 +73,16 @@ Section "-Required"
   File ".\x264vfw.ico"
 
   CreateDirectory $SMPROGRAMS\${ShortName}
-  CreateShortcut "$SMPROGRAMS\${ShortName}\Configure ${ShortName}.lnk" "rundll32.exe" "x264vfw.dll,Configure" "$INSTDIR\x264vfw.ico"
-  CreateShortcut "$SMPROGRAMS\${ShortName}\Uninstall ${ShortName}.lnk" "$SYSDIR\${ShortName}-uninstall.exe"
+
+  IfFileExists "$INSTDIR\rundll32.exe" RUNDLL32_SYSDIR RUNDLL32_WINDIR
+RUNDLL32_WINDIR:
+  CreateShortcut "$SMPROGRAMS\${ShortName}\Configure ${ShortName}.lnk" "$WINDIR\rundll32.exe" "x264vfw.dll,Configure" "$INSTDIR\x264vfw.ico"
+  Goto RUNDLL32_end
+RUNDLL32_SYSDIR:
+  CreateShortcut "$SMPROGRAMS\${ShortName}\Configure ${ShortName}.lnk" "$INSTDIR\rundll32.exe" "x264vfw.dll,Configure" "$INSTDIR\x264vfw.ico"
+RUNDLL32_end:
+
+  CreateShortcut "$SMPROGRAMS\${ShortName}\Uninstall ${ShortName}.lnk" "$INSTDIR\${ShortName}-uninstall.exe"
 
   StrCmp $IsNT '1' x264vfw_NT x264vfw_NotNT
 x264vfw_NotNT:
@@ -122,6 +131,10 @@ NoNT:
 EndCheckNT:
 
   ClearErrors
+
+  ${If} ${RunningX64}
+    StrCpy $INSTDIR "$WINDIR\SysWOW64"
+  ${EndIf}
 
 FunctionEnd
 

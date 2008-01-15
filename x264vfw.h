@@ -12,6 +12,9 @@
 
 #include "resource.h"
 
+#define X264_MAX(a, b) ((a)>(b) ? (a) : (b))
+#define X264_MIN(a, b) ((a)<(b) ? (a) : (b))
+
 /* Name */
 #define X264_NAME_L     L"x264vfw"
 #define X264_DESC_L     L"x264vfw - H.264/MPEG-4 AVC encoder"
@@ -36,6 +39,10 @@
 #define X264_BFRAME_MAX  16
 #define X264_THREAD_MAX  128
 
+#define MAX_STATS_PATH   (MAX_PATH - 5) // -5 because x264 add ".temp" for temp file
+#define MAX_STATS_SIZE   X264_MAX(MAX_STATS_PATH, MAX_PATH)
+#define MAX_CMDLINE      4096
+
 typedef char fourcc_str[4 + 1];
 
 /* CONFIG: vfw config */
@@ -51,8 +58,8 @@ typedef struct
     int i_pass;
     int b_fast1pass;    /* turns off some flags during 1st pass */
     int b_updatestats;  /* updates the statsfile during 2nd pass */
-    char stats[MAX_PATH];
-    char extra_cmdline[MAX_PATH];
+    char stats[MAX_STATS_SIZE];
+    char extra_cmdline[MAX_CMDLINE];
 
     /* Rate Control */
     int i_key_boost;
@@ -105,7 +112,7 @@ typedef struct
 
     /* Command Line */
     int b_use_cmdline;
-    char cmdline[MAX_PATH];
+    char cmdline[MAX_CMDLINE];
 } CONFIG;
 
 /* CODEC: vfw codec instance */
