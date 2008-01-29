@@ -28,7 +28,7 @@ DIR_LIB = $(DIR_CUR)/../x264
 DIR_SRC = $(DIR_CUR)
 
 # Sources
-SRC_C = codec.c config.c driverproc.c
+SRC_C = codec.c config.c driverproc.c csp.c
 SRC_RES = resource.rc
 
 # Alias

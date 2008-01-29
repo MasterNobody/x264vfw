@@ -144,7 +144,7 @@ BEGIN
     COMBOBOX        IDC_SUBPEL,90,12,51,80,CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
     CONTROL         "B-RDO",IDC_BRDO,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,146,12,40,12
     LTEXT           "Method",IDC_STATIC,24,30,62,12,SS_CENTERIMAGE
-    COMBOBOX        IDC_ME_METHOD,90,30,90,80,CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
+    COMBOBOX        IDC_ME_METHOD,90,30,51,80,CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
     LTEXT           "Range",IDC_STATIC,24,48,62,12,SS_CENTERIMAGE
     EDITTEXT        IDC_MERANGE,90,48,24,12,ES_AUTOHSCROLL | ES_NUMBER
     CONTROL         "Chroma ME",IDC_CHROMAME,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,126,48,60,12
@@ -310,7 +310,7 @@ STRINGTABLE
 BEGIN
     IDC_SUBPEL              "This parameter controls quality versus speed tradeoffs involved in the motion estimation decision process (lower = quicker and higher = better quality)."
     IDC_BRDO                "RD (rate-distortion) based mode decision for B-frames."
-    IDC_ME_METHOD           "Selects the ME (motion estimation) algorithm:\n - dia: diamond search, radius 1 (fast)\n - hex: hexagonal search, radius 2\n - umh: uneven multi-hexagon search (better but slower)\n - esa: exhaustive search (extremely slow, primarily for testing)"
+    IDC_ME_METHOD           "Selects the ME (motion estimation) algorithm:\n - dia: diamond search, radius 1 (fast)\n - hex: hexagonal search, radius 2\n - umh: uneven multi-hexagon search\n - esa: exhaustive search\n - tesa: hadamard exhaustive search (slow)"
     IDC_MERANGE             "Maximum distance to search for ME (motion estimation), measured from predicted position(s). Default of 16 is good for most footage, high motion sequences may benefit from settings between 24 and 32."
     IDC_CHROMAME            "Chroma ME (motion estimation) for subpel and mode decision in P-frames."
     IDC_FRAMEREFS           "Number of previous frames used as predictors. This is effective in Anime, but seems to make little difference in live-action source material."

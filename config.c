@@ -502,10 +502,11 @@ void tabs_update_items(HWND hDlg, CONFIG *config)
     CheckDlgButton(hTabs[3], IDC_BRDO, config->b_brdo);
     if (SendMessage(GetDlgItem(hTabs[3], IDC_ME_METHOD), CB_GETCOUNT, 0, 0) == 0)
     {
-        SendDlgItemMessage(hTabs[3], IDC_ME_METHOD, CB_ADDSTRING, 0, (LPARAM)"Diamond");
-        SendDlgItemMessage(hTabs[3], IDC_ME_METHOD, CB_ADDSTRING, 0, (LPARAM)"Hexagonal");
-        SendDlgItemMessage(hTabs[3], IDC_ME_METHOD, CB_ADDSTRING, 0, (LPARAM)"Uneven multi-hexagon");
-        SendDlgItemMessage(hTabs[3], IDC_ME_METHOD, CB_ADDSTRING, 0, (LPARAM)"Exhaustive");
+        SendDlgItemMessage(hTabs[3], IDC_ME_METHOD, CB_ADDSTRING, 0, (LPARAM)"dia");
+        SendDlgItemMessage(hTabs[3], IDC_ME_METHOD, CB_ADDSTRING, 0, (LPARAM)"hex");
+        SendDlgItemMessage(hTabs[3], IDC_ME_METHOD, CB_ADDSTRING, 0, (LPARAM)"umh");
+        SendDlgItemMessage(hTabs[3], IDC_ME_METHOD, CB_ADDSTRING, 0, (LPARAM)"esa");
+        SendDlgItemMessage(hTabs[3], IDC_ME_METHOD, CB_ADDSTRING, 0, (LPARAM)"tesa");
     }
     SendDlgItemMessage(hTabs[3], IDC_ME_METHOD, CB_SETCURSEL, (config->i_me_method), 0);
     SendMessage(GetDlgItem(hTabs[3], IDC_MERANGE), EM_LIMITTEXT, 4, 0);
@@ -1457,9 +1458,9 @@ BOOL CALLBACK callback_err_console(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM l
                             {
                                 char msg_buf[1024];
 
-                                SendDlgItemMessage(hWnd, IDC_CONSOLE, LB_GETTEXT, (WPARAM)i, (LPARAM)msg_buf);
+                                SendDlgItemMessage(hWnd, IDC_CONSOLE, LB_GETTEXT, (WPARAM)i, (LPARAM)&msg_buf);
                                 strcat(msg_buf, "\r\n");
-                                memcpy(buffer, msg_buf, strlen(msg_buf));
+                                memcpy(buffer, &msg_buf, strlen(msg_buf));
                                 buffer += strlen(msg_buf);
                             }
                             *buffer = 0; /* null-terminate the buffer */

@@ -70,6 +70,7 @@ LRESULT compress_get_format(CODEC *codec, BITMAPINFO *lpbiInput, BITMAPINFO *lpb
     BITMAPINFOHEADER *inhdr = &lpbiInput->bmiHeader;
     BITMAPINFOHEADER *outhdr = &lpbiOutput->bmiHeader;
     CONFIG           *config = &codec->config;
+    int              iWidth;
     int              iHeight;
 
     if (lpbiOutput == NULL)
@@ -78,21 +79,22 @@ LRESULT compress_get_format(CODEC *codec, BITMAPINFO *lpbiInput, BITMAPINFO *lpb
     if (get_csp(inhdr) == X264_CSP_NONE)
         return ICERR_BADFORMAT;
 
+    iWidth  = inhdr->biWidth;
     iHeight = inhdr->biHeight < 0 ? -inhdr->biHeight : inhdr->biHeight;
-    if (inhdr->biWidth <= 0 || iHeight <= 0)
+    if (iWidth <= 0 || iHeight <= 0)
         return ICERR_BADFORMAT;
     /* We need x2 width/height */
-    if (inhdr->biWidth % 2 || iHeight % 2)
+    if (iWidth % 2 || iHeight % 2)
         return ICERR_BADFORMAT;
 
-    memcpy(outhdr, inhdr, sizeof(BITMAPINFOHEADER));
-    outhdr->biSize = sizeof(BITMAPINFOHEADER);
-    outhdr->biSizeImage = compress_get_size(codec, lpbiInput, lpbiOutput);
-    outhdr->biXPelsPerMeter = 0;
-    outhdr->biYPelsPerMeter = 0;
-    outhdr->biClrUsed = 0;
-    outhdr->biClrImportant = 0;
+    memset(outhdr, 0, sizeof(BITMAPINFOHEADER));
+    outhdr->biSize        = sizeof(BITMAPINFOHEADER);
+    outhdr->biWidth       = iWidth;
+    outhdr->biHeight      = iHeight;
+    outhdr->biPlanes      = 1;
+    outhdr->biBitCount    = 24;
     outhdr->biCompression = mmioFOURCC(config->fcc[0], config->fcc[1], config->fcc[2], config->fcc[3]);
+    outhdr->biSizeImage   = compress_get_size(codec, lpbiInput, lpbiOutput);
 
     return ICERR_OK;
 }
@@ -109,22 +111,24 @@ LRESULT compress_query(CODEC *codec, BITMAPINFO *lpbiInput, BITMAPINFO *lpbiOutp
     BITMAPINFOHEADER *inhdr = &lpbiInput->bmiHeader;
     BITMAPINFOHEADER *outhdr = &lpbiOutput->bmiHeader;
     CONFIG           *config = &codec->config;
+    int              iWidth;
     int              iHeight;
 
     if (get_csp(inhdr) == X264_CSP_NONE)
         return ICERR_BADFORMAT;
 
+    iWidth  = inhdr->biWidth;
     iHeight = inhdr->biHeight < 0 ? -inhdr->biHeight : inhdr->biHeight;
-    if (inhdr->biWidth <= 0 || iHeight <= 0)
+    if (iWidth <= 0 || iHeight <= 0)
         return ICERR_BADFORMAT;
     /* We need x2 width/height */
-    if (inhdr->biWidth % 2 || iHeight % 2)
+    if (iWidth % 2 || iHeight % 2)
         return ICERR_BADFORMAT;
 
     if (lpbiOutput == NULL)
         return ICERR_OK;
 
-    if (inhdr->biWidth != outhdr->biWidth || iHeight != outhdr->biHeight)
+    if (iWidth != outhdr->biWidth || iHeight != outhdr->biHeight)
         return ICERR_BADFORMAT;
 
     if (outhdr->biCompression != mmioFOURCC(config->fcc[0], config->fcc[1], config->fcc[2], config->fcc[3]))
@@ -191,7 +195,7 @@ static void x264_log_vfw(void *p_private, int i_level, const char *psz_fmt, va_l
         ShowWindow(codec->hCons, SW_SHOW);
         codec->b_visible = TRUE;
     }
-    idx = SendDlgItemMessage(codec->hCons, IDC_CONSOLE, LB_ADDSTRING, 0, (LPARAM)error_msg);
+    idx = SendDlgItemMessage(codec->hCons, IDC_CONSOLE, LB_ADDSTRING, 0, (LPARAM)&error_msg);
 
     /* Make sure that the last item added is visible (autoscroll) */
     if (idx >= 0)
@@ -553,8 +557,13 @@ LRESULT compress_begin(CODEC *codec, BITMAPINFO *lpbiInput, BITMAPINFO *lpbiOutp
     codec->b_use_vd_hack = FALSE; /* Don't use "VD hack" by default */
 
     /* Video Properties */
+    param.i_csp    = X264_CSP_I420;
     param.i_width  = lpbiInput->bmiHeader.biWidth;
     param.i_height = lpbiInput->bmiHeader.biHeight < 0 ? -lpbiInput->bmiHeader.biHeight : lpbiInput->bmiHeader.biHeight;
+
+    x264_csp_init(&codec->csp, param.i_csp);
+    x264_picture_alloc(&codec->conv_pic, param.i_csp, param.i_width, param.i_height);
+
     param.i_frame_total = codec->i_frame_total;
     param.i_fps_num = codec->i_fps_num;
     param.i_fps_den = codec->i_fps_den;
@@ -742,6 +751,9 @@ LRESULT compress(CODEC *codec, ICCOMPRESS *icc)
     x264_nal_t *nal;
     int        i_nal;
     int        i_out;
+
+    int        i_csp;
+    int        iWidth;
     int        iHeight;
 
 #ifdef BUGGY_APPS_HACK
@@ -764,15 +776,16 @@ LRESULT compress(CODEC *codec, ICCOMPRESS *icc)
         /* Init the picture */
         memset(&pic, 0, sizeof(x264_picture_t));
         pic.img.i_csp = get_csp(inhdr);
+        i_csp   = pic.img.i_csp & X264_CSP_MASK;
+        iWidth  = inhdr->biWidth;
+        iHeight = inhdr->biHeight < 0 ? -inhdr->biHeight : inhdr->biHeight;
 
-        switch (pic.img.i_csp & X264_CSP_MASK)
+        switch (i_csp)
         {
             case X264_CSP_I420:
             case X264_CSP_YV12:
-                iHeight = inhdr->biHeight < 0 ? -inhdr->biHeight : inhdr->biHeight;
-
                 pic.img.i_plane     = 3;
-                pic.img.i_stride[0] = inhdr->biWidth;
+                pic.img.i_stride[0] = iWidth;
                 pic.img.i_stride[1] =
                 pic.img.i_stride[2] = pic.img.i_stride[0] / 2;
 
@@ -783,19 +796,19 @@ LRESULT compress(CODEC *codec, ICCOMPRESS *icc)
 
             case X264_CSP_YUYV:
                 pic.img.i_plane     = 1;
-                pic.img.i_stride[0] = 2 * inhdr->biWidth;
+                pic.img.i_stride[0] = 2 * iWidth;
                 pic.img.plane[0]    = (uint8_t *)icc->lpInput;
                 break;
 
             case X264_CSP_BGR:
                 pic.img.i_plane     = 1;
-                pic.img.i_stride[0] = (3 * inhdr->biWidth + 3) & ~3;
+                pic.img.i_stride[0] = (3 * iWidth + 3) & ~3;
                 pic.img.plane[0]    = (uint8_t *)icc->lpInput;
                 break;
 
             case X264_CSP_BGRA:
                 pic.img.i_plane     = 1;
-                pic.img.i_stride[0] = 4 * inhdr->biWidth;
+                pic.img.i_stride[0] = 4 * iWidth;
                 pic.img.plane[0]    = (uint8_t *)icc->lpInput;
                 break;
 
@@ -803,8 +816,10 @@ LRESULT compress(CODEC *codec, ICCOMPRESS *icc)
                 return ICERR_BADFORMAT;
         }
 
+        codec->csp.convert[i_csp](&codec->conv_pic.img, &pic.img, iWidth, iHeight);
+
         /* Encode it */
-        x264_encoder_encode(codec->h, &nal, &i_nal, &pic, &pic_out);
+        x264_encoder_encode(codec->h, &nal, &i_nal, &codec->conv_pic, &pic_out);
 #ifdef VIRTUALDUB_HACK
     }
     else
@@ -859,6 +874,7 @@ LRESULT compress_end(CODEC *codec)
     {
         x264_encoder_close(codec->h);
         codec->h = NULL;
+        x264_picture_clean(&codec->conv_pic);
     }
     return ICERR_OK;
 }

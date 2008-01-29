@@ -9,6 +9,7 @@
 #include <vfw.h>
 
 #include <x264.h>
+#include "csp.h"
 
 #include "resource.h"
 
@@ -140,6 +141,9 @@ typedef struct
     int i_frame_remain;
 #endif
     int b_use_vd_hack;
+
+    x264_csp_function_t csp;
+    x264_picture_t conv_pic;
 } CODEC;
 
 /* Compress functions */
