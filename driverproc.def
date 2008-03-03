@@ -1,6 +1,6 @@
 ; DriverProc.def : Declares the module parameters for the DLL.
 
-DESCRIPTION 'x264vfw - H.264/MPEG-4 AVC encoder'
+DESCRIPTION 'x264vfw - H.264/MPEG-4 AVC codec'
 
 EXPORTS
 	DriverProc

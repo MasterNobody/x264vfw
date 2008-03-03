@@ -24,7 +24,7 @@
 #include "csp.h"
 #include <assert.h>
 
-static inline void plane_copy( uint8_t *dst, int i_dst,
+static __inline void plane_copy( uint8_t *dst, int i_dst,
                                uint8_t *src, int i_src, int w, int h)
 {
     while( h-- )
@@ -35,13 +35,13 @@ static inline void plane_copy( uint8_t *dst, int i_dst,
     }
 }
 
-static inline void plane_copy_vflip( uint8_t *dst, int i_dst,
+static __inline void plane_copy_vflip( uint8_t *dst, int i_dst,
                                      uint8_t *src, int i_src, int w, int h)
 {
     plane_copy( dst, i_dst, src + (h -1)*i_src, -i_src, w, h );
 }
 
-static inline void plane_subsamplev2( uint8_t *dst, int i_dst,
+static __inline void plane_subsamplev2( uint8_t *dst, int i_dst,
                                       uint8_t *src, int i_src, int w, int h)
 {
     for( ; h > 0; h-- )
@@ -59,13 +59,13 @@ static inline void plane_subsamplev2( uint8_t *dst, int i_dst,
     }
 }
 
-static inline void plane_subsamplev2_vlip( uint8_t *dst, int i_dst,
+static __inline void plane_subsamplev2_vlip( uint8_t *dst, int i_dst,
                                            uint8_t *src, int i_src, int w, int h)
 {
     plane_subsamplev2( dst, i_dst, src + (2*h-1)*i_src, -i_src, w, h );
 }
 
-static inline void plane_subsamplehv2( uint8_t *dst, int i_dst,
+static __inline void plane_subsamplehv2( uint8_t *dst, int i_dst,
                                        uint8_t *src, int i_src, int w, int h)
 {
     for( ; h > 0; h-- )
@@ -83,7 +83,7 @@ static inline void plane_subsamplehv2( uint8_t *dst, int i_dst,
     }
 }
 
-static inline void plane_subsamplehv2_vlip( uint8_t *dst, int i_dst,
+static __inline void plane_subsamplehv2_vlip( uint8_t *dst, int i_dst,
                                             uint8_t *src, int i_src, int w, int h)
 {
     plane_subsamplehv2( dst, i_dst, src + (2*h-1)*i_src, -i_src, w, h );

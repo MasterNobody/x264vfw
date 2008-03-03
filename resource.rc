@@ -32,21 +32,21 @@ CAPTION "About x264vfw"
 FONT 8, "MS Sans Serif", 0, 0, 0x0
 BEGIN
     DEFPUSHBUTTON   "OK",IDOK,158,109,48,14
-    CTEXT           "x264vfw - H.264/MPEG-4 AVC encoder",IDC_X264,6,6,199,8
+    CTEXT           "x264vfw - H.264/MPEG-4 AVC codec",IDC_X264,6,6,199,8
     CTEXT           "BUILD",IDC_BUILD,6,18,199,18
     CTEXT           "Copyright 2005-2008 Laurent Aimar, Justin Clay, Min Chen,\nEric Petit, Måns Rullgård, Loren Merritt,\nAnton Mitrofanov (a.k.a. BugMaster)",IDC_STATIC,6,42,199,30
     CTEXT           "This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation.",IDC_STATIC,6,78,199,26
     PUSHBUTTON      "Visit Homepage",IDC_HOMEPAGE,7,109,77,14
 END
 
-IDD_ERRCONSOLE DIALOG  0, 0, 264, 130
-STYLE DS_SETFONT | DS_MODALFRAME | DS_CENTER | WS_POPUP | WS_CAPTION
+IDD_ERRCONSOLE DIALOGEX 0, 0, 264, 130
+STYLE DS_SETFONT | DS_MODALFRAME | DS_CENTER | WS_MINIMIZEBOX | WS_POPUP | WS_CAPTION | WS_SYSMENU
 CAPTION "x264vfw log console"
-FONT 8, "MS Sans Serif"
+FONT 8, "MS Sans Serif", 0, 0, 0x0
 BEGIN
     DEFPUSHBUTTON   "OK",IDOK,68,110,48,14
     PUSHBUTTON      "Copy",IDC_COPYCLIP,148,110,48,14
-    LISTBOX         IDC_CONSOLE,6,8,251,95,LBS_HASSTRINGS | LBS_NOINTEGRALHEIGHT | LBS_NOSEL | WS_VSCROLL
+    LISTBOX         IDC_CONSOLE,6,8,251,95,LBS_HASSTRINGS | LBS_NOINTEGRALHEIGHT | LBS_NOSEL | WS_VSCROLL | WS_HSCROLL
 END
 
 IDD_MAINCONFIG DIALOGEX 0, 0, 204, 250
@@ -56,14 +56,14 @@ FONT 8, "MS Sans Serif", 400, 0, 0x0
 BEGIN
     DEFPUSHBUTTON   "OK",IDOK,156,234,42,14
     CONTROL         "",IDC_TABCONTROL,"SysTabControl32",TCS_MULTILINE | WS_TABSTOP,0,0,204,200
-    PUSHBUTTON      "Load Defaults",IDC_DEFAULTS,6,234,54,14
-    PUSHBUTTON      "Cancel",IDCANCEL,108,234,42,14
     CONTROL         "Use command line:",IDC_USE_CMDLINE,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,6,204,192,8
     EDITTEXT        IDC_CMDLINE,6,216,192,12,ES_AUTOHSCROLL
+    PUSHBUTTON      "Load Defaults",IDC_DEFAULTS,6,234,54,14
+    PUSHBUTTON      "Cancel",IDCANCEL,108,234,42,14
 END
 
 IDD_TAB_BITRATE DIALOGEX 0, 0, 200, 188
-STYLE DS_SETFONT | DS_FIXEDSYS | WS_CHILD
+STYLE DS_SETFONT | DS_FIXEDSYS | DS_CONTROL | WS_CHILD
 FONT 8, "MS Shell Dlg", 0, 0, 0x0
 BEGIN
     CONTROL         IDB_LOGO,IDC_LOGO,"Static",SS_BITMAP,31,12,136,39,WS_EX_CLIENTEDGE
@@ -83,7 +83,7 @@ BEGIN
 END
 
 IDD_TAB_RATECONTROL DIALOGEX 0, 0, 200, 188
-STYLE DS_SETFONT | DS_FIXEDSYS | WS_CHILD
+STYLE DS_SETFONT | DS_FIXEDSYS | DS_CONTROL | WS_CHILD
 FONT 8, "MS Shell Dlg", 0, 0, 0x0
 BEGIN
     GROUPBOX        "Bitrate",IDC_STATIC,6,2,186,53,WS_DISABLED
@@ -110,7 +110,7 @@ BEGIN
 END
 
 IDD_TAB_IPFRAMES DIALOGEX 0, 0, 200, 188
-STYLE DS_SETFONT | DS_FIXEDSYS | WS_CHILD
+STYLE DS_SETFONT | DS_FIXEDSYS | DS_CONTROL | WS_CHILD
 FONT 8, "MS Shell Dlg", 0, 0, 0x0
 BEGIN
     GROUPBOX        "Partitions",IDC_STATIC,6,2,186,90,WS_DISABLED
@@ -136,7 +136,7 @@ BEGIN
 END
 
 IDD_TAB_MISC DIALOGEX 0, 0, 200, 188
-STYLE DS_SETFONT | DS_FIXEDSYS | WS_CHILD
+STYLE DS_SETFONT | DS_FIXEDSYS | DS_CONTROL | WS_CHILD
 FONT 8, "MS Shell Dlg", 0, 0, 0x0
 BEGIN
     GROUPBOX        "Motion estimation",IDC_STATIC,7,2,186,82,WS_DISABLED
@@ -288,7 +288,7 @@ BEGIN
     IDC_QPMIN               "Minimum QP (quantizer parameter)."
     IDC_QPMAX               "Maximum QP (quantizer parameter)."
     IDC_QPSTEP              "Maximum QP (quantizer parameter) step between frames."
-    IDC_SCENECUT            "Scene-cut detection. Controls how aggressively to insert extra I-frames. With small values of scenecut, encoder often has to force an I-frame when it would exceed keyint. Good values of scenecut may find a better location for the I-frame. Large values use more I-frames than necessary, thus wasting bits. -1 disables scene-cut detection, so I-frames are inserted only every other keyint frames, which probably leads to ugly encoding artifacts."
+    IDC_SCENECUT            "Scene-cut detection. Controls how aggressively to insert extra I-frames. With small values of scenecut, codec often has to force an I-frame when it would exceed keyint. Good values of scenecut may find a better location for the I-frame. Large values use more I-frames than necessary, thus wasting bits. -1 disables scene-cut detection, so I-frames are inserted only every other keyint frames, which probably leads to ugly encoding artifacts."
     IDC_KEYINTMIN           "Minimum GOP size. Sets minimum interval between IDR-frames. In H.264, I-frames do not necessarily bound a closed GOP because it is allowable for a P-frame to be predicted from more frames than just the one frame before it (also see reference frame option). Therefore, I-frames are not necessarily seekable. IDR-frames restrict subsequent P-frames from referring to any frame prior to the IDR-frame. If scenecuts appear within this interval, they are still encoded as I-frames, but do not start a new GOP."
     IDC_KEYINTMAX           "Maximum GOP size. Sets maximum interval between IDR-frames. Larger values save bits, thus improving quality for a given bitrate at the cost of seeking precision."
 END
@@ -296,7 +296,7 @@ END
 STRINGTABLE 
 BEGIN
     IDC_BFRAME              "Maximum number of consecutive B-frames between I and P-frames."
-    IDC_VDHACK              "VirtualDub hack for fixing B-frames lag (also multithreading lag). CAUTION! Use only with VirtualDub otherwise encoder can produce invalid bitstream."
+    IDC_VDHACK              "VirtualDub hack for fixing B-frames lag (also multithreading lag). CAUTION! Use only with VirtualDub otherwise codec can produce invalid bitstream."
     IDC_BBIASSLIDER         "Bias the choice to use B-frames. Positive values cause more B-frames, negative values cause less B-frames."
     IDC_BBIAS               "Bias the choice to use B-frames. Positive values cause more B-frames, negative values cause less B-frames."
     IDC_BADAPT              "Adaptive B-frames decision."

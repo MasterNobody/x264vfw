@@ -23,9 +23,11 @@ INST_EXE = x264vfw.exe
 DIR_CUR = $(shell pwd)
 
 # Path to include filen library and src
-DIR_INC = $(DIR_CUR)/../x264
-DIR_LIB = $(DIR_CUR)/../x264
 DIR_SRC = $(DIR_CUR)
+X264_INC = $(DIR_CUR)/../x264
+X264_LIB = $(DIR_CUR)/../x264
+FF_INC = $(DIR_CUR)/../ffmpeg
+FF_LIB = $(DIR_CUR)/../ffmpeg
 
 # Sources
 SRC_C = codec.c config.c driverproc.c csp.c
@@ -41,7 +43,7 @@ WINDRES = windres
 
 # Constants which should not be modified
 # The `mingw-runtime` package is required when building with -mno-cygwin
-CFLAGS += -I$(DIR_SRC)/w32api -I$(DIR_INC)
+CFLAGS += -I$(DIR_SRC)/w32api -I$(X264_INC) -I$(FF_INC) -I$(FF_INC)/libavcodec -I$(FF_INC)/libavutil
 CFLAGS += -D_WIN32_IE=0x0500
 CFLAGS += -mno-cygwin
 
@@ -49,7 +51,16 @@ CFLAGS += -mno-cygwin
 # Compiler flags for linking stage
 ##############################################################################
 
-LDFLAGS += -L$(DIR_LIB) -lx264
+LDFLAGS += -L$(X264_LIB) -lx264 -L$(FF_LIB)/libavcodec -lavcodec -L$(FF_LIB)/libavutil -lavutil
+
+##############################################################################
+# Conditional options
+##############################################################################
+
+ifeq ($(HAVE_SWSCALE),yes)
+CFLAGS += -I$(FF_INC)/libswscale -DHAVE_SWSCALE
+LDFLAGS += -L$(FF_LIB)/libswscale -lswscale
+endif
 
 ##############################################################################
 # Rules

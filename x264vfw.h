@@ -9,6 +9,13 @@
 #include <vfw.h>
 
 #include <x264.h>
+#include <avcodec.h>
+#include <avutil.h>
+
+#ifdef HAVE_SWSCALE
+#include <swscale.h>
+#endif
+
 #include "csp.h"
 
 #include "resource.h"
@@ -18,7 +25,7 @@
 
 /* Name */
 #define X264_NAME_L     L"x264vfw"
-#define X264_DESC_L     L"x264vfw - H.264/MPEG-4 AVC encoder"
+#define X264_DESC_L     L"x264vfw - H.264/MPEG-4 AVC codec"
 
 /* Codec fcc */
 #define FOURCC_X264 mmioFOURCC('X','2','6','4')
@@ -144,6 +151,18 @@ typedef struct
 
     x264_csp_function_t csp;
     x264_picture_t conv_pic;
+
+    AVCodec           *decoder;
+    AVCodecContext    *decoder_context;
+    AVFrame           *decoder_frame;
+    void              *decoder_buf;
+    unsigned int      decoder_buf_size;
+    enum PixelFormat  decoder_pix_fmt;
+    int               decoder_vflip;
+    int               decoder_swap_UV;
+#ifdef HAVE_SWSCALE
+    struct SwsContext *sws;
+#endif
 } CODEC;
 
 /* Compress functions */
@@ -154,6 +173,13 @@ LRESULT compress_begin(CODEC *, BITMAPINFO *, BITMAPINFO *);
 LRESULT compress(CODEC *, ICCOMPRESS *);
 LRESULT compress_end(CODEC *);
 LRESULT compress_frames_info(CODEC *, ICCOMPRESSFRAMES *);
+
+/* Decompress functions */
+LRESULT decompress_get_format(CODEC *, BITMAPINFO *, BITMAPINFO *);
+LRESULT decompress_query(CODEC *, BITMAPINFO *, BITMAPINFO *);
+LRESULT decompress_begin(CODEC *, BITMAPINFO *, BITMAPINFO *);
+LRESULT decompress(CODEC *, ICDECOMPRESS *);
+LRESULT decompress_end(CODEC *);
 
 /* Log functions */
 void x264_log_vfw_create(CODEC *codec);
@@ -172,10 +198,23 @@ BOOL CALLBACK callback_err_console(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM l
 /* DLL instance */
 extern HINSTANCE g_hInst;
 
+/* Supported FourCC codes */
+/* FIXME: static is not good, but sizeof operator doesn't work with extern */
+static const fourcc_str fcc_str_table[] =
+{
+    "H264\0",
+    "h264\0",
+    "X264\0",
+    "x264\0",
+    "AVC1\0",
+    "avc1\0",
+    "VSSH\0"
+};
+
 #ifdef _DEBUG
 #include <stdio.h> /* vsprintf */
 #define DPRINTF_BUF_SZ 1024
-static __inline void DPRINTF(char *fmt, ...)
+static __inline void DPRINTF(const char *fmt, ...)
 {
     va_list args;
     char buf[DPRINTF_BUF_SZ];
@@ -185,8 +224,16 @@ static __inline void DPRINTF(char *fmt, ...)
     va_end(args);
     OutputDebugString(buf);
 }
+static __inline void DVPRINTF(const char *fmt, va_list args)
+{
+    char buf[DPRINTF_BUF_SZ];
+
+    vsprintf(buf, fmt, args);
+    OutputDebugString(buf);
+}
 #else
-static __inline void DPRINTF(char *fmt, ...) { }
+static __inline void DPRINTF(const char *fmt, ...) { }
+static __inline void DVPRINTF(const char *fmt, va_list args) {}
 #endif
 
 #endif

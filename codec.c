@@ -34,7 +34,8 @@
 /* Return a valid x264 colorspace or X264_CSP_NONE if unsuported */
 static int get_csp(BITMAPINFOHEADER *hdr)
 {
-    int i_vflip = hdr->biHeight < 0 ? X264_CSP_VFLIP : 0;
+    /* For YUV bitmaps, the bitmap is always top-down, regardless of the sign of biHeight */
+    int i_vflip = 0;
 
     switch (hdr->biCompression)
     {
@@ -64,6 +65,37 @@ static int get_csp(BITMAPINFOHEADER *hdr)
     }
 }
 
+static enum PixelFormat csp_to_pix_fmt(int i_csp)
+{
+    switch (i_csp)
+    {
+        case X264_CSP_I420:
+        case X264_CSP_YV12:
+            return PIX_FMT_YUV420P;
+
+        case X264_CSP_YUYV:
+            return PIX_FMT_YUYV422;
+
+        case X264_CSP_BGR:
+            return PIX_FMT_BGR24;
+
+        case X264_CSP_BGRA:
+            return PIX_FMT_RGB32;
+
+        default:
+            return PIX_FMT_NONE;
+    }
+}
+
+static int supported_fourcc(DWORD fourcc)
+{
+    int i;
+    for (i = 0; i < sizeof(fcc_str_table) / sizeof(fourcc_str); i++)
+        if (fourcc == mmioFOURCC(fcc_str_table[i][0], fcc_str_table[i][1], fcc_str_table[i][2], fcc_str_table[i][3]))
+            return 1;
+    return 0;
+}
+
 /* Return the output format of the compressed data */
 LRESULT compress_get_format(CODEC *codec, BITMAPINFO *lpbiInput, BITMAPINFO *lpbiOutput)
 {
@@ -73,14 +105,14 @@ LRESULT compress_get_format(CODEC *codec, BITMAPINFO *lpbiInput, BITMAPINFO *lpb
     int              iWidth;
     int              iHeight;
 
-    if (lpbiOutput == NULL)
+    if (!lpbiOutput)
         return sizeof(BITMAPINFOHEADER);
 
     if (get_csp(inhdr) == X264_CSP_NONE)
         return ICERR_BADFORMAT;
 
     iWidth  = inhdr->biWidth;
-    iHeight = inhdr->biHeight < 0 ? -inhdr->biHeight : inhdr->biHeight;
+    iHeight = abs(inhdr->biHeight);
     if (iWidth <= 0 || iHeight <= 0)
         return ICERR_BADFORMAT;
     /* We need x2 width/height */
@@ -110,7 +142,6 @@ LRESULT compress_query(CODEC *codec, BITMAPINFO *lpbiInput, BITMAPINFO *lpbiOutp
 {
     BITMAPINFOHEADER *inhdr = &lpbiInput->bmiHeader;
     BITMAPINFOHEADER *outhdr = &lpbiOutput->bmiHeader;
-    CONFIG           *config = &codec->config;
     int              iWidth;
     int              iHeight;
 
@@ -118,20 +149,23 @@ LRESULT compress_query(CODEC *codec, BITMAPINFO *lpbiInput, BITMAPINFO *lpbiOutp
         return ICERR_BADFORMAT;
 
     iWidth  = inhdr->biWidth;
-    iHeight = inhdr->biHeight < 0 ? -inhdr->biHeight : inhdr->biHeight;
+    iHeight = abs(inhdr->biHeight);
     if (iWidth <= 0 || iHeight <= 0)
         return ICERR_BADFORMAT;
     /* We need x2 width/height */
     if (iWidth % 2 || iHeight % 2)
         return ICERR_BADFORMAT;
 
-    if (lpbiOutput == NULL)
+    if (!lpbiOutput)
         return ICERR_OK;
 
     if (iWidth != outhdr->biWidth || iHeight != outhdr->biHeight)
         return ICERR_BADFORMAT;
 
-    if (outhdr->biCompression != mmioFOURCC(config->fcc[0], config->fcc[1], config->fcc[2], config->fcc[3]))
+    if (!supported_fourcc(outhdr->biCompression))
+        return ICERR_BADFORMAT;
+
+    if (outhdr->biSizeImage < compress_get_size(codec, lpbiInput, lpbiOutput))
         return ICERR_BADFORMAT;
 
     return ICERR_OK;
@@ -159,6 +193,8 @@ static void x264_log_vfw(void *p_private, int i_level, const char *psz_fmt, va_l
     int   idx;
     CODEC *codec = p_private;
     char  *psz_prefix;
+    HWND  h_console;
+    HDC   hdc;
 
     switch (i_level)
     {
@@ -195,11 +231,27 @@ static void x264_log_vfw(void *p_private, int i_level, const char *psz_fmt, va_l
         ShowWindow(codec->hCons, SW_SHOW);
         codec->b_visible = TRUE;
     }
-    idx = SendDlgItemMessage(codec->hCons, IDC_CONSOLE, LB_ADDSTRING, 0, (LPARAM)&error_msg);
+    h_console = GetDlgItem(codec->hCons, IDC_CONSOLE);
+    idx = SendMessage(h_console, LB_ADDSTRING, 0, (LPARAM)&error_msg);
 
     /* Make sure that the last item added is visible (autoscroll) */
     if (idx >= 0)
-        SendDlgItemMessage(codec->hCons, IDC_CONSOLE, LB_SETTOPINDEX, (WPARAM)idx, 0);
+        SendMessage(h_console, LB_SETTOPINDEX, (WPARAM)idx, 0);
+
+    hdc = GetDC(h_console);
+    if (hdc)
+    {
+        HFONT hfntDefault;
+        SIZE  sz;
+
+        strcat(error_msg, "X"); // otherwise item may be clipped.
+        hfntDefault = SelectObject(hdc, (HFONT)SendMessage(h_console, WM_GETFONT, 0, 0));
+        GetTextExtentPoint32(hdc, error_msg, strlen(error_msg), &sz);
+        if (sz.cx > SendMessage(h_console, LB_GETHORIZONTALEXTENT, 0, 0))
+            SendMessage(h_console, LB_SETHORIZONTALEXTENT, (WPARAM)sz.cx, 0);
+        SelectObject(hdc, hfntDefault);
+        ReleaseDC(h_console, hdc);
+    }
 }
 
 static void x264vfw_log(CODEC *codec, int i_level, const char *psz_fmt, ... )
@@ -559,7 +611,7 @@ LRESULT compress_begin(CODEC *codec, BITMAPINFO *lpbiInput, BITMAPINFO *lpbiOutp
     /* Video Properties */
     param.i_csp    = X264_CSP_I420;
     param.i_width  = lpbiInput->bmiHeader.biWidth;
-    param.i_height = lpbiInput->bmiHeader.biHeight < 0 ? -lpbiInput->bmiHeader.biHeight : lpbiInput->bmiHeader.biHeight;
+    param.i_height = abs(lpbiInput->bmiHeader.biHeight);
 
     x264_csp_init(&codec->csp, param.i_csp);
     x264_picture_alloc(&codec->conv_pic, param.i_csp, param.i_width, param.i_height);
@@ -707,7 +759,7 @@ LRESULT compress_begin(CODEC *codec, BITMAPINFO *lpbiInput, BITMAPINFO *lpbiOutp
                         param.analyse.inter = 0;
                         param.analyse.b_transform_8x8 = FALSE;
                         param.analyse.i_me_method = X264_ME_DIA;
-                        param.analyse.i_subpel_refine = X264_MIN(2, param.analyse.i_subpel_refine); //subme=1 may lead for significant quality decrease
+                        param.analyse.i_subpel_refine = X264_MIN(2, param.analyse.i_subpel_refine); // subme=1 may lead for significant quality decrease
                         param.analyse.b_chroma_me = FALSE;
                         param.analyse.b_bframe_rdo = FALSE;
                         param.analyse.b_mixed_references = FALSE;
@@ -733,7 +785,7 @@ LRESULT compress_begin(CODEC *codec, BITMAPINFO *lpbiInput, BITMAPINFO *lpbiOutp
     /* Open the encoder */
     codec->h = x264_encoder_open(&param);
 
-    if (codec->h == NULL)
+    if (!codec->h)
         return ICERR_ERROR;
 
     return ICERR_OK;
@@ -778,7 +830,7 @@ LRESULT compress(CODEC *codec, ICCOMPRESS *icc)
         pic.img.i_csp = get_csp(inhdr);
         i_csp   = pic.img.i_csp & X264_CSP_MASK;
         iWidth  = inhdr->biWidth;
-        iHeight = inhdr->biHeight < 0 ? -inhdr->biHeight : inhdr->biHeight;
+        iHeight = abs(inhdr->biHeight);
 
         switch (i_csp)
         {
@@ -870,12 +922,12 @@ LRESULT compress(CODEC *codec, ICCOMPRESS *icc)
 /* End compression and free resources allocated for compression */
 LRESULT compress_end(CODEC *codec)
 {
-    if (codec->h != NULL)
+    if (codec->h)
     {
         x264_encoder_close(codec->h);
         codec->h = NULL;
-        x264_picture_clean(&codec->conv_pic);
     }
+    x264_picture_clean(&codec->conv_pic);
     return ICERR_OK;
 }
 
@@ -885,5 +937,225 @@ LRESULT compress_frames_info(CODEC *codec, ICCOMPRESSFRAMES *icf)
     codec->i_frame_total = icf->lFrameCount;
     codec->i_fps_num = icf->dwRate;
     codec->i_fps_den = icf->dwScale;
+    return ICERR_OK;
+}
+
+LRESULT decompress_get_format(CODEC *codec, BITMAPINFO *lpbiInput, BITMAPINFO *lpbiOutput)
+{
+    BITMAPINFOHEADER *inhdr = &lpbiInput->bmiHeader;
+    BITMAPINFOHEADER *outhdr = &lpbiOutput->bmiHeader;
+    int              iWidth;
+    int              iHeight;
+
+    if (!lpbiOutput)
+        return sizeof(BITMAPINFOHEADER);
+
+    if (!supported_fourcc(inhdr->biCompression))
+        return ICERR_BADFORMAT;
+
+    iWidth  = inhdr->biWidth;
+    iHeight = inhdr->biHeight;
+    if (iWidth <= 0 || iHeight <= 0)
+        return ICERR_BADFORMAT;
+    /* We need x2 width/height */
+    if (iWidth % 2 || iHeight % 2)
+        return ICERR_BADFORMAT;
+
+    memset(outhdr, 0, sizeof(BITMAPINFOHEADER));
+    outhdr->biSize        = sizeof(BITMAPINFOHEADER);
+    outhdr->biWidth       = iWidth;
+    outhdr->biHeight      = iHeight;
+    outhdr->biPlanes      = 1;
+    outhdr->biBitCount    = 32;
+    outhdr->biCompression = BI_RGB;
+    outhdr->biSizeImage   = avpicture_get_size(PIX_FMT_RGB32, iWidth, iHeight);
+
+    return ICERR_OK;
+}
+
+LRESULT decompress_query(CODEC *codec, BITMAPINFO *lpbiInput, BITMAPINFO *lpbiOutput)
+{
+    BITMAPINFOHEADER *inhdr = &lpbiInput->bmiHeader;
+    BITMAPINFOHEADER *outhdr = &lpbiOutput->bmiHeader;
+    int              iWidth;
+    int              iHeight;
+    int              i_csp;
+    enum PixelFormat pix_fmt;
+
+    if (!supported_fourcc(inhdr->biCompression))
+        return ICERR_BADFORMAT;
+
+    iWidth  = inhdr->biWidth;
+    iHeight = inhdr->biHeight;
+    if (iWidth <= 0 || iHeight <= 0)
+        return ICERR_BADFORMAT;
+    /* We need x2 width/height */
+    if (iWidth % 2 || iHeight % 2)
+        return ICERR_BADFORMAT;
+
+    if (!lpbiOutput)
+        return ICERR_OK;
+
+    if (iWidth != outhdr->biWidth || iHeight != abs(outhdr->biHeight))
+        return ICERR_BADFORMAT;
+
+    i_csp = get_csp(outhdr);
+    if (i_csp == X264_CSP_NONE)
+        return ICERR_BADFORMAT;
+
+    pix_fmt = csp_to_pix_fmt(i_csp & X264_CSP_MASK);
+    if (pix_fmt == PIX_FMT_NONE)
+        return ICERR_BADFORMAT;
+
+#ifndef RGB24_FIXED
+    if (pix_fmt == PIX_FMT_BGR24 && iWidth % 4) // Bug in libavcodec (for me it is simpler forbid this than fixing libavcodec)
+        return ICERR_BADFORMAT;
+#endif
+
+    // MSDN says that biSizeImage may be set to zero for BI_RGB bitmaps
+    if ((outhdr->biCompression != BI_RGB || outhdr->biSizeImage != 0) && outhdr->biSizeImage < avpicture_get_size(pix_fmt, iWidth, iHeight))
+        return ICERR_BADFORMAT;
+
+    return ICERR_OK;
+}
+
+LRESULT decompress_begin(CODEC *codec, BITMAPINFO *lpbiInput, BITMAPINFO *lpbiOutput)
+{
+    int i_csp;
+
+    decompress_end(codec);
+
+    if (decompress_query(codec, lpbiInput, lpbiOutput) != ICERR_OK)
+        return ICERR_BADFORMAT;
+
+    i_csp = get_csp(&lpbiOutput->bmiHeader);
+    codec->decoder_pix_fmt = csp_to_pix_fmt(i_csp & X264_CSP_MASK);
+    codec->decoder_vflip = (i_csp & X264_CSP_VFLIP) != 0;
+    codec->decoder_swap_UV = (i_csp & X264_CSP_MASK) == X264_CSP_YV12;
+
+    codec->decoder = avcodec_find_decoder(CODEC_ID_H264);
+    if (!codec->decoder)
+        return ICERR_ERROR;
+
+    codec->decoder_context = avcodec_alloc_context();
+    if (!codec->decoder_context)
+        return ICERR_ERROR;
+
+    codec->decoder_frame = avcodec_alloc_frame();
+    if (!codec->decoder_frame)
+    {
+        av_freep(&codec->decoder_context);
+        return ICERR_ERROR;
+    }
+
+    codec->decoder_context->coded_width  = lpbiInput->bmiHeader.biWidth;
+    codec->decoder_context->coded_height = lpbiInput->bmiHeader.biHeight;
+    codec->decoder_context->codec_tag = lpbiInput->bmiHeader.biCompression;
+
+    if (avcodec_open(codec->decoder_context, codec->decoder) < 0)
+    {
+        av_freep(&codec->decoder_context);
+        av_freep(&codec->decoder_frame);
+        return ICERR_ERROR;
+    }
+
+#ifdef HAVE_SWSCALE
+    codec->sws = sws_getContext(lpbiInput->bmiHeader.biWidth, lpbiInput->bmiHeader.biHeight, codec->decoder_context->pix_fmt,
+                                lpbiInput->bmiHeader.biWidth, lpbiInput->bmiHeader.biHeight, codec->decoder_pix_fmt,
+                                SWS_BILINEAR, NULL, NULL, NULL);
+    if (!codec->sws)
+    {
+        avcodec_close(codec->decoder_context);
+        av_freep(&codec->decoder_context);
+        av_freep(&codec->decoder_frame);
+        return ICERR_ERROR;
+    }
+#endif
+
+    return ICERR_OK;
+}
+
+LRESULT decompress(CODEC *codec, ICDECOMPRESS *icd)
+{
+    BITMAPINFOHEADER *inhdr = icd->lpbiInput;
+    unsigned int neededsize = inhdr->biSizeImage + FF_INPUT_BUFFER_PADDING_SIZE;
+    int len, got_picture;
+    AVPicture picture;
+
+    if (codec->decoder_buf_size < neededsize)
+    {
+        av_free(codec->decoder_buf);
+        codec->decoder_buf_size = 0;
+        codec->decoder_buf = av_malloc(neededsize);
+        if (!codec->decoder_buf)
+            return ICERR_ERROR;
+        codec->decoder_buf_size = neededsize;
+    }
+    memcpy(codec->decoder_buf, icd->lpInput, inhdr->biSizeImage);
+    memset(codec->decoder_buf + inhdr->biSizeImage, 0, FF_INPUT_BUFFER_PADDING_SIZE);
+    len = avcodec_decode_video(codec->decoder_context, codec->decoder_frame, &got_picture, codec->decoder_buf, inhdr->biSizeImage);
+    if (len < 0)
+        return ICERR_ERROR;
+
+    if (avpicture_fill(&picture, icd->lpOutput, codec->decoder_pix_fmt, inhdr->biWidth, inhdr->biHeight) < 0)
+        return ICERR_ERROR;
+    if (codec->decoder_swap_UV)
+    {
+        uint8_t *temp_data;
+        int     temp_linesize;
+
+        temp_data = picture.data[1];
+        temp_linesize = picture.linesize[1];
+        picture.data[1] = picture.data[2];
+        picture.linesize[1] = picture.linesize[2];
+        picture.data[2] = temp_data;
+        picture.linesize[2] = temp_linesize;
+    }
+    if (codec->decoder_vflip)
+    {
+        if (picture.data[0])
+        {
+            picture.data[0] += picture.linesize[0] * (inhdr->biHeight - 1);
+            picture.linesize[0] = -picture.linesize[0];
+        }
+        if (picture.data[1])
+        {
+            picture.data[1] += picture.linesize[1] * (inhdr->biHeight - 1);
+            picture.linesize[1] = -picture.linesize[1];
+        }
+        if (picture.data[2])
+        {
+            picture.data[2] += picture.linesize[2] * (inhdr->biHeight - 1);
+            picture.linesize[2] = -picture.linesize[2];
+        }
+        if (picture.data[3])
+        {
+            picture.data[3] += picture.linesize[3] * (inhdr->biHeight - 1);
+            picture.linesize[3] = -picture.linesize[3];
+        }
+    }
+#ifdef HAVE_SWSCALE
+    sws_scale(codec->sws, codec->decoder_frame->data, codec->decoder_frame->linesize, 0, inhdr->biHeight, picture.data, picture.linesize);
+#else
+    if (img_convert(&picture, codec->decoder_pix_fmt, (AVPicture *)codec->decoder_frame, codec->decoder_context->pix_fmt, inhdr->biWidth, inhdr->biHeight) < 0)
+        return ICERR_ERROR;
+#endif
+//    icd->lpbiOutput->biSizeImage = avpicture_get_size(codec->decoder_pix_fmt, inhdr->biWidth, inhdr->biHeight);
+
+    return ICERR_OK;
+}
+
+LRESULT decompress_end(CODEC *codec)
+{
+    if (codec->decoder_context)
+        avcodec_close(codec->decoder_context);
+    av_freep(&codec->decoder_context);
+    av_freep(&codec->decoder_frame);
+    av_freep(&codec->decoder_buf);
+    codec->decoder_buf_size = 0;
+#ifdef HAVE_SWSCALE
+    sws_freeContext(codec->sws);
+    codec->sws = NULL;
+#endif
     return ICERR_OK;
 }

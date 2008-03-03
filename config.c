@@ -74,17 +74,6 @@ HWND   hTooltip;
 HWND   hTabs[8];
 int    b_tabs_updated;
 
-static const fourcc_str fcc_str_table[] =
-{
-    "H264\0",
-    "h264\0",
-    "X264\0",
-    "x264\0",
-    "AVC1\0",
-    "avc1\0",
-    "VSSH\0"
-};
-
 static const reg_int_t reg_int_table[] =
 {
     /* Bitrate */
@@ -627,7 +616,7 @@ BOOL CALLBACK callback_main(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lParam)
             tabs_update_items(hDlg, config);
             b_tabs_updated = TRUE;
             ShowWindow(hTabs[0], SW_SHOW);
-            BringWindowToTop(hTabs[0]);
+            SetWindowPos(hTabs[0], hTabCtrl, 0, 0, 0, 0, SWP_NOACTIVATE | SWP_NOMOVE | SWP_NOSIZE);
             UpdateWindow(hDlg);
             break;
         }
@@ -654,7 +643,7 @@ BOOL CALLBACK callback_main(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lParam)
                 SetFocus(hTabCtrl);
                 num = TabCtrl_GetCurSel(hTabCtrl);
                 ShowWindow(hTabs[num], SW_SHOW);
-                BringWindowToTop(hTabs[num]);
+                SetWindowPos(hTabs[num], hTabCtrl, 0, 0, 0, 0, SWP_NOACTIVATE | SWP_NOMOVE | SWP_NOSIZE);
                 UpdateWindow(hDlg);
             }
             else
@@ -1427,6 +1416,7 @@ BOOL CALLBACK callback_err_console(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM l
                 switch (LOWORD(wParam))
                 {
                     case IDOK:
+                    case IDCANCEL:
                         DestroyWindow(hWnd);
                         break;
 

@@ -1,7 +1,7 @@
-;x264vfw - H.264/MPEG-4 AVC encoder
+;x264vfw - H.264/MPEG-4 AVC codec
 ;Written by BugMaster
 
-!define FullName  "x264vfw - H.264/MPEG-4 AVC encoder"
+!define FullName  "x264vfw - H.264/MPEG-4 AVC codec"
 !define ShortName "x264vfw"
 
 ;--------------------------------

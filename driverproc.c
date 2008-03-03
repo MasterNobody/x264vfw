@@ -39,6 +39,12 @@ BOOL WINAPI DllMain(HANDLE hModule, DWORD ul_reason_for_call, LPVOID lpReserved)
     return TRUE;
 }
 
+static void log_callback(void* ptr, int level, const char* fmt, va_list vl)
+{
+    if (level <= av_log_get_level())
+        DVPRINTF(fmt, vl);
+}
+
 /* This little puppy handles the calls which vfw programs send out to the codec */
 LRESULT WINAPI DriverProc(DWORD dwDriverId, HDRVR hDriver, UINT uMsg, LPARAM lParam1, LPARAM lParam2)
 {
@@ -51,6 +57,9 @@ LRESULT WINAPI DriverProc(DWORD dwDriverId, HDRVR hDriver, UINT uMsg, LPARAM lPa
             pthread_win32_process_attach_np();
             pthread_win32_thread_attach_np();
 #endif
+            avcodec_init();
+            avcodec_register_all();
+            av_log_set_callback(log_callback);
             return DRV_OK;
 
         case DRV_FREE:
@@ -64,12 +73,12 @@ LRESULT WINAPI DriverProc(DWORD dwDriverId, HDRVR hDriver, UINT uMsg, LPARAM lPa
         {
             ICOPEN *icopen = (ICOPEN *)lParam2;
 
-            if (icopen != NULL && icopen->fccType != ICTYPE_VIDEO)
+            if (icopen && icopen->fccType != ICTYPE_VIDEO)
                 return 0;
 
-            if ((codec = malloc(sizeof(CODEC))) == NULL)
+            if (!(codec = malloc(sizeof(CODEC))))
             {
-                if (icopen != NULL)
+                if (icopen)
                     icopen->dwError = ICERR_MEMORY;
                 return 0;
             }
@@ -77,7 +86,7 @@ LRESULT WINAPI DriverProc(DWORD dwDriverId, HDRVR hDriver, UINT uMsg, LPARAM lPa
             memset(codec, 0, sizeof(CODEC));
             config_reg_load(&codec->config);
 
-            if (icopen != NULL)
+            if (icopen)
                 icopen->dwError = ICERR_OK;
             return (LRESULT)codec;
         }
@@ -85,6 +94,7 @@ LRESULT WINAPI DriverProc(DWORD dwDriverId, HDRVR hDriver, UINT uMsg, LPARAM lPa
         case DRV_CLOSE:
             /* From xvid: compress_end/decompress_end don't always get called */
             compress_end(codec);
+            decompress_end(codec);
             x264_log_vfw_destroy(codec);
             free(codec);
             return DRV_OK;
@@ -107,7 +117,7 @@ LRESULT WINAPI DriverProc(DWORD dwDriverId, HDRVR hDriver, UINT uMsg, LPARAM lPa
 
         /* ICM */
         case ICM_GETSTATE:
-            if ((void *)lParam1 == NULL)
+            if (!(void *)lParam1)
                 return sizeof(CONFIG);
             if (lParam2 < sizeof(CONFIG))
                 return ICERR_BADSIZE;
@@ -117,7 +127,7 @@ LRESULT WINAPI DriverProc(DWORD dwDriverId, HDRVR hDriver, UINT uMsg, LPARAM lPa
             return ICERR_OK;
 
         case ICM_SETSTATE:
-            if ((void *)lParam1 == NULL)
+            if (!(void *)lParam1)
             {
                 config_reg_load(&codec->config);
                 return 0;
@@ -138,7 +148,7 @@ LRESULT WINAPI DriverProc(DWORD dwDriverId, HDRVR hDriver, UINT uMsg, LPARAM lPa
             icinfo->dwSize       = sizeof(ICINFO);
             icinfo->fccType      = ICTYPE_VIDEO;
             icinfo->fccHandler   = FOURCC_X264;
-            icinfo->dwFlags      = VIDCF_COMPRESSFRAMES | VIDCF_FASTTEMPORALC;
+            icinfo->dwFlags      = VIDCF_COMPRESSFRAMES | VIDCF_FASTTEMPORALC | VIDCF_FASTTEMPORALD;
             icinfo->dwVersion    = 0;
             icinfo->dwVersionICM = ICVERSION;
             wcscpy(icinfo->szName, X264_NAME_L);
@@ -171,7 +181,7 @@ LRESULT WINAPI DriverProc(DWORD dwDriverId, HDRVR hDriver, UINT uMsg, LPARAM lPa
             return ICERR_OK;
 
         case ICM_GET:
-            if ((void *)lParam1 == NULL)
+            if (!(void *)lParam1)
                 return 0;
             return ICERR_OK;
 
@@ -200,21 +210,21 @@ LRESULT WINAPI DriverProc(DWORD dwDriverId, HDRVR hDriver, UINT uMsg, LPARAM lPa
         case ICM_COMPRESS_FRAMES_INFO:
             return compress_frames_info(codec, (ICCOMPRESSFRAMES *)lParam1);
 
-        /* Decompressor: not implemented */
-/*
+        /* Decompressor */
         case ICM_DECOMPRESS_GET_FORMAT:
+            return decompress_get_format(codec, (BITMAPINFO *)lParam1, (BITMAPINFO *)lParam2);
+
         case ICM_DECOMPRESS_QUERY:
+            return decompress_query(codec, (BITMAPINFO *)lParam1, (BITMAPINFO *)lParam2);
+
         case ICM_DECOMPRESS_BEGIN:
+            return decompress_begin(codec, (BITMAPINFO *)lParam1, (BITMAPINFO *)lParam2);
+
         case ICM_DECOMPRESS:
+            return decompress(codec, (ICDECOMPRESS *)lParam1);
+
         case ICM_DECOMPRESS_END:
-        case ICM_DECOMPRESS_SET_PALETTE:
-        case ICM_DECOMPRESS_GET_PALETTE:
-        case ICM_DECOMPRESSEX_BEGIN:
-        case ICM_DECOMPRESSEX_QUERY:
-        case ICM_DECOMPRESSEX:
-        case ICM_DECOMPRESSEX_END:
-            return ICERR_UNSUPPORTED;
-*/
+            return decompress_end(codec);
 
         default:
             if (uMsg < DRV_USER)
