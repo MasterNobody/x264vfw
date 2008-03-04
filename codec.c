@@ -31,6 +31,14 @@
 #define _GNU_SOURCE
 #include <getopt.h>
 
+#ifndef attribute_align_arg
+#if defined(__GNUC__) && (__GNUC__ > 4 || __GNUC__ == 4 && __GNUC_MINOR__>1)
+#    define attribute_align_arg __attribute__((force_align_arg_pointer))
+#else
+#    define attribute_align_arg
+#endif
+#endif
+
 /* Return a valid x264 colorspace or X264_CSP_NONE if unsuported */
 static int get_csp(BITMAPINFOHEADER *hdr)
 {
@@ -583,7 +591,7 @@ static int Parse(const char *cmdline, x264_param_t *param, CODEC *codec)
 }
 
 /* Prepare to compress data */
-LRESULT compress_begin(CODEC *codec, BITMAPINFO *lpbiInput, BITMAPINFO *lpbiOutput)
+LRESULT attribute_align_arg compress_begin(CODEC *codec, BITMAPINFO *lpbiInput, BITMAPINFO *lpbiOutput)
 {
     CONFIG *config = &codec->config;
     x264_param_t param;
@@ -792,7 +800,7 @@ LRESULT compress_begin(CODEC *codec, BITMAPINFO *lpbiInput, BITMAPINFO *lpbiOutp
 }
 
 /* Compress a frame of data */
-LRESULT compress(CODEC *codec, ICCOMPRESS *icc)
+LRESULT attribute_align_arg compress(CODEC *codec, ICCOMPRESS *icc)
 {
     BITMAPINFOHEADER *inhdr = icc->lpbiInput;
     BITMAPINFOHEADER *outhdr = icc->lpbiOutput;
@@ -920,7 +928,7 @@ LRESULT compress(CODEC *codec, ICCOMPRESS *icc)
 }
 
 /* End compression and free resources allocated for compression */
-LRESULT compress_end(CODEC *codec)
+LRESULT attribute_align_arg compress_end(CODEC *codec)
 {
     if (codec->h)
     {
@@ -1019,7 +1027,7 @@ LRESULT decompress_query(CODEC *codec, BITMAPINFO *lpbiInput, BITMAPINFO *lpbiOu
     return ICERR_OK;
 }
 
-LRESULT decompress_begin(CODEC *codec, BITMAPINFO *lpbiInput, BITMAPINFO *lpbiOutput)
+LRESULT attribute_align_arg decompress_begin(CODEC *codec, BITMAPINFO *lpbiInput, BITMAPINFO *lpbiOutput)
 {
     int i_csp;
 
@@ -1075,7 +1083,7 @@ LRESULT decompress_begin(CODEC *codec, BITMAPINFO *lpbiInput, BITMAPINFO *lpbiOu
     return ICERR_OK;
 }
 
-LRESULT decompress(CODEC *codec, ICDECOMPRESS *icd)
+LRESULT attribute_align_arg decompress(CODEC *codec, ICDECOMPRESS *icd)
 {
     BITMAPINFOHEADER *inhdr = icd->lpbiInput;
     unsigned int neededsize = inhdr->biSizeImage + FF_INPUT_BUFFER_PADDING_SIZE;
@@ -1145,7 +1153,7 @@ LRESULT decompress(CODEC *codec, ICDECOMPRESS *icd)
     return ICERR_OK;
 }
 
-LRESULT decompress_end(CODEC *codec)
+LRESULT attribute_align_arg decompress_end(CODEC *codec)
 {
     if (codec->decoder_context)
         avcodec_close(codec->decoder_context);
