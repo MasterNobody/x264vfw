@@ -29,6 +29,14 @@
 
 #include "x264vfw.h"
 
+#ifndef attribute_align_arg
+#if defined(__GNUC__) && (__GNUC__ > 4 || __GNUC__ == 4 && __GNUC_MINOR__>1)
+#    define attribute_align_arg __attribute__((force_align_arg_pointer))
+#else
+#    define attribute_align_arg
+#endif
+#endif
+
 /* Global DLL instance */
 HINSTANCE g_hInst;
 
@@ -46,7 +54,7 @@ static void log_callback(void* ptr, int level, const char* fmt, va_list vl)
 }
 
 /* This little puppy handles the calls which vfw programs send out to the codec */
-LRESULT WINAPI DriverProc(DWORD dwDriverId, HDRVR hDriver, UINT uMsg, LPARAM lParam1, LPARAM lParam2)
+LRESULT WINAPI attribute_align_arg DriverProc(DWORD dwDriverId, HDRVR hDriver, UINT uMsg, LPARAM lParam1, LPARAM lParam2)
 {
     CODEC *codec = (CODEC *)dwDriverId;
 

@@ -70,8 +70,9 @@ typedef struct
 } reg_str_t;
 
 CONFIG reg;
+HWND   hMainDlg;
+HWND   hTabs[4];
 HWND   hTooltip;
-HWND   hTabs[8];
 int    b_tabs_updated;
 
 static const reg_int_t reg_int_table[] =
@@ -257,7 +258,7 @@ void config_defaults(CONFIG *config)
 }
 
 /* Tabs */
-void tabs_enable_items(HWND hDlg, CONFIG *config)
+void tabs_enable_items(CONFIG *config)
 {
     ShowWindow(GetDlgItem(hTabs[0], IDC_BITRATELABEL), config->i_encoding_type > 0);
     ShowWindow(GetDlgItem(hTabs[0], IDC_BITRATEEDIT), config->i_encoding_type > 0);
@@ -335,11 +336,11 @@ void tabs_enable_items(HWND hDlg, CONFIG *config)
     EnableWindow(GetDlgItem(hTabs[3], IDC_INLOOP_B), config->i_encoding_type > 0 && config->b_filter);
 //    EnableWindow(GetDlgItem(hTabs[3], IDC_INTERLACED), TRUE);
 
-//    EnableWindow(GetDlgItem(hDlg, IDC_USE_CMDLINE), TRUE);
-    EnableWindow(GetDlgItem(hDlg, IDC_CMDLINE), config->b_use_cmdline);
+//    EnableWindow(GetDlgItem(hMainDlg, IDC_USE_CMDLINE), TRUE);
+    EnableWindow(GetDlgItem(hMainDlg, IDC_CMDLINE), config->b_use_cmdline);
 }
 
-void tabs_update_items(HWND hDlg, CONFIG *config)
+void tabs_update_items(CONFIG *config)
 {
     char szTmp[1024];
 
@@ -542,9 +543,9 @@ void tabs_update_items(HWND hDlg, CONFIG *config)
     SetDlgItemInt(hTabs[3], IDC_LOOPB_TXT, config->i_inloop_b, TRUE);
     CheckDlgButton(hTabs[3], IDC_INTERLACED, config->b_interlaced);
 
-    CheckDlgButton(hDlg, IDC_USE_CMDLINE, config->b_use_cmdline);
-    SendMessage(GetDlgItem(hDlg, IDC_CMDLINE), EM_LIMITTEXT, MAX_CMDLINE - 1, 0);
-    SetDlgItemText(hDlg, IDC_CMDLINE, config->cmdline);
+    CheckDlgButton(hMainDlg, IDC_USE_CMDLINE, config->b_use_cmdline);
+    SendMessage(GetDlgItem(hMainDlg, IDC_CMDLINE), EM_LIMITTEXT, MAX_CMDLINE - 1, 0);
+    SetDlgItemText(hMainDlg, IDC_CMDLINE, config->cmdline);
 }
 
 /* Assigns tooltips */
@@ -585,6 +586,8 @@ BOOL CALLBACK callback_main(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lParam)
             SetWindowLong(hDlg, GWL_USERDATA, lParam);
             config = (CONFIG *)lParam;
 
+            hMainDlg = hDlg;
+
             b_tabs_updated = FALSE;
 
             // insert tabs in tab control
@@ -594,10 +597,10 @@ BOOL CALLBACK callback_main(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lParam)
             tie.pszText = "Rate Control";    TabCtrl_InsertItem(hTabCtrl, 1, &tie);
             tie.pszText = "MBs && Frames";   TabCtrl_InsertItem(hTabCtrl, 2, &tie);
             tie.pszText = "More...";         TabCtrl_InsertItem(hTabCtrl, 3, &tie);
-            hTabs[0] = CreateDialogParam(g_hInst, MAKEINTRESOURCE(IDD_TAB_BITRATE),     hDlg, (DLGPROC)callback_tabs, lParam);
-            hTabs[1] = CreateDialogParam(g_hInst, MAKEINTRESOURCE(IDD_TAB_RATECONTROL), hDlg, (DLGPROC)callback_tabs, lParam);
-            hTabs[2] = CreateDialogParam(g_hInst, MAKEINTRESOURCE(IDD_TAB_IPFRAMES),    hDlg, (DLGPROC)callback_tabs, lParam);
-            hTabs[3] = CreateDialogParam(g_hInst, MAKEINTRESOURCE(IDD_TAB_MISC),        hDlg, (DLGPROC)callback_tabs, lParam);
+            hTabs[0] = CreateDialogParam(g_hInst, MAKEINTRESOURCE(IDD_TAB_BITRATE),     hMainDlg, (DLGPROC)callback_tabs, lParam);
+            hTabs[1] = CreateDialogParam(g_hInst, MAKEINTRESOURCE(IDD_TAB_RATECONTROL), hMainDlg, (DLGPROC)callback_tabs, lParam);
+            hTabs[2] = CreateDialogParam(g_hInst, MAKEINTRESOURCE(IDD_TAB_IPFRAMES),    hMainDlg, (DLGPROC)callback_tabs, lParam);
+            hTabs[3] = CreateDialogParam(g_hInst, MAKEINTRESOURCE(IDD_TAB_MISC),        hMainDlg, (DLGPROC)callback_tabs, lParam);
             GetClientRect(hTabCtrl, &rect);
             TabCtrl_AdjustRect(hTabCtrl, FALSE, &rect);
             MoveWindow(hTabs[0], rect.left, rect.top, rect.right - rect.left + 1, rect.bottom - rect.top + 1, TRUE);
@@ -609,15 +612,14 @@ BOOL CALLBACK callback_main(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lParam)
             {
                 SetWindowPos(hTooltip, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
                 SendMessage(hTooltip, TTM_SETMAXTIPWIDTH, 0, 400);
-                EnumChildWindows(hDlg, enum_tooltips, 0);
+                EnumChildWindows(hMainDlg, enum_tooltips, 0);
             }
 
-            tabs_enable_items(hDlg, config);
-            tabs_update_items(hDlg, config);
+            tabs_enable_items(config);
+            tabs_update_items(config);
             b_tabs_updated = TRUE;
-            ShowWindow(hTabs[0], SW_SHOW);
             SetWindowPos(hTabs[0], hTabCtrl, 0, 0, 0, 0, SWP_NOACTIVATE | SWP_NOMOVE | SWP_NOSIZE);
-            UpdateWindow(hDlg);
+            ShowWindow(hTabs[0], SW_SHOW);
             break;
         }
 
@@ -628,23 +630,21 @@ BOOL CALLBACK callback_main(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lParam)
             if (tem->code == TCN_SELCHANGING)
             {
                 int num;
-                HWND hTabCtrl = GetDlgItem(hDlg, IDC_TABCONTROL);
+                HWND hTabCtrl = GetDlgItem(hMainDlg, IDC_TABCONTROL);
 
                 SetFocus(hTabCtrl);
                 num = TabCtrl_GetCurSel(hTabCtrl);
                 ShowWindow(hTabs[num], SW_HIDE);
-                UpdateWindow(hDlg);
             }
             else if (tem->code == TCN_SELCHANGE)
             {
                 int num;
-                HWND hTabCtrl = GetDlgItem(hDlg, IDC_TABCONTROL);
+                HWND hTabCtrl = GetDlgItem(hMainDlg, IDC_TABCONTROL);
 
                 SetFocus(hTabCtrl);
                 num = TabCtrl_GetCurSel(hTabCtrl);
-                ShowWindow(hTabs[num], SW_SHOW);
                 SetWindowPos(hTabs[num], hTabCtrl, 0, 0, 0, 0, SWP_NOACTIVATE | SWP_NOMOVE | SWP_NOSIZE);
-                UpdateWindow(hDlg);
+                ShowWindow(hTabs[num], SW_SHOW);
             }
             else
                 return FALSE;
@@ -659,28 +659,28 @@ BOOL CALLBACK callback_main(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lParam)
                     {
                         case IDOK:
                             config->b_save = TRUE;
-                            EndDialog(hDlg, LOWORD(wParam));
+                            EndDialog(hMainDlg, LOWORD(wParam));
                             break;
 
                         case IDCANCEL:
                             config->b_save = FALSE;
-                            EndDialog(hDlg, LOWORD(wParam));
+                            EndDialog(hMainDlg, LOWORD(wParam));
                             break;
 
                         case IDC_DEFAULTS:
-                            if (MessageBox(hDlg, X264_DEF_TEXT, X264_NAME, MB_YESNO) == IDYES)
+                            if (MessageBox(hMainDlg, X264_DEF_TEXT, X264_NAME, MB_YESNO) == IDYES)
                             {
                                 config_defaults(config);
                                 b_tabs_updated = FALSE;
-                                tabs_enable_items(hDlg, config);
-                                tabs_update_items(hDlg, config);
+                                tabs_enable_items(config);
+                                tabs_update_items(config);
                                 b_tabs_updated = TRUE;
                             }
                             break;
 
                         case IDC_USE_CMDLINE:
-                            config->b_use_cmdline = IsDlgButtonChecked(hDlg, IDC_USE_CMDLINE);
-                            EnableWindow(GetDlgItem(hDlg, IDC_CMDLINE), config->b_use_cmdline);
+                            config->b_use_cmdline = IsDlgButtonChecked(hMainDlg, IDC_USE_CMDLINE);
+                            EnableWindow(GetDlgItem(hMainDlg, IDC_CMDLINE), config->b_use_cmdline);
                             break;
 
                         default:
@@ -692,7 +692,7 @@ BOOL CALLBACK callback_main(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lParam)
                     switch (LOWORD(wParam))
                     {
                         case IDC_CMDLINE:
-                            if (GetDlgItemText(hDlg, IDC_CMDLINE, config->cmdline, MAX_CMDLINE) == 0)
+                            if (GetDlgItemText(hMainDlg, IDC_CMDLINE, config->cmdline, MAX_CMDLINE) == 0)
                                 strcpy(config->cmdline, "");
                             break;
 
@@ -705,9 +705,9 @@ BOOL CALLBACK callback_main(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lParam)
                     switch (LOWORD(wParam))
                     {
                         case IDC_CMDLINE:
-                            if (GetDlgItemText(hDlg, IDC_CMDLINE, config->cmdline, MAX_CMDLINE) == 0)
+                            if (GetDlgItemText(hMainDlg, IDC_CMDLINE, config->cmdline, MAX_CMDLINE) == 0)
                                 strcpy(config->cmdline, "");
-                            SetDlgItemText(hDlg, IDC_CMDLINE, config->cmdline);
+                            SetDlgItemText(hMainDlg, IDC_CMDLINE, config->cmdline);
                             break;
 
                         default:
@@ -904,7 +904,7 @@ BOOL CALLBACK callback_tabs(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lParam)
                                     break;
                             }
                             b_tabs_updated = FALSE;
-                            tabs_update_items(hDlg, config);
+                            tabs_update_items(config);
                             b_tabs_updated = TRUE;
                             break;
 
@@ -959,7 +959,7 @@ BOOL CALLBACK callback_tabs(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lParam)
                                 memset(&ofn, 0, sizeof(OPENFILENAME));
                                 ofn.lStructSize = sizeof(OPENFILENAME);
 
-                                ofn.hwndOwner = hDlg;
+                                ofn.hwndOwner = hMainDlg;
                                 ofn.lpstrFilter = "Statsfile (*.stats)\0*.stats\0All files (*.*)\0*.*\0\0";
                                 ofn.lpstrFile = tmp;
                                 ofn.nMaxFile = MAX_STATS_SIZE;
@@ -1360,7 +1360,7 @@ BOOL CALLBACK callback_tabs(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lParam)
             return FALSE;
     }
 
-    tabs_enable_items(hDlg, config);
+    tabs_enable_items(config);
     return TRUE;
 }
 
