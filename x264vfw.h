@@ -173,6 +173,7 @@ LRESULT compress_begin(CODEC *, BITMAPINFO *, BITMAPINFO *);
 LRESULT compress(CODEC *, ICCOMPRESS *);
 LRESULT compress_end(CODEC *);
 LRESULT compress_frames_info(CODEC *, ICCOMPRESSFRAMES *);
+void default_compress_frames_info(CODEC *);
 
 /* Decompress functions */
 LRESULT decompress_get_format(CODEC *, BITMAPINFO *, BITMAPINFO *);

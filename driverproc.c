@@ -93,6 +93,7 @@ LRESULT WINAPI attribute_align_arg DriverProc(DWORD dwDriverId, HDRVR hDriver, U
 
             memset(codec, 0, sizeof(CODEC));
             config_reg_load(&codec->config);
+            default_compress_frames_info(codec);
 
             if (icopen)
                 icopen->dwError = ICERR_OK;
@@ -213,6 +214,7 @@ LRESULT WINAPI attribute_align_arg DriverProc(DWORD dwDriverId, HDRVR hDriver, U
             return compress(codec, (ICCOMPRESS *)lParam1);
 
         case ICM_COMPRESS_END:
+            default_compress_frames_info(codec);
             return compress_end(codec);
 
         case ICM_COMPRESS_FRAMES_INFO:

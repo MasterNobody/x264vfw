@@ -165,7 +165,9 @@ LRESULT compress_query(CODEC *codec, BITMAPINFO *lpbiInput, BITMAPINFO *lpbiOutp
     if (!supported_fourcc(outhdr->biCompression))
         return ICERR_BADFORMAT;
 
-    if (outhdr->biSizeImage < compress_get_size(codec, lpbiInput, lpbiOutput))
+    // MSDN says that biSizeImage may be set to zero for BI_RGB bitmaps
+    // But some buggy applications don't set it also for other bitmaps types
+    if (outhdr->biSizeImage != 0 && outhdr->biSizeImage < compress_get_size(codec, lpbiInput, lpbiOutput))
         return ICERR_BADFORMAT;
 
     return ICERR_OK;
@@ -617,8 +619,11 @@ LRESULT compress_begin(CODEC *codec, BITMAPINFO *lpbiInput, BITMAPINFO *lpbiOutp
     x264_picture_alloc(&codec->conv_pic, param.i_csp, param.i_width, param.i_height);
 
     param.i_frame_total = codec->i_frame_total;
-    param.i_fps_num = codec->i_fps_num;
-    param.i_fps_den = codec->i_fps_den;
+    if (codec->i_fps_num > 0 && codec->i_fps_den > 0)
+    {
+        param.i_fps_num = codec->i_fps_num;
+        param.i_fps_den = codec->i_fps_den;
+    }
 
     /* Log */
     x264_log_vfw_create(codec);
@@ -940,6 +945,15 @@ LRESULT compress_frames_info(CODEC *codec, ICCOMPRESSFRAMES *icf)
     return ICERR_OK;
 }
 
+/* Set the parameters for the pending compression (default values for buggy applications which don't send ICM_COMPRESS_FRAMES_INFO) */
+void default_compress_frames_info(CODEC *codec)
+{
+    /* Zero values are correct (they will be checked in compress_begin) */
+    codec->i_frame_total = 0;
+    codec->i_fps_num = 0;
+    codec->i_fps_den = 0;
+}
+
 LRESULT decompress_get_format(CODEC *codec, BITMAPINFO *lpbiInput, BITMAPINFO *lpbiOutput)
 {
     BITMAPINFOHEADER *inhdr = &lpbiInput->bmiHeader;
@@ -1013,7 +1027,8 @@ LRESULT decompress_query(CODEC *codec, BITMAPINFO *lpbiInput, BITMAPINFO *lpbiOu
 #endif
 
     // MSDN says that biSizeImage may be set to zero for BI_RGB bitmaps
-    if ((outhdr->biCompression != BI_RGB || outhdr->biSizeImage != 0) && outhdr->biSizeImage < avpicture_get_size(pix_fmt, iWidth, iHeight))
+    // But some buggy applications don't set it also for other bitmaps types
+    if (outhdr->biSizeImage != 0 && outhdr->biSizeImage < avpicture_get_size(pix_fmt, iWidth, iHeight))
         return ICERR_BADFORMAT;
 
     return ICERR_OK;
