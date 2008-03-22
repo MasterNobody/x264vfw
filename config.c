@@ -905,6 +905,11 @@ BOOL CALLBACK callback_tabs(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lParam)
                             }
                             b_tabs_updated = FALSE;
                             tabs_update_items(config);
+
+                            /* Ugly hack for fixing visualization bug of IDC_BITRATESLIDER */
+                            ShowWindow(GetDlgItem(hTabs[0], IDC_BITRATESLIDER), FALSE);
+                            ShowWindow(GetDlgItem(hTabs[0], IDC_BITRATESLIDER), config->i_encoding_type > 0);
+
                             b_tabs_updated = TRUE;
                             break;
 

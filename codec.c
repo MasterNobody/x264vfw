@@ -452,6 +452,7 @@ static int Parse(const char *cmdline, x264_param_t *param, CODEC *codec)
             { "no-dct-decimate",   no_argument,       NULL, 0                },
             { "aq-strength",       required_argument, NULL, 0                },
             { "aq-sensitivity",    required_argument, NULL, 0                },
+            { "aq-mode",           required_argument, NULL, 0                },
             { "deadzone-inter",    required_argument, NULL, 0                },
             { "deadzone-intra",    required_argument, NULL, 0                },
             { "level",             required_argument, NULL, 0                },
