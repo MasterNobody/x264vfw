@@ -258,7 +258,7 @@ static void x264_log_vfw(void *p_private, int i_level, const char *psz_fmt, va_l
 
 static void x264vfw_log(CODEC *codec, int i_level, const char *psz_fmt, ... )
 {
-    if (i_level <= codec->config.i_log_level)
+    if (i_level <= codec->config.i_log_level - 1)
     {
         va_list arg;
         va_start(arg, psz_fmt);
@@ -399,6 +399,7 @@ static int Parse(const char *cmdline, x264_param_t *param, CODEC *codec)
 #define OPT_LONGHELP 263
 #define OPT_FPS 264
 #define OPT_VD_HACK 265
+#define OPT_NO_OUTPUT 266
 
         static struct option long_options[] =
         {
@@ -505,6 +506,7 @@ static int Parse(const char *cmdline, x264_param_t *param, CODEC *codec)
             { "colormatrix",       required_argument, NULL, 0                },
             { "chromaloc",         required_argument, NULL, 0                },
             { "vd-hack",           no_argument,       NULL, OPT_VD_HACK      },
+            { "no-output",         no_argument,       NULL, OPT_NO_OUTPUT    },
             { 0,                   0,                 0,    0                }
         };
 
@@ -540,6 +542,10 @@ static int Parse(const char *cmdline, x264_param_t *param, CODEC *codec)
 
             case OPT_VD_HACK:
                 codec->b_use_vd_hack = TRUE;
+                break;
+
+            case OPT_NO_OUTPUT:
+                codec->b_no_output = TRUE;
                 break;
 
             default:
@@ -611,6 +617,7 @@ LRESULT compress_begin(CODEC *codec, BITMAPINFO *lpbiInput, BITMAPINFO *lpbiOutp
     /* Get default param */
     x264_param_default(&param);
     codec->b_use_vd_hack = FALSE; /* Don't use "VD hack" by default */
+    codec->b_no_output   = FALSE;
 
     /* Video Properties */
     param.i_csp    = X264_CSP_I420;
@@ -640,7 +647,7 @@ LRESULT compress_begin(CODEC *codec, BITMAPINFO *lpbiInput, BITMAPINFO *lpbiOutp
     }
     else
     {
-        codec->b_use_vd_hack = codec->config.b_vd_hack;
+        codec->b_use_vd_hack = config->b_vd_hack;
 
         /* CPU flags */
 #ifdef HAVE_PTHREAD
@@ -756,6 +763,7 @@ LRESULT compress_begin(CODEC *codec, BITMAPINFO *lpbiInput, BITMAPINFO *lpbiOutp
                 param.rc.i_bitrate = config->i_passbitrate;
                 if (config->i_pass <= 1)
                 {
+                    codec->b_no_output = TRUE;
                     param.rc.b_stat_write = TRUE;
                     param.rc.f_rate_tolerance = 4.0;
                     if (config->b_fast1pass)
@@ -888,7 +896,7 @@ LRESULT compress(CODEC *codec, ICCOMPRESS *icc)
     /* Create bitstream, unless we're dropping it in 1st pass */
     i_out = 0;
 
-    if (codec->config.i_encoding_type != 4 || codec->config.i_pass > 1)
+    if (!codec->b_no_output)
     {
         int i;
         for (i = 0; i < i_nal; i++)

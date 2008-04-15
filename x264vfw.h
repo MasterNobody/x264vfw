@@ -148,6 +148,7 @@ typedef struct
     int i_frame_remain;
 #endif
     int b_use_vd_hack;
+    int b_no_output;
 
     x264_csp_function_t csp;
     x264_picture_t conv_pic;

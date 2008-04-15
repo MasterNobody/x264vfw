@@ -44,6 +44,30 @@ HINSTANCE g_hInst;
 BOOL WINAPI DllMain(HANDLE hModule, DWORD ul_reason_for_call, LPVOID lpReserved)
 {
     g_hInst = (HINSTANCE) hModule;
+
+#ifdef PTW32_STATIC_LIB
+    switch (ul_reason_for_call)
+    {
+        case DLL_PROCESS_ATTACH:
+            pthread_win32_process_attach_np();
+            pthread_win32_thread_attach_np();
+            break;
+
+        case DLL_THREAD_ATTACH:
+            pthread_win32_thread_attach_np();
+            break;
+
+        case DLL_THREAD_DETACH:
+            pthread_win32_thread_detach_np();
+            break;
+
+        case DLL_PROCESS_DETACH:
+            pthread_win32_thread_detach_np();
+            pthread_win32_process_detach_np();
+            break;
+    }
+#endif
+
     return TRUE;
 }
 
@@ -61,20 +85,12 @@ LRESULT WINAPI attribute_align_arg DriverProc(DWORD dwDriverId, HDRVR hDriver, U
     switch (uMsg)
     {
         case DRV_LOAD:
-#ifdef PTW32_STATIC_LIB
-            pthread_win32_process_attach_np();
-            pthread_win32_thread_attach_np();
-#endif
             avcodec_init();
             avcodec_register_all();
             av_log_set_callback(log_callback);
             return DRV_OK;
 
         case DRV_FREE:
-#ifdef PTW32_STATIC_LIB
-            pthread_win32_thread_detach_np();
-            pthread_win32_process_detach_np();
-#endif
             return DRV_OK;
 
         case DRV_OPEN:
