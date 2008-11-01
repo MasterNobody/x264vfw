@@ -12,6 +12,7 @@
 ##############################################################################
 
 include config.mak
+include x264vfw_config.mak
 
 # Dll to build
 DLL = x264vfw.dll
@@ -24,13 +25,11 @@ DIR_CUR = $(shell pwd)
 
 # Path to include filen library and src
 DIR_SRC = $(DIR_CUR)
-X264_INC = $(DIR_CUR)/../x264
-X264_LIB = $(DIR_CUR)/../x264
-FF_INC = $(DIR_CUR)/../ffmpeg
-FF_LIB = $(DIR_CUR)/../ffmpeg
+X264_DIR = $(DIR_CUR)/../x264
+FFMPEG_DIR = $(DIR_CUR)/../ffmpeg
 
 # Sources
-SRC_C = codec.c config.c driverproc.c csp.c
+SRC_C = codec.c config.c csp.c driverproc.c
 SRC_RES = resource.rc
 
 # Alias
@@ -43,23 +42,28 @@ WINDRES = windres
 
 # Constants which should not be modified
 # The `mingw-runtime` package is required when building with -mno-cygwin
-CFLAGS += -I$(DIR_SRC)/w32api -I$(X264_INC) -I$(FF_INC) -I$(FF_INC)/libavcodec -I$(FF_INC)/libavutil
-CFLAGS += -D_WIN32_IE=0x0500
 CFLAGS += -mno-cygwin
+CFLAGS += -D_WIN32_IE=0x0500
+CFLAGS += -I$(DIR_SRC)/w32api -I$(X264_DIR)
 
 ##############################################################################
 # Compiler flags for linking stage
 ##############################################################################
 
-LDFLAGS += -L$(X264_LIB) -lx264 -L$(FF_LIB)/libavcodec -lavcodec -L$(FF_LIB)/libavutil -lavutil
+VFW_LDFLAGS = -L$(X264_DIR) -lx264
 
 ##############################################################################
 # Conditional options
 ##############################################################################
 
+ifeq ($(HAVE_FFMPEG),yes)
+CFLAGS += -I$(FFMPEG_DIR) -I$(FFMPEG_DIR)/libavcodec -I$(FFMPEG_DIR)/libavutil
+VFW_LDFLAGS += -L$(FFMPEG_DIR)/libavcodec -lavcodec -L$(FFMPEG_DIR)/libavutil -lavutil
+
+CFLAGS += -I$(FFMPEG_DIR)/libswscale
 ifeq ($(HAVE_SWSCALE),yes)
-CFLAGS += -I$(FF_INC)/libswscale -DHAVE_SWSCALE
-LDFLAGS += -L$(FF_LIB)/libswscale -lswscale
+VFW_LDFLAGS += -L$(FFMPEG_DIR)/libswscale -lswscale
+endif
 endif
 
 ##############################################################################
@@ -75,6 +79,10 @@ DIR_BUILD = $(DIR_CUR)/bin
 VPATH = $(DIR_SRC):$(DIR_BUILD)
 
 all: $(DLL)
+
+config.mak:
+	@echo " Copy config.mak from $(X264_DIR)"
+	@cp $(X264_DIR)/config.mak $(DIR_SRC)/config.mak
 
 $(DIR_BUILD):
 	@echo " D: $(DIR_BUILD)"
@@ -102,7 +110,7 @@ $(DLL): $(DIR_BUILD) $(OBJECTS)
 	-mno-cygwin -shared -Wl,-dll,--out-implib,$@.a,--enable-stdcall-fixup \
 	-o $@ \
 	$(OBJECTS) driverproc.def \
-	-lgdi32 -lwinmm -lcomdlg32 -lcomctl32 $(LDFLAGS)
+	$(VFW_LDFLAGS) $(LDFLAGS) -lgdi32 -lwinmm -lcomdlg32 -lcomctl32
 
 clean:
 	@echo " Cl: Object files and target lib"

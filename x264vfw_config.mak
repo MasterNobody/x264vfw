@@ -1,0 +1,2 @@
+HAVE_FFMPEG=yes
+HAVE_SWSCALE=no

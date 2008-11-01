@@ -5,6 +5,7 @@
  * $Id: csp.c,v 1.1 2004/06/03 19:27:06 fenrir Exp $
  *
  * Authors: Laurent Aimar <fenrir@via.ecp.fr>
+ *          Anton Mitrofanov (a.k.a. BugMaster)
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -21,10 +22,11 @@
  * Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111, USA.
  *****************************************************************************/
 
-#include "csp.h"
+#include "x264vfw.h"
+
 #include <assert.h>
 
-static __inline void plane_copy( uint8_t *dst, int i_dst,
+static inline void plane_copy( uint8_t *dst, int i_dst,
                                uint8_t *src, int i_src, int w, int h)
 {
     while( h-- )
@@ -35,13 +37,13 @@ static __inline void plane_copy( uint8_t *dst, int i_dst,
     }
 }
 
-static __inline void plane_copy_vflip( uint8_t *dst, int i_dst,
+static inline void plane_copy_vflip( uint8_t *dst, int i_dst,
                                      uint8_t *src, int i_src, int w, int h)
 {
     plane_copy( dst, i_dst, src + (h -1)*i_src, -i_src, w, h );
 }
 
-static __inline void plane_subsamplev2( uint8_t *dst, int i_dst,
+static inline void plane_subsamplev2( uint8_t *dst, int i_dst,
                                       uint8_t *src, int i_src, int w, int h)
 {
     for( ; h > 0; h-- )
@@ -59,13 +61,13 @@ static __inline void plane_subsamplev2( uint8_t *dst, int i_dst,
     }
 }
 
-static __inline void plane_subsamplev2_vlip( uint8_t *dst, int i_dst,
+static inline void plane_subsamplev2_vlip( uint8_t *dst, int i_dst,
                                            uint8_t *src, int i_src, int w, int h)
 {
     plane_subsamplev2( dst, i_dst, src + (2*h-1)*i_src, -i_src, w, h );
 }
 
-static __inline void plane_subsamplehv2( uint8_t *dst, int i_dst,
+static inline void plane_subsamplehv2( uint8_t *dst, int i_dst,
                                        uint8_t *src, int i_src, int w, int h)
 {
     for( ; h > 0; h-- )
@@ -83,7 +85,7 @@ static __inline void plane_subsamplehv2( uint8_t *dst, int i_dst,
     }
 }
 
-static __inline void plane_subsamplehv2_vlip( uint8_t *dst, int i_dst,
+static inline void plane_subsamplehv2_vlip( uint8_t *dst, int i_dst,
                                             uint8_t *src, int i_src, int w, int h)
 {
     plane_subsamplehv2( dst, i_dst, src + (2*h-1)*i_src, -i_src, w, h );
@@ -261,7 +263,7 @@ static void yuyv_to_i420( x264_image_t *img_dst, x264_image_t *img_src,
     }
 }
 
-#ifdef BT_709
+#if X264VFW_CSP_BT_709
 //BT.709
 #define Kb 0.0722
 #define Kr 0.2126
@@ -275,7 +277,7 @@ static void yuyv_to_i420( x264_image_t *img_dst, x264_image_t *img_src,
 #define Sb (1.0 - Kb)
 #define Sr (1.0 - Kr)
 
-#ifdef PC_SCALE
+#if X264VFW_CSP_PC_SCALE
 //PC Scale
 //0 <= Y <= 255
 //0 <= U <= 255

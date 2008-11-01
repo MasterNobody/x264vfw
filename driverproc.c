@@ -1,5 +1,5 @@
 /*****************************************************************************
- * drvproc.c: vfw x264 wrapper
+ * driverproc.c: vfw x264 wrapper
  *****************************************************************************
  * Copyright (C) 2003 Laurent Aimar
  * $Id: driverproc.c,v 1.1 2004/06/03 19:27:09 fenrir Exp $
@@ -23,18 +23,10 @@
  * Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111, USA.
  *****************************************************************************/
 
-#ifdef PTW32_STATIC_LIB
-#include <pthread.h>
-#endif
-
 #include "x264vfw.h"
 
-#ifndef attribute_align_arg
-#if defined(__GNUC__) && (__GNUC__ > 4 || __GNUC__ == 4 && __GNUC_MINOR__>1)
-#    define attribute_align_arg __attribute__((force_align_arg_pointer))
-#else
-#    define attribute_align_arg
-#endif
+#ifdef PTW32_STATIC_LIB
+#include <pthread.h>
 #endif
 
 /* Global DLL instance */
@@ -71,11 +63,13 @@ BOOL WINAPI DllMain(HANDLE hModule, DWORD ul_reason_for_call, LPVOID lpReserved)
     return TRUE;
 }
 
+#if X264VFW_USE_DECODER
 static void log_callback(void* ptr, int level, const char* fmt, va_list vl)
 {
     if (level <= av_log_get_level())
         DVPRINTF(fmt, vl);
 }
+#endif
 
 /* This little puppy handles the calls which vfw programs send out to the codec */
 LRESULT WINAPI attribute_align_arg DriverProc(DWORD dwDriverId, HDRVR hDriver, UINT uMsg, LPARAM lParam1, LPARAM lParam2)
@@ -85,9 +79,11 @@ LRESULT WINAPI attribute_align_arg DriverProc(DWORD dwDriverId, HDRVR hDriver, U
     switch (uMsg)
     {
         case DRV_LOAD:
+#if X264VFW_USE_DECODER
             avcodec_init();
             avcodec_register_all();
             av_log_set_callback(log_callback);
+#endif
             return DRV_OK;
 
         case DRV_FREE:
@@ -109,6 +105,9 @@ LRESULT WINAPI attribute_align_arg DriverProc(DWORD dwDriverId, HDRVR hDriver, U
 
             memset(codec, 0, sizeof(CODEC));
             config_reg_load(&codec->config);
+#if X264VFW_USE_DECODER
+            codec->decoder_enabled = !codec->config.b_disable_decoder;
+#endif
             default_compress_frames_info(codec);
 
             if (icopen)
@@ -119,7 +118,9 @@ LRESULT WINAPI attribute_align_arg DriverProc(DWORD dwDriverId, HDRVR hDriver, U
         case DRV_CLOSE:
             /* From xvid: compress_end/decompress_end don't always get called */
             compress_end(codec);
+#if X264VFW_USE_DECODER
             decompress_end(codec);
+#endif
             x264_log_vfw_destroy(codec);
             free(codec);
             return DRV_OK;
@@ -173,7 +174,11 @@ LRESULT WINAPI attribute_align_arg DriverProc(DWORD dwDriverId, HDRVR hDriver, U
             icinfo->dwSize       = sizeof(ICINFO);
             icinfo->fccType      = ICTYPE_VIDEO;
             icinfo->fccHandler   = FOURCC_X264;
-            icinfo->dwFlags      = VIDCF_COMPRESSFRAMES | VIDCF_FASTTEMPORALC | VIDCF_FASTTEMPORALD;
+            icinfo->dwFlags      = VIDCF_COMPRESSFRAMES | VIDCF_FASTTEMPORALC;
+#if X264VFW_USE_DECODER
+            if (codec->decoder_enabled)
+                icinfo->dwFlags |= VIDCF_FASTTEMPORALD;
+#endif
             icinfo->dwVersion    = 0;
             icinfo->dwVersionICM = ICVERSION;
             wcscpy(icinfo->szName, X264_NAME_L);
@@ -190,7 +195,7 @@ LRESULT WINAPI attribute_align_arg DriverProc(DWORD dwDriverId, HDRVR hDriver, U
                 codec->config.b_save = FALSE;
                 memcpy(&temp, &codec->config, sizeof(CONFIG));
 
-                DialogBoxParam(g_hInst, MAKEINTRESOURCE(IDD_MAINCONFIG), (HWND)lParam1, callback_main, (LPARAM)&temp);
+                DialogBoxParam(g_hInst, MAKEINTRESOURCE(IDD_CONFIG), (HWND)lParam1, callback_main, (LPARAM)&temp);
 
                 if (temp.b_save)
                 {
@@ -236,21 +241,38 @@ LRESULT WINAPI attribute_align_arg DriverProc(DWORD dwDriverId, HDRVR hDriver, U
         case ICM_COMPRESS_FRAMES_INFO:
             return compress_frames_info(codec, (ICCOMPRESSFRAMES *)lParam1);
 
+#if X264VFW_USE_DECODER
         /* Decompressor */
         case ICM_DECOMPRESS_GET_FORMAT:
-            return decompress_get_format(codec, (BITMAPINFO *)lParam1, (BITMAPINFO *)lParam2);
+            if (codec->decoder_enabled)
+                return decompress_get_format(codec, (BITMAPINFO *)lParam1, (BITMAPINFO *)lParam2);
+            else
+                return ICERR_UNSUPPORTED;
 
         case ICM_DECOMPRESS_QUERY:
-            return decompress_query(codec, (BITMAPINFO *)lParam1, (BITMAPINFO *)lParam2);
+            if (codec->decoder_enabled)
+                return decompress_query(codec, (BITMAPINFO *)lParam1, (BITMAPINFO *)lParam2);
+            else
+                return ICERR_UNSUPPORTED;
 
         case ICM_DECOMPRESS_BEGIN:
-            return decompress_begin(codec, (BITMAPINFO *)lParam1, (BITMAPINFO *)lParam2);
+            if (codec->decoder_enabled)
+                return decompress_begin(codec, (BITMAPINFO *)lParam1, (BITMAPINFO *)lParam2);
+            else
+                return ICERR_UNSUPPORTED;
 
         case ICM_DECOMPRESS:
-            return decompress(codec, (ICDECOMPRESS *)lParam1);
+            if (codec->decoder_enabled)
+                return decompress(codec, (ICDECOMPRESS *)lParam1);
+            else
+                return ICERR_UNSUPPORTED;
 
         case ICM_DECOMPRESS_END:
-            return decompress_end(codec);
+            if (codec->decoder_enabled)
+                return decompress_end(codec);
+            else
+                return ICERR_UNSUPPORTED;
+#endif
 
         default:
             if (uMsg < DRV_USER)
@@ -272,6 +294,6 @@ void WINAPI Configure(HWND hwnd, HINSTANCE hinst, LPTSTR lpCmdLine, int nCmdShow
             DriverProc(dwDriverId, 0, ICM_CONFIGURE, (LPARAM)GetDesktopWindow(), 0);
             DriverProc(dwDriverId, 0, DRV_CLOSE, 0, 0);
         }
-       DriverProc(0, 0, DRV_FREE, 0, 0);
+        DriverProc(0, 0, DRV_FREE, 0, 0);
     }
 }

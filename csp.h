@@ -5,6 +5,7 @@
  * $Id: csp.h,v 1.1 2004/06/03 19:27:06 fenrir Exp $
  *
  * Authors: Laurent Aimar <fenrir@via.ecp.fr>
+ *          Anton Mitrofanov (a.k.a. BugMaster)
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -21,8 +22,8 @@
  * Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111, USA.
  *****************************************************************************/
 
-#ifndef _CSP_H
-#define _CSP_H
+#ifndef X264VFW_CSP_H
+#define X264VFW_CSP_H
 
 #include <stdlib.h>
 #include <string.h>

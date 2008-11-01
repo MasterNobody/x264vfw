@@ -26,8 +26,9 @@
 #include "x264vfw.h"
 
 #include <stdio.h>
-#include <io.h>
 #include <assert.h>
+#include <wchar.h>
+
 #define _GNU_SOURCE
 #include <getopt.h>
 
@@ -65,6 +66,7 @@ static int get_csp(BITMAPINFOHEADER *hdr)
     }
 }
 
+#if X264VFW_USE_DECODER
 static enum PixelFormat csp_to_pix_fmt(int i_csp)
 {
     switch (i_csp)
@@ -86,6 +88,7 @@ static enum PixelFormat csp_to_pix_fmt(int i_csp)
             return PIX_FMT_NONE;
     }
 }
+#endif
 
 static int supported_fourcc(DWORD fourcc)
 {
@@ -233,7 +236,7 @@ static void x264_log_vfw(void *p_private, int i_level, const char *psz_fmt, va_l
         ShowWindow(codec->hCons, SW_SHOW);
         codec->b_visible = TRUE;
     }
-    h_console = GetDlgItem(codec->hCons, IDC_CONSOLE);
+    h_console = GetDlgItem(codec->hCons, IDC_ERRCONSOLE_CONSOLE);
     idx = SendMessage(h_console, LB_ADDSTRING, 0, (LPARAM)&error_msg);
 
     /* Make sure that the last item added is visible (autoscroll) */
@@ -398,7 +401,9 @@ static int Parse(const char *cmdline, x264_param_t *param, CODEC *codec)
 #define OPT_VISUALIZE 262
 #define OPT_LONGHELP 263
 #define OPT_FPS 264
+#if X264VFW_USE_VIRTUALDUB_HACK
 #define OPT_VD_HACK 265
+#endif
 #define OPT_NO_OUTPUT 266
 
         static struct option long_options[] =
@@ -408,6 +413,7 @@ static int Parse(const char *cmdline, x264_param_t *param, CODEC *codec)
             { "version",           no_argument,       NULL, 'V'              },
             { "bitrate",           required_argument, NULL, 'B'              },
             { "bframes",           required_argument, NULL, 'b'              },
+            { "b-adapt",           required_argument, NULL, 0                },
             { "no-b-adapt",        no_argument,       NULL, 0                },
             { "b-bias",            required_argument, NULL, 0                },
             { "b-pyramid",         no_argument,       NULL, 0                },
@@ -420,6 +426,10 @@ static int Parse(const char *cmdline, x264_param_t *param, CODEC *codec)
             { "filter",            required_argument, NULL, 0                },
             { "deblock",           required_argument, NULL, 'f'              },
             { "interlaced",        no_argument,       NULL, 0                },
+#if X264_PATCH_HDR
+            { "tff",               no_argument,       NULL, 0                },
+            { "bff",               no_argument,       NULL, 0                },
+#endif
             { "no-cabac",          no_argument,       NULL, 0                },
             { "qp",                required_argument, NULL, 'q'              },
             { "qpmin",             required_argument, NULL, 0                },
@@ -444,19 +454,19 @@ static int Parse(const char *cmdline, x264_param_t *param, CODEC *codec)
             { "mvrange",           required_argument, NULL, 0                },
             { "mvrange-thread",    required_argument, NULL, 0                },
             { "subme",             required_argument, NULL, 'm'              },
-            { "b-rdo",             no_argument,       NULL, 0                },
+            { "psy-rd",            required_argument, NULL, 0                },
             { "mixed-refs",        no_argument,       NULL, 0                },
             { "no-chroma-me",      no_argument,       NULL, 0                },
-            { "bime",              no_argument,       NULL, 0                },
             { "8x8dct",            no_argument,       NULL, '8'              },
             { "trellis",           required_argument, NULL, 't'              },
             { "no-fast-pskip",     no_argument,       NULL, 0                },
             { "no-dct-decimate",   no_argument,       NULL, 0                },
             { "aq-strength",       required_argument, NULL, 0                },
-            { "aq-sensitivity",    required_argument, NULL, 0                },
             { "aq-mode",           required_argument, NULL, 0                },
+#if X264_PATCH_VAQ_MOD
             { "aq-metric",         required_argument, NULL, 0                },
-            { "fgo",               required_argument, NULL, 0                },
+            { "aq-sensitivity",    required_argument, NULL, 0                },
+#endif
             { "deadzone-inter",    required_argument, NULL, 0                },
             { "deadzone-intra",    required_argument, NULL, 0                },
             { "level",             required_argument, NULL, 0                },
@@ -469,14 +479,15 @@ static int Parse(const char *cmdline, x264_param_t *param, CODEC *codec)
             { "chroma-qp-offset",  required_argument, NULL, 0                },
             { "pass",              required_argument, NULL, 'p'              },
             { "stats",             required_argument, NULL, 0                },
-            { "rceq",              required_argument, NULL, 0                },
             { "qcomp",             required_argument, NULL, 0                },
             { "qblur",             required_argument, NULL, 0                },
             { "cplxblur",          required_argument, NULL, 0                },
             { "zones",             required_argument, NULL, 0                },
             { "qpfile",            required_argument, NULL, OPT_QPFILE       },
             { "threads",           required_argument, NULL, 0                },
+#if X264_PATCH_THREAD_POOL
             { "thread-queue",      required_argument, NULL, 0                },
+#endif
             { "thread-input",      no_argument,       NULL, OPT_THREAD_INPUT },
             { "non-deterministic", no_argument,       NULL, 0                },
             { "no-psnr",           no_argument,       NULL, 0                },
@@ -485,8 +496,14 @@ static int Parse(const char *cmdline, x264_param_t *param, CODEC *codec)
             { "verbose",           no_argument,       NULL, 'v'              },
             { "progress",          no_argument,       NULL, OPT_PROGRESS     },
             { "visualize",         no_argument,       NULL, OPT_VISUALIZE    },
+            { "dump-yuv",          required_argument, NULL, 0                },
             { "sps-id",            required_argument, NULL, 0                },
             { "aud",               no_argument,       NULL, 0                },
+#if X264_PATCH_HDR
+            { "nal-hrd",           no_argument,       NULL, 0                },
+            { "pulldown",          required_argument, NULL, 0                },
+            { "pd",                required_argument, NULL, 0                },
+#endif
             { "nr",                required_argument, NULL, 0                },
             { "cqm",               required_argument, NULL, 0                },
             { "cqmfile",           required_argument, NULL, 0                },
@@ -507,7 +524,9 @@ static int Parse(const char *cmdline, x264_param_t *param, CODEC *codec)
             { "transfer",          required_argument, NULL, 0                },
             { "colormatrix",       required_argument, NULL, 0                },
             { "chromaloc",         required_argument, NULL, 0                },
+#if X264VFW_USE_VIRTUALDUB_HACK
             { "vd-hack",           no_argument,       NULL, OPT_VD_HACK      },
+#endif
             { "no-output",         no_argument,       NULL, OPT_NO_OUTPUT    },
             { 0,                   0,                 0,    0                }
         };
@@ -542,9 +561,11 @@ static int Parse(const char *cmdline, x264_param_t *param, CODEC *codec)
                 param->i_log_level = X264_LOG_DEBUG;
                 break;
 
+#if X264VFW_USE_VIRTUALDUB_HACK
             case OPT_VD_HACK:
                 codec->b_use_vd_hack = TRUE;
                 break;
+#endif
 
             case OPT_NO_OUTPUT:
                 codec->b_no_output = TRUE;
@@ -599,6 +620,7 @@ LRESULT compress_begin(CODEC *codec, BITMAPINFO *lpbiInput, BITMAPINFO *lpbiOutp
 {
     CONFIG *config = &codec->config;
     x264_param_t param;
+    char cqm_file[MAX_PATH];
     char stat_out[MAX_STATS_SIZE];
     char stat_in[MAX_STATS_SIZE];
 
@@ -608,23 +630,24 @@ LRESULT compress_begin(CODEC *codec, BITMAPINFO *lpbiInput, BITMAPINFO *lpbiOutp
     if (compress_query(codec, lpbiInput, lpbiOutput) != ICERR_OK)
         return ICERR_BADFORMAT;
 
-#ifdef BUGGY_APPS_HACK
+#if X264VFW_USE_BUGGY_APPS_HACK
     codec->prev_lpbiOutput = NULL;
     codec->prev_output_biSizeImage = 0;
-#endif
-#ifdef VIRTUALDUB_HACK
-    codec->i_frame_remain = codec->i_frame_total ? codec->i_frame_total : -1;
 #endif
 
     /* Get default param */
     x264_param_default(&param);
+#if X264VFW_USE_VIRTUALDUB_HACK
     codec->b_use_vd_hack = FALSE; /* Don't use "VD hack" by default */
+    codec->save_fcc = lpbiOutput->bmiHeader.biCompression;
+#endif
     codec->b_no_output   = FALSE;
+    codec->i_frame_remain = codec->i_frame_total ? codec->i_frame_total : -1;
 
     /* Video Properties */
-    param.i_csp    = X264_CSP_I420;
     param.i_width  = lpbiInput->bmiHeader.biWidth;
     param.i_height = abs(lpbiInput->bmiHeader.biHeight);
+    param.i_csp    = X264_CSP_I420;
 
     x264_csp_init(&codec->csp, param.i_csp);
     x264_picture_alloc(&codec->conv_pic, param.i_csp, param.i_width, param.i_height);
@@ -649,27 +672,65 @@ LRESULT compress_begin(CODEC *codec, BITMAPINFO *lpbiInput, BITMAPINFO *lpbiOutp
     }
     else
     {
+#if X264VFW_USE_VIRTUALDUB_HACK
         codec->b_use_vd_hack = config->b_vd_hack;
+#endif
 
         /* CPU flags */
-#ifdef HAVE_PTHREAD
+        param.cpu = config->b_no_asm ? 0 : param.cpu;
+#if X264VFW_USE_THREADS
         param.i_threads = config->i_threads;
+        param.b_deterministic = config->i_threads != 1 ? config->b_mt_deterministic : TRUE;
+#if X264_PATCH_THREAD_POOL
+        param.i_thread_queue = config->i_threads != 1 ? config->i_thread_queue : 1;
+#endif
 #else
         param.i_threads = 1;
+        param.b_deterministic = TRUE;
+#if X264_PATCH_THREAD_POOL
+        param.i_thread_queue = 1;
+#endif
 #endif
 
         /* Video Properties */
+        switch (config->i_avc_level)
+        {
+            case  1: param.i_level_idc = 10; break;
+            case  2: param.i_level_idc = 11; break;
+            case  3: param.i_level_idc = 12; break;
+            case  4: param.i_level_idc = 13; break;
+            case  5: param.i_level_idc = 20; break;
+            case  6: param.i_level_idc = 21; break;
+            case  7: param.i_level_idc = 22; break;
+            case  8: param.i_level_idc = 30; break;
+            case  9: param.i_level_idc = 31; break;
+            case 10: param.i_level_idc = 32; break;
+            case 11: param.i_level_idc = 40; break;
+            case 12: param.i_level_idc = 41; break;
+            case 13: param.i_level_idc = 42; break;
+            case 14: param.i_level_idc = 50; break;
+            case 15: param.i_level_idc = 51; break;
+            default: param.i_level_idc = -1; break;
+        }
         param.vui.i_sar_width = config->i_sar_width;
         param.vui.i_sar_height = config->i_sar_height;
+        param.vui.i_overscan = config->i_overscan;
+        param.vui.i_vidformat = config->i_vidformat;
+        param.vui.b_fullrange = config->i_fullrange > 0;
+        param.vui.i_colorprim = config->i_colorprim;
+        param.vui.i_transfer = config->i_transfer;
+        param.vui.i_colmatrix = config->i_colmatrix;
+        param.vui.i_chroma_loc = config->i_chromaloc;
 
         /* Bitstream parameters */
         param.i_frame_reference = config->i_refmax;
-        param.i_keyint_min = config->i_keyint_min;
         param.i_keyint_max = config->i_keyint_max;
+        param.i_keyint_min = config->i_keyint_min;
         param.i_scenecut_threshold = config->i_scenecut_threshold;
+        param.b_pre_scenecut = config->i_scenecut_threshold >= 0 && config->b_pre_scenecut;
         param.i_bframe = config->i_bframe;
-        param.b_bframe_adaptive = config->i_bframe > 0 && config->b_bframe_adaptive;
-        param.i_bframe_bias = config->i_bframe > 0 && config->b_bframe_adaptive ? config->i_bframe_bias : 0;
+        param.i_bframe_adaptive = config->i_bframe > 0 && config->i_bframe_adaptive > 0 ? config->i_bframe_adaptive : 0;
+        param.i_bframe_bias = config->i_bframe > 0 && config->i_bframe_adaptive > 0 ? config->i_bframe_bias : 0;
         param.b_bframe_pyramid = config->i_bframe > 1 && config->b_b_refs;
 
         param.b_deblocking_filter = config->i_encoding_type > 0 && config->b_filter;
@@ -678,7 +739,15 @@ LRESULT compress_begin(CODEC *codec, BITMAPINFO *lpbiInput, BITMAPINFO *lpbiOutp
 
         param.b_cabac = config->b_cabac;
 
-        param.b_interlaced = config->b_interlaced;
+        param.b_interlaced = config->i_interlaced > 0;
+#if X264_PATCH_HDR
+        param.b_nal_hrd = param.b_interlaced;
+        param.b_tff = config->i_interlaced == 1;
+#endif
+
+        strcpy(cqm_file, config->cqmfile);
+        param.i_cqm_preset = config->i_encoding_type > 0 ? config->i_cqm : 0;
+        param.psz_cqm_file = config->i_encoding_type > 0 && config->i_cqm == 2 ? (char *)&cqm_file : NULL;
 
         /* Log */
         param.i_log_level = config->i_log_level - 1;
@@ -686,16 +755,17 @@ LRESULT compress_begin(CODEC *codec, BITMAPINFO *lpbiInput, BITMAPINFO *lpbiOutp
         /* Encoder analyser parameters */
         param.analyse.intra = 0;
         param.analyse.inter = 0;
-        if (config->i_encoding_type > 0 && config->b_dct8x8 && config->b_i8x8)
+        if ((config->i_encoding_type > 0 || config->b_cabac) && config->b_dct8x8)
         {
-            param.analyse.intra |= X264_ANALYSE_I8x8;
-            param.analyse.inter |= X264_ANALYSE_I8x8;
+            if (config->b_intra_i8x8)
+                param.analyse.intra |= X264_ANALYSE_I8x8;
+            if (config->b_i8x8)
+                param.analyse.inter |= X264_ANALYSE_I8x8;
         }
-        if (config->b_i4x4)
-        {
+        if (config->b_intra_i4x4)
             param.analyse.intra |= X264_ANALYSE_I4x4;
+        if (config->b_i4x4)
             param.analyse.inter |= X264_ANALYSE_I4x4;
-        }
         if (config->b_psub16x16)
         {
             param.analyse.inter |= X264_ANALYSE_PSUB16x16;
@@ -708,28 +778,44 @@ LRESULT compress_begin(CODEC *codec, BITMAPINFO *lpbiInput, BITMAPINFO *lpbiOutp
         param.analyse.b_transform_8x8 = config->i_encoding_type > 0 && config->b_dct8x8;
         param.analyse.b_weighted_bipred = config->i_bframe > 0 && config->b_b_wpred;
         param.analyse.i_direct_mv_pred = config->i_bframe > 0 ? config->i_direct_mv_pred : 0;
+        param.analyse.i_chroma_qp_offset = config->i_encoding_type > 0 ? config->i_chroma_qp_offset : 0;
 
         param.analyse.i_me_method = config->i_me_method;
         param.analyse.i_me_range = config->i_me_range;
-        param.analyse.i_subpel_refine = config->i_subpel_refine + 1; /* 0..6 -> 1..7 */
-        param.analyse.b_bidir_me = config->i_bframe > 0 && config->b_bidir_me;
+        param.analyse.i_subpel_refine = config->i_subpel_refine + 1; /* 0..8 -> 1..9 */
         param.analyse.b_chroma_me = config->i_subpel_refine >= 4 && config->b_chroma_me;
-        param.analyse.b_bframe_rdo = config->i_bframe > 0 && config->i_subpel_refine >= 5 && config->b_brdo;
         param.analyse.b_mixed_references = config->i_refmax > 1 && config->b_mixedref;
         param.analyse.i_trellis = config->i_encoding_type > 0 && config->b_cabac ? config->i_trellis : 0;
+        param.analyse.b_fast_pskip = config->i_encoding_type > 0 && config->b_fast_pskip;
+        param.analyse.b_dct_decimate = config->i_encoding_type > 0 && config->b_dct_decimate;
         param.analyse.i_noise_reduction = config->i_encoding_type > 0 ? config->i_noise_reduction : 0;
+        param.analyse.f_psy_rd = config->i_encoding_type > 0 && config->i_subpel_refine >= 5 ? config->f_psy_rdo : 0.0;
+        param.analyse.f_psy_trellis = config->i_encoding_type > 0 && config->b_cabac && config->i_trellis > 0 ? config->f_psy_trellis : 0.0;
 
-        param.analyse.b_psnr = config->i_log_level >= 3;
-        param.analyse.b_ssim = config->i_log_level >= 3;
+        param.analyse.i_luma_deadzone[0] = config->i_encoding_type > 0 ? config->i_inter_deadzone : 0;
+        param.analyse.i_luma_deadzone[1] = config->i_encoding_type > 0 ? config->i_intra_deadzone : 0;
+
+        param.analyse.b_psnr = config->i_log_level >= 3 && config->b_psnr;
+        param.analyse.b_ssim = config->i_log_level >= 3 && config->b_ssim;
 
         /* Rate control parameters */
-        param.rc.i_qp_min = config->i_encoding_type > 1 ? config->i_qp_min : 0;
-        param.rc.i_qp_max = config->i_encoding_type > 1 ? config->i_qp_max : X264_QUANT_MAX;
-        param.rc.i_qp_step = config->i_encoding_type > 1 ? config->i_qp_step : X264_QUANT_MAX;
+        param.rc.i_qp_min = config->i_encoding_type > 1 ? config->i_qp_min : param.rc.i_qp_min;
+        param.rc.i_qp_max = config->i_encoding_type > 1 ? config->i_qp_max : param.rc.i_qp_max;
+        param.rc.i_qp_step = config->i_encoding_type > 1 ? config->i_qp_step : param.rc.i_qp_step;
 
-        param.rc.f_ip_factor = config->i_encoding_type > 0 ? 1.0 + (float)config->i_key_boost / 100.0 : 1.0;
-        param.rc.f_pb_factor = config->i_encoding_type > 0 && config->i_bframe > 0 ? 1.0 + (float)config->i_b_red / 100.0 : 1.0;
-        param.rc.f_qcompress = config->i_encoding_type > 1 ? (float)config->i_curve_comp / 100.0 : 1.0;
+        param.rc.f_rate_tolerance = config->i_encoding_type > 2 ? config->f_ratetol : param.rc.f_rate_tolerance;
+        param.rc.i_vbv_max_bitrate = config->i_encoding_type > 1 ? config->i_vbv_maxrate : 0;
+        param.rc.i_vbv_buffer_size = config->i_encoding_type > 1 ? config->i_vbv_bufsize : 0;
+        param.rc.f_vbv_buffer_init = config->i_encoding_type > 1 ? (float)config->i_vbv_occupancy / 100.0 : param.rc.f_vbv_buffer_init;
+        param.rc.f_ip_factor = config->i_encoding_type > 0 ? config->f_ipratio : 1.0;
+        param.rc.f_pb_factor = config->i_encoding_type > 0 && config->i_bframe > 0 ? config->f_pbratio : 1.0;
+
+        param.rc.i_aq_mode = config->i_encoding_type > 1 ? config->i_aq_mode : 0;
+        param.rc.f_aq_strength = config->i_encoding_type > 1 && config->i_aq_mode > 0 ? config->f_aq_strength : 0.0;
+#if X264_PATCH_VAQ_MOD
+        param.rc.i_aq_metric = config->i_encoding_type > 1 && config->i_aq_mode > 0 ? config->i_aq_metric : param.rc.i_aq_metric;
+        param.rc.f_aq_sensitivity = config->i_encoding_type > 1 && config->i_aq_mode > 0 ? config->f_aq_sensitivity : param.rc.f_aq_sensitivity;
+#endif
 
         strcpy(stat_out, config->stats);
         strcpy(stat_in, config->stats);
@@ -737,6 +823,10 @@ LRESULT compress_begin(CODEC *codec, BITMAPINFO *lpbiInput, BITMAPINFO *lpbiOutp
         param.rc.psz_stat_out = (char *)&stat_out;
         param.rc.b_stat_read = FALSE;
         param.rc.psz_stat_in = (char *)&stat_in;
+
+        param.rc.f_qcompress = config->i_encoding_type > 1 ? config->f_qcomp : 1.0;
+        param.rc.f_qblur = config->i_encoding_type == 4 && config->i_pass > 1 ? config->f_qblur : param.rc.f_qblur;
+        param.rc.f_complexity_blur = config->i_encoding_type == 4 && config->i_pass > 1 ? config->f_cplxblur : param.rc.f_complexity_blur;
 
         switch (config->i_encoding_type)
         {
@@ -767,7 +857,6 @@ LRESULT compress_begin(CODEC *codec, BITMAPINFO *lpbiInput, BITMAPINFO *lpbiOutp
                 {
                     codec->b_no_output = TRUE;
                     param.rc.b_stat_write = TRUE;
-                    param.rc.f_rate_tolerance = 4.0;
                     if (config->b_fast1pass)
                     {
                         /* Adjust or turn off some flags to gain speed, if needed */
@@ -778,8 +867,8 @@ LRESULT compress_begin(CODEC *codec, BITMAPINFO *lpbiInput, BITMAPINFO *lpbiOutp
                         param.analyse.i_me_method = X264_ME_DIA;
                         param.analyse.i_subpel_refine = X264_MIN(2, param.analyse.i_subpel_refine); // subme=1 may lead for significant quality decrease
                         param.analyse.b_chroma_me = FALSE;
-                        param.analyse.b_bframe_rdo = FALSE;
                         param.analyse.b_mixed_references = FALSE;
+                        param.analyse.f_psy_rd = 0.0;
                     }
                 }
                 else
@@ -825,7 +914,7 @@ LRESULT compress(CODEC *codec, ICCOMPRESS *icc)
     int        iWidth;
     int        iHeight;
 
-#ifdef BUGGY_APPS_HACK
+#if X264VFW_USE_BUGGY_APPS_HACK
     // Work around applications' bugs
     // Because Microsoft's document is incomplete, many applications are buggy in my opinion.
     //  lpbiOutput->biSizeImage is used to return value, the applications should update lpbiOutput->biSizeImage on every call.
@@ -837,11 +926,12 @@ LRESULT compress(CODEC *codec, ICCOMPRESS *icc)
     codec->prev_output_biSizeImage = outhdr->biSizeImage;
     // End of work around applications' bugs.
 #endif
-#ifdef VIRTUALDUB_HACK
+
     if (codec->i_frame_remain)
     {
-        codec->i_frame_remain--;
-#endif
+        if (codec->i_frame_remain != -1)
+            codec->i_frame_remain--;
+
         /* Init the picture */
         memset(&pic, 0, sizeof(x264_picture_t));
         pic.img.i_csp = get_csp(inhdr);
@@ -889,11 +979,9 @@ LRESULT compress(CODEC *codec, ICCOMPRESS *icc)
 
         /* Encode it */
         x264_encoder_encode(codec->h, &nal, &i_nal, &codec->conv_pic, &pic_out);
-#ifdef VIRTUALDUB_HACK
     }
     else
         x264_encoder_encode(codec->h, &nal, &i_nal, NULL, &pic_out);
-#endif
 
     /* Create bitstream, unless we're dropping it in 1st pass */
     i_out = 0;
@@ -910,7 +998,7 @@ LRESULT compress(CODEC *codec, ICCOMPRESS *icc)
         }
     }
 
-#ifdef VIRTUALDUB_HACK
+#if X264VFW_USE_VIRTUALDUB_HACK
     if (codec->b_use_vd_hack && i_nal == 0)
     {
         *icc->lpdwFlags = 0;
@@ -928,8 +1016,8 @@ LRESULT compress(CODEC *codec, ICCOMPRESS *icc)
         else
             *icc->lpdwFlags = 0;
         outhdr->biSizeImage = i_out;
-#ifdef VIRTUALDUB_HACK
-        outhdr->biCompression = mmioFOURCC(codec->config.fcc[0], codec->config.fcc[1], codec->config.fcc[2], codec->config.fcc[3]);
+#if X264VFW_USE_VIRTUALDUB_HACK
+        outhdr->biCompression = codec->save_fcc;
     }
 #endif
 
@@ -966,6 +1054,7 @@ void default_compress_frames_info(CODEC *codec)
     codec->i_fps_den = 0;
 }
 
+#if X264VFW_USE_DECODER
 LRESULT decompress_get_format(CODEC *codec, BITMAPINFO *lpbiInput, BITMAPINFO *lpbiOutput)
 {
     BITMAPINFOHEADER *inhdr = &lpbiInput->bmiHeader;
@@ -1033,7 +1122,7 @@ LRESULT decompress_query(CODEC *codec, BITMAPINFO *lpbiInput, BITMAPINFO *lpbiOu
     if (pix_fmt == PIX_FMT_NONE)
         return ICERR_BADFORMAT;
 
-#ifndef RGB24_FIXED
+#if !FFMPEG_HAVE_RGB24_FIXED
     if (pix_fmt == PIX_FMT_BGR24 && iWidth % 4) // Bug in libavcodec (for me it is simpler forbid this than fixing libavcodec)
         return ICERR_BADFORMAT;
 #endif
@@ -1086,7 +1175,7 @@ LRESULT decompress_begin(CODEC *codec, BITMAPINFO *lpbiInput, BITMAPINFO *lpbiOu
         return ICERR_ERROR;
     }
 
-#ifdef HAVE_SWSCALE
+#if !FFMPEG_HAVE_IMG_CONVERT
     codec->sws = sws_getContext(lpbiInput->bmiHeader.biWidth, lpbiInput->bmiHeader.biHeight, codec->decoder_context->pix_fmt,
                                 lpbiInput->bmiHeader.biWidth, lpbiInput->bmiHeader.biHeight, codec->decoder_pix_fmt,
                                 SWS_BILINEAR, NULL, NULL, NULL);
@@ -1120,9 +1209,29 @@ LRESULT decompress(CODEC *codec, ICDECOMPRESS *icd)
     }
     memcpy(codec->decoder_buf, icd->lpInput, inhdr->biSizeImage);
     memset(codec->decoder_buf + inhdr->biSizeImage, 0, FF_INPUT_BUFFER_PADDING_SIZE);
+    got_picture = 0;
     len = avcodec_decode_video(codec->decoder_context, codec->decoder_frame, &got_picture, codec->decoder_buf, inhdr->biSizeImage);
     if (len < 0)
         return ICERR_ERROR;
+
+    if (!got_picture)
+    {
+        // Frame was decoded but delayed so we would show the BLACK-frame instead
+        int picture_size = avpicture_get_size(codec->decoder_pix_fmt, inhdr->biWidth, inhdr->biHeight);
+
+        if (codec->decoder_pix_fmt == PIX_FMT_YUV420P)
+        {
+            int luma_size = picture_size * 2 / 3;
+            memset(icd->lpOutput, 0x10, luma_size); //TV Scale
+            memset(icd->lpOutput + luma_size, 0x80, picture_size - luma_size);
+        }
+        else if (codec->decoder_pix_fmt == PIX_FMT_YUYV422)
+            wmemset(icd->lpOutput, 0x8010, picture_size / sizeof(wchar_t)); //TV Scale
+        else
+            memset(icd->lpOutput, 0x00, picture_size);
+//        icd->lpbiOutput->biSizeImage = picture_size;
+        return ICERR_OK;
+    }
 
     if (avpicture_fill(&picture, icd->lpOutput, codec->decoder_pix_fmt, inhdr->biWidth, inhdr->biHeight) < 0)
         return ICERR_ERROR;
@@ -1161,7 +1270,7 @@ LRESULT decompress(CODEC *codec, ICDECOMPRESS *icd)
             picture.linesize[3] = -picture.linesize[3];
         }
     }
-#ifdef HAVE_SWSCALE
+#if !FFMPEG_HAVE_IMG_CONVERT
     sws_scale(codec->sws, codec->decoder_frame->data, codec->decoder_frame->linesize, 0, inhdr->biHeight, picture.data, picture.linesize);
 #else
     if (img_convert(&picture, codec->decoder_pix_fmt, (AVPicture *)codec->decoder_frame, codec->decoder_context->pix_fmt, inhdr->biWidth, inhdr->biHeight) < 0)
@@ -1180,9 +1289,10 @@ LRESULT decompress_end(CODEC *codec)
     av_freep(&codec->decoder_frame);
     av_freep(&codec->decoder_buf);
     codec->decoder_buf_size = 0;
-#ifdef HAVE_SWSCALE
+#if !FFMPEG_HAVE_IMG_CONVERT
     sws_freeContext(codec->sws);
     codec->sws = NULL;
 #endif
     return ICERR_OK;
 }
+#endif
