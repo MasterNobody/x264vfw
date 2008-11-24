@@ -145,7 +145,7 @@ static const reg_int_t reg_int_table[] =
     { "mixedref",         &reg.b_mixedref,           1,   0,   1                   },
     { "me_method",        &reg.i_me_method,          2,   0,   4                   },
     { "me_range",         &reg.i_me_range,           16,  4,   64                  },
-    { "subpel",           &reg.i_subpel_refine,      6,   0,   8                   },
+    { "subpel",           &reg.i_subpel_refine,      7,   0,   9                   },
     { "chroma_me",        &reg.b_chroma_me,          1,   0,   1                   },
     { "keyint_min",       &reg.i_keyint_min,         25,  1,   9999                },
     { "keyint_max",       &reg.i_keyint_max,         250, 1,   9999                },
@@ -424,8 +424,8 @@ void tabs_enable_items(CONFIG *config)
     EnableWindow(GetDlgItem(hTabs[1], IDC_ANALYSIS_PB_B8X8), config->i_bframe > 0);
     EnableWindow(GetDlgItem(hTabs[1], IDC_ANALYSIS_FAST_PSKIP), config->i_encoding_type > 0);
     EnableWindow(GetDlgItem(hTabs[1], IDC_ANALYSIS_MIXED_REFS), config->i_refmax > 1);
-    EnableWindow(GetDlgItem(hTabs[1], IDC_ANALYSIS_CHROMA_ME), config->i_subpel_refine >= 4);
-    EnableWindow(GetDlgItem(hTabs[1], IDC_ANALYSIS_PSY_RDO), config->i_encoding_type > 0 && config->i_subpel_refine >= 5);
+    EnableWindow(GetDlgItem(hTabs[1], IDC_ANALYSIS_CHROMA_ME), config->i_subpel_refine >= 5);
+    EnableWindow(GetDlgItem(hTabs[1], IDC_ANALYSIS_PSY_RDO), config->i_encoding_type > 0 && config->i_subpel_refine >= 6);
     EnableWindow(GetDlgItem(hTabs[1], IDC_ANALYSIS_PRE_SCENECUT), config->i_scenecut_threshold >= 0);
     EnableWindow(GetDlgItem(hTabs[1], IDC_ANALYSIS_B_ADAPT), config->i_bframe > 0);
     EnableWindow(GetDlgItem(hTabs[1], IDC_ANALYSIS_B_BIAS), config->i_bframe > 0 && config->i_bframe_adaptive > 0);
@@ -668,11 +668,12 @@ void tabs_update_items(CONFIG *config)
     SetDlgItemInt(hTabs[1], IDC_ANALYSIS_MERANGE, config->i_me_range, FALSE);
     if (SendMessage(GetDlgItem(hTabs[1], IDC_ANALYSIS_SUBME), CB_GETCOUNT, 0, 0) == 0)
     {
+        SendDlgItemMessage(hTabs[1], IDC_ANALYSIS_SUBME, CB_ADDSTRING, 0, (LPARAM)"0 FullPel");
         SendDlgItemMessage(hTabs[1], IDC_ANALYSIS_SUBME, CB_ADDSTRING, 0, (LPARAM)"1 QPel SAD");
         SendDlgItemMessage(hTabs[1], IDC_ANALYSIS_SUBME, CB_ADDSTRING, 0, (LPARAM)"2 QPel SATD");
         SendDlgItemMessage(hTabs[1], IDC_ANALYSIS_SUBME, CB_ADDSTRING, 0, (LPARAM)"3 HPel+QPel");
-        SendDlgItemMessage(hTabs[1], IDC_ANALYSIS_SUBME, CB_ADDSTRING, 0, (LPARAM)"4 Always QPel");
-        SendDlgItemMessage(hTabs[1], IDC_ANALYSIS_SUBME, CB_ADDSTRING, 0, (LPARAM)"5 Multi QPel");
+        SendDlgItemMessage(hTabs[1], IDC_ANALYSIS_SUBME, CB_ADDSTRING, 0, (LPARAM)"4 QPel+QPel");
+        SendDlgItemMessage(hTabs[1], IDC_ANALYSIS_SUBME, CB_ADDSTRING, 0, (LPARAM)"5 QPel+BiME");
         SendDlgItemMessage(hTabs[1], IDC_ANALYSIS_SUBME, CB_ADDSTRING, 0, (LPARAM)"6 RD on I/P");
         SendDlgItemMessage(hTabs[1], IDC_ANALYSIS_SUBME, CB_ADDSTRING, 0, (LPARAM)"7 RD on all");
         SendDlgItemMessage(hTabs[1], IDC_ANALYSIS_SUBME, CB_ADDSTRING, 0, (LPARAM)"8 RDr on I/P");

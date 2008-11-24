@@ -782,14 +782,14 @@ LRESULT compress_begin(CODEC *codec, BITMAPINFO *lpbiInput, BITMAPINFO *lpbiOutp
 
         param.analyse.i_me_method = config->i_me_method;
         param.analyse.i_me_range = config->i_me_range;
-        param.analyse.i_subpel_refine = config->i_subpel_refine + 1; /* 0..8 -> 1..9 */
-        param.analyse.b_chroma_me = config->i_subpel_refine >= 4 && config->b_chroma_me;
+        param.analyse.i_subpel_refine = config->i_subpel_refine;
+        param.analyse.b_chroma_me = config->i_subpel_refine >= 5 && config->b_chroma_me;
         param.analyse.b_mixed_references = config->i_refmax > 1 && config->b_mixedref;
         param.analyse.i_trellis = config->i_encoding_type > 0 && config->b_cabac ? config->i_trellis : 0;
         param.analyse.b_fast_pskip = config->i_encoding_type > 0 && config->b_fast_pskip;
         param.analyse.b_dct_decimate = config->i_encoding_type > 0 && config->b_dct_decimate;
         param.analyse.i_noise_reduction = config->i_encoding_type > 0 ? config->i_noise_reduction : 0;
-        param.analyse.f_psy_rd = config->i_encoding_type > 0 && config->i_subpel_refine >= 5 ? config->f_psy_rdo : 0.0;
+        param.analyse.f_psy_rd = config->i_encoding_type > 0 && config->i_subpel_refine >= 6 ? config->f_psy_rdo : 0.0;
         param.analyse.f_psy_trellis = config->i_encoding_type > 0 && config->b_cabac && config->i_trellis > 0 ? config->f_psy_trellis : 0.0;
 
         param.analyse.i_luma_deadzone[0] = config->i_encoding_type > 0 ? config->i_inter_deadzone : 0;
