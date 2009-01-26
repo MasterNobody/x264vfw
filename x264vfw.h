@@ -308,10 +308,10 @@ void config_reg_load(CONFIG *config);
 void config_reg_save(CONFIG *config);
 
 /* Dialog callbacks */
-BOOL CALLBACK callback_main (HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lParam);
-BOOL CALLBACK callback_tabs(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lParam);
-BOOL CALLBACK callback_about(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lParam);
-BOOL CALLBACK callback_err_console(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lParam);
+INT_PTR CALLBACK callback_main (HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lParam);
+INT_PTR CALLBACK callback_tabs(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lParam);
+INT_PTR CALLBACK callback_about(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lParam);
+INT_PTR CALLBACK callback_err_console(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lParam);
 
 /* DLL instance */
 extern HINSTANCE g_hInst;

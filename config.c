@@ -39,7 +39,11 @@
 /* Registry */
 #define X264_REG_KEY     HKEY_CURRENT_USER
 #define X264_REG_PARENT  "Software\\GNU"
+#ifdef _WIN64
+#define X264_REG_CHILD   "x264vfw64"
+#else
 #define X264_REG_CHILD   "x264"            /* not "x264vfw" because of GordianKnot compatibility */
+#endif
 #define X264_REG_CLASS   "config"
 
 /* Description */
@@ -892,9 +896,9 @@ BOOL CALLBACK enum_tooltips(HWND hWnd, LPARAM lParam)
 }
 
 /* Main window */
-BOOL CALLBACK callback_main(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lParam)
+INT_PTR CALLBACK callback_main(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
-    CONFIG *config = (CONFIG *)GetWindowLong(hDlg, GWL_USERDATA);
+    CONFIG *config = (CONFIG *)GetWindowLongPtr(hDlg, GWLP_USERDATA);
 
     switch (uMsg)
     {
@@ -904,7 +908,7 @@ BOOL CALLBACK callback_main(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lParam)
             RECT rect;
             HWND hTabCtrl = GetDlgItem(hDlg, IDC_CONFIG_TABCONTROL);
 
-            SetWindowLong(hDlg, GWL_USERDATA, lParam);
+            SetWindowLongPtr(hDlg, GWLP_USERDATA, lParam);
             config = (CONFIG *)lParam;
 
             hMainDlg = hDlg;
@@ -1223,13 +1227,13 @@ void CheckControlTextIsNumber(HWND hDlgItem, BOOL bSigned, int iDecimalPlacesNum
     SetDlgItemDouble(hDlg, nIDDlgItem, var, format);\
 }
 
-BOOL CALLBACK callback_tabs(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lParam)
+INT_PTR CALLBACK callback_tabs(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
-    CONFIG *config = (CONFIG *)GetWindowLong(hDlg, GWL_USERDATA);
+    CONFIG *config = (CONFIG *)GetWindowLongPtr(hDlg, GWLP_USERDATA);
 
     if (uMsg == WM_INITDIALOG)
     {
-        SetWindowLong(hDlg, GWL_USERDATA, lParam);
+        SetWindowLongPtr(hDlg, GWLP_USERDATA, lParam);
         config = (CONFIG *)lParam;
         return TRUE;
     }
@@ -2141,7 +2145,7 @@ BOOL CALLBACK callback_tabs(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lParam)
 }
 
 /* About box */
-BOOL CALLBACK callback_about(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lParam)
+INT_PTR CALLBACK callback_about(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
     switch (uMsg)
     {
@@ -2179,7 +2183,7 @@ BOOL CALLBACK callback_about(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lParam)
 }
 
 /* Error console */
-BOOL CALLBACK callback_err_console(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
+INT_PTR CALLBACK callback_err_console(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
     switch (uMsg)
     {

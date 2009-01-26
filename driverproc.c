@@ -72,7 +72,7 @@ static void log_callback(void* ptr, int level, const char* fmt, va_list vl)
 #endif
 
 /* This little puppy handles the calls which vfw programs send out to the codec */
-LRESULT WINAPI attribute_align_arg DriverProc(DWORD dwDriverId, HDRVR hDriver, UINT uMsg, LPARAM lParam1, LPARAM lParam2)
+LRESULT WINAPI attribute_align_arg DriverProc(DWORD_PTR dwDriverId, HDRVR hDriver, UINT uMsg, LPARAM lParam1, LPARAM lParam2)
 {
     CODEC *codec = (CODEC *)dwDriverId;
 
@@ -286,10 +286,10 @@ void WINAPI Configure(HWND hwnd, HINSTANCE hinst, LPTSTR lpCmdLine, int nCmdShow
 {
     if (DriverProc(0, 0, DRV_LOAD, 0, 0))
     {
-        DWORD dwDriverId;
+        DWORD_PTR dwDriverId;
 
         dwDriverId = DriverProc(0, 0, DRV_OPEN, 0, 0);
-        if (dwDriverId != (DWORD)NULL)
+        if (dwDriverId != (DWORD_PTR)NULL)
         {
             DriverProc(dwDriverId, 0, ICM_CONFIGURE, (LPARAM)GetDesktopWindow(), 0);
             DriverProc(dwDriverId, 0, DRV_CLOSE, 0, 0);

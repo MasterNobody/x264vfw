@@ -14,11 +14,25 @@
 include config.mak
 include x264vfw_config.mak
 
+ifeq ($(ARCH),X86_64)
+# Dll to build
+DLL = x264vfw64.dll
+
+# Installer script
+INST_NSI = x264vfw64.nsi
+
+# Installer executable
+INST_EXE = x264vfw64.exe
+else
 # Dll to build
 DLL = x264vfw.dll
 
+# Installer script
+INST_NSI = x264vfw.nsi
+
 # Installer executable
 INST_EXE = x264vfw.exe
+endif
 
 # Current dir
 DIR_CUR = $(shell pwd)
@@ -43,7 +57,7 @@ WINDRES = windres
 # Constants which should not be modified
 # The `mingw-runtime` package is required when building with -mno-cygwin
 CFLAGS += -mno-cygwin
-CFLAGS += -D_WIN32_IE=0x0500
+CFLAGS += -D_WIN32_IE=0x0501
 CFLAGS += -I$(DIR_SRC)/w32api -I$(X264_DIR)
 
 ##############################################################################
@@ -123,6 +137,6 @@ clean:
 
 build-installer: $(DLL)
 	@cp $(DIR_BUILD)/$(DLL) $(DIR_SRC)/installer
-	@makensis $(DIR_SRC)/installer/x264vfw.nsi
+	@makensis $(DIR_SRC)/installer/$(INST_NSI)
 	@mv $(DIR_SRC)/installer/$(INST_EXE) $(DIR_BUILD)
 	@rm $(DIR_SRC)/installer/$(DLL)
