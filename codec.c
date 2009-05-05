@@ -400,11 +400,10 @@ static int Parse(const char *cmdline, x264_param_t *param, CODEC *codec)
 #define OPT_PROGRESS 261
 #define OPT_VISUALIZE 262
 #define OPT_LONGHELP 263
-#define OPT_FPS 264
 #if X264VFW_USE_VIRTUALDUB_HACK
-#define OPT_VD_HACK 265
+#define OPT_VD_HACK 264
 #endif
-#define OPT_NO_OUTPUT 266
+#define OPT_NO_OUTPUT 265
 
         static struct option long_options[] =
         {
@@ -420,7 +419,7 @@ static int Parse(const char *cmdline, x264_param_t *param, CODEC *codec)
             { "min-keyint",        required_argument, NULL, 'i'              },
             { "keyint",            required_argument, NULL, 'I'              },
             { "scenecut",          required_argument, NULL, 0                },
-            { "pre-scenecut",      no_argument,       NULL, 0                },
+            { "no-scenecut",       no_argument,       NULL, 0                },
             { "nf",                no_argument,       NULL, 0                },
             { "no-deblock",        no_argument,       NULL, 0                },
             { "filter",            required_argument, NULL, 0                },
@@ -440,7 +439,7 @@ static int Parse(const char *cmdline, x264_param_t *param, CODEC *codec)
             { "asm",               required_argument, NULL, 0                },
             { "no-asm",            no_argument,       NULL, 0                },
             { "sar",               required_argument, NULL, 0                },
-            { "fps",               required_argument, NULL, OPT_FPS          },
+            { "fps",               required_argument, NULL, 0                },
             { "frames",            required_argument, NULL, OPT_FRAMES       },
             { "seek",              required_argument, NULL, OPT_SEEK         },
             { "output",            required_argument, NULL, 'o'              },
@@ -549,7 +548,6 @@ static int Parse(const char *cmdline, x264_param_t *param, CODEC *codec)
             case OPT_THREAD_INPUT:
             case OPT_PROGRESS:
             case OPT_VISUALIZE:
-            case OPT_FPS:
                 x264vfw_log(codec, X264_LOG_WARNING, "not supported option: %s\n", argv[checked_optind]);
                 break;
 
@@ -727,7 +725,6 @@ LRESULT compress_begin(CODEC *codec, BITMAPINFO *lpbiInput, BITMAPINFO *lpbiOutp
         param.i_keyint_max = config->i_keyint_max;
         param.i_keyint_min = config->i_keyint_min;
         param.i_scenecut_threshold = config->i_scenecut_threshold;
-        param.b_pre_scenecut = config->i_scenecut_threshold >= 0 && config->b_pre_scenecut;
         param.i_bframe = config->i_bframe;
         param.i_bframe_adaptive = config->i_bframe > 0 && config->i_bframe_adaptive > 0 ? config->i_bframe_adaptive : 0;
         param.i_bframe_bias = config->i_bframe > 0 && config->i_bframe_adaptive > 0 ? config->i_bframe_bias : 0;
@@ -833,21 +830,25 @@ LRESULT compress_begin(CODEC *codec, BITMAPINFO *lpbiInput, BITMAPINFO *lpbiOutp
             case 0: /* 1 PASS LOSSLESS */
                 param.rc.i_rc_method = X264_RC_CQP;
                 param.rc.i_qp_constant = 0;
+                param.rc.b_stat_write = config->b_createstats;
                 break;
 
             case 1: /* 1 PASS CQP */
                 param.rc.i_rc_method = X264_RC_CQP;
                 param.rc.i_qp_constant = config->i_qp;
+                param.rc.b_stat_write = config->b_createstats;
                 break;
 
             case 2: /* 1 PASS VBR */
                 param.rc.i_rc_method = X264_RC_CRF;
                 param.rc.f_rf_constant = (float)config->i_rf_constant * 0.1;
+                param.rc.b_stat_write = config->b_createstats;
                 break;
 
             case 3: /* 1 PASS ABR */
                 param.rc.i_rc_method = X264_RC_ABR;
                 param.rc.i_bitrate = config->i_passbitrate;
+                param.rc.b_stat_write = config->b_createstats;
                 break;
 
             case 4: /* 2 PASS */
@@ -1175,7 +1176,10 @@ LRESULT decompress_begin(CODEC *codec, BITMAPINFO *lpbiInput, BITMAPINFO *lpbiOu
         return ICERR_ERROR;
     }
 
-#if !FFMPEG_HAVE_IMG_CONVERT
+    av_init_packet(&codec->decoder_pkt);
+    codec->decoder_pkt.data = NULL;
+    codec->decoder_pkt.size = 0;
+
     codec->sws = sws_getContext(lpbiInput->bmiHeader.biWidth, lpbiInput->bmiHeader.biHeight, codec->decoder_context->pix_fmt,
                                 lpbiInput->bmiHeader.biWidth, lpbiInput->bmiHeader.biHeight, codec->decoder_pix_fmt,
                                 SWS_BILINEAR, NULL, NULL, NULL);
@@ -1186,7 +1190,6 @@ LRESULT decompress_begin(CODEC *codec, BITMAPINFO *lpbiInput, BITMAPINFO *lpbiOu
         av_freep(&codec->decoder_frame);
         return ICERR_ERROR;
     }
-#endif
 
     return ICERR_OK;
 }
@@ -1210,7 +1213,9 @@ LRESULT decompress(CODEC *codec, ICDECOMPRESS *icd)
     memcpy(codec->decoder_buf, icd->lpInput, inhdr->biSizeImage);
     memset(codec->decoder_buf + inhdr->biSizeImage, 0, FF_INPUT_BUFFER_PADDING_SIZE);
     got_picture = 0;
-    len = avcodec_decode_video(codec->decoder_context, codec->decoder_frame, &got_picture, codec->decoder_buf, inhdr->biSizeImage);
+    codec->decoder_pkt.data = codec->decoder_buf;
+    codec->decoder_pkt.size = inhdr->biSizeImage;
+    len = avcodec_decode_video2(codec->decoder_context, codec->decoder_frame, &got_picture, &codec->decoder_pkt);
     if (len < 0)
         return ICERR_ERROR;
 
@@ -1229,7 +1234,7 @@ LRESULT decompress(CODEC *codec, ICDECOMPRESS *icd)
             wmemset(icd->lpOutput, 0x8010, picture_size / sizeof(wchar_t)); //TV Scale
         else
             memset(icd->lpOutput, 0x00, picture_size);
-//        icd->lpbiOutput->biSizeImage = picture_size;
+        //icd->lpbiOutput->biSizeImage = picture_size;
         return ICERR_OK;
     }
 
@@ -1270,13 +1275,8 @@ LRESULT decompress(CODEC *codec, ICDECOMPRESS *icd)
             picture.linesize[3] = -picture.linesize[3];
         }
     }
-#if !FFMPEG_HAVE_IMG_CONVERT
     sws_scale(codec->sws, codec->decoder_frame->data, codec->decoder_frame->linesize, 0, inhdr->biHeight, picture.data, picture.linesize);
-#else
-    if (img_convert(&picture, codec->decoder_pix_fmt, (AVPicture *)codec->decoder_frame, codec->decoder_context->pix_fmt, inhdr->biWidth, inhdr->biHeight) < 0)
-        return ICERR_ERROR;
-#endif
-//    icd->lpbiOutput->biSizeImage = avpicture_get_size(codec->decoder_pix_fmt, inhdr->biWidth, inhdr->biHeight);
+    //icd->lpbiOutput->biSizeImage = avpicture_get_size(codec->decoder_pix_fmt, inhdr->biWidth, inhdr->biHeight);
 
     return ICERR_OK;
 }
@@ -1289,10 +1289,8 @@ LRESULT decompress_end(CODEC *codec)
     av_freep(&codec->decoder_frame);
     av_freep(&codec->decoder_buf);
     codec->decoder_buf_size = 0;
-#if !FFMPEG_HAVE_IMG_CONVERT
     sws_freeContext(codec->sws);
     codec->sws = NULL;
-#endif
     return ICERR_OK;
 }
 #endif

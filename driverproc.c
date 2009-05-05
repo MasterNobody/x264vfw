@@ -145,7 +145,7 @@ LRESULT WINAPI attribute_align_arg DriverProc(DWORD_PTR dwDriverId, HDRVR hDrive
         case ICM_GETSTATE:
             if (!(void *)lParam1)
                 return sizeof(CONFIG);
-            if (lParam2 < sizeof(CONFIG))
+            if (lParam2 != sizeof(CONFIG))
                 return ICERR_BADSIZE;
             memcpy((void *)lParam1, &codec->config, sizeof(CONFIG));
             /* Reset params that don't need saving */
@@ -158,7 +158,7 @@ LRESULT WINAPI attribute_align_arg DriverProc(DWORD_PTR dwDriverId, HDRVR hDrive
                 config_reg_load(&codec->config);
                 return 0;
             }
-            if (lParam2 < sizeof(CONFIG))
+            if (lParam2 != sizeof(CONFIG))
                 return 0;
             memcpy(&codec->config, (void *)lParam1, sizeof(CONFIG));
             return sizeof(CONFIG);

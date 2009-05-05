@@ -38,6 +38,7 @@
 
   !define MUI_WELCOMEPAGE_TITLE_3LINES
   !insertmacro MUI_PAGE_WELCOME
+  !insertmacro MUI_PAGE_LICENSE ..\Copying
   !insertmacro MUI_PAGE_INSTFILES
   !define MUI_FINISHPAGE_TITLE_3LINES
   !insertmacro MUI_PAGE_FINISH
@@ -104,8 +105,6 @@ RUNDLL32_end:
     WriteRegStr HKLM "System\CurrentControlSet\Control\MediaResources\icm\vidc.x264" "FriendlyName" "${FullName}"
   ${EndIf}
 
-  DeleteRegKey HKCU "Software\GNU\x264vfw64"
-
   SetRegView lastused
 
 SectionEnd
@@ -118,7 +117,7 @@ Function .onInit
   ${If} ${RunningX64}
     StrCpy $INSTDIR "$WINDIR\SysWOW64"
   ${Else}
-    MessageBox MB_OK|MB_ICONEXCLAMATION "This program could be installed only on x64 version of Windows"
+    MessageBox MB_OK|MB_ICONEXCLAMATION "This program could be installed only on x64 version of Windows" /SD IDOK
     Abort
   ${EndIf}
 
@@ -145,6 +144,11 @@ FunctionEnd
 Section "Uninstall"
 
   SetRegView 64
+
+  MessageBox MB_YESNO|MB_ICONQUESTION "Keep ${ShortName}'s settings in registry?" /SD IDYES IDYES keep_settings
+  DeleteRegKey HKCU "Software\GNU\x264vfw64"
+keep_settings:
+
   Push $R0
 
   ReadRegStr $R0 HKLM "Software\Microsoft\Windows NT\CurrentVersion\drivers32" "vidc.x264"

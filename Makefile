@@ -48,7 +48,9 @@ SRC_RES = resource.rc
 
 # Alias
 RM = rm -rf
+ifeq ($(WINDRES)x,x)
 WINDRES = windres
+endif
 
 ##############################################################################
 # CFLAGS
@@ -71,13 +73,8 @@ VFW_LDFLAGS = -L$(X264_DIR) -lx264
 ##############################################################################
 
 ifeq ($(HAVE_FFMPEG),yes)
-CFLAGS += -I$(FFMPEG_DIR) -I$(FFMPEG_DIR)/libavcodec -I$(FFMPEG_DIR)/libavutil
-VFW_LDFLAGS += -L$(FFMPEG_DIR)/libavcodec -lavcodec -L$(FFMPEG_DIR)/libavutil -lavutil
-
-CFLAGS += -I$(FFMPEG_DIR)/libswscale
-ifeq ($(HAVE_SWSCALE),yes)
-VFW_LDFLAGS += -L$(FFMPEG_DIR)/libswscale -lswscale
-endif
+CFLAGS += -I$(FFMPEG_DIR) -I$(FFMPEG_DIR)/libavcodec -I$(FFMPEG_DIR)/libavutil -I$(FFMPEG_DIR)/libswscale
+VFW_LDFLAGS += -L$(FFMPEG_DIR)/libavcodec -lavcodec -L$(FFMPEG_DIR)/libavutil -lavutil -L$(FFMPEG_DIR)/libswscale -lswscale
 endif
 
 ##############################################################################

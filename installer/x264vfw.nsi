@@ -38,6 +38,7 @@
 
   !define MUI_WELCOMEPAGE_TITLE_3LINES
   !insertmacro MUI_PAGE_WELCOME
+  !insertmacro MUI_PAGE_LICENSE ..\Copying
   !insertmacro MUI_PAGE_INSTFILES
   !define MUI_FINISHPAGE_TITLE_3LINES
   !insertmacro MUI_PAGE_FINISH
@@ -95,8 +96,6 @@ RUNDLL32_end:
     WriteRegStr HKLM "System\CurrentControlSet\Control\MediaResources\icm\vidc.x264" "FriendlyName" "${FullName}"
   ${EndIf}
 
-  DeleteRegKey HKCU "Software\GNU\x264"
-
 SectionEnd
 
 ;--------------------------------
@@ -129,6 +128,10 @@ FunctionEnd
 ;Uninstaller Section
 
 Section "Uninstall"
+
+  MessageBox MB_YESNO|MB_ICONQUESTION "Keep ${ShortName}'s settings in registry?" /SD IDYES IDYES keep_settings
+  DeleteRegKey HKCU "Software\GNU\x264"
+keep_settings:
 
   Push $R0
 

@@ -39,14 +39,7 @@
 #if X264VFW_USE_DECODER
 #include <avcodec.h>
 #include <avutil.h>
-
-#if !FFMPEG_HAVE_IMG_CONVERT
 #include <swscale.h>
-#else
-int img_convert(AVPicture *dst, int dst_pix_fmt,
-                const AVPicture *src, int src_pix_fmt,
-                int src_width, int src_height);
-#endif
 #endif
 
 #include "csp.h"
@@ -119,6 +112,7 @@ typedef struct
     int i_passbitrate;
     int i_pass;
     int b_fast1pass;    /* turns off some flags during 1st pass */
+    int b_createstats;  /* creates the statsfile in single pass mode */
     int b_updatestats;  /* updates the statsfile during 2nd pass */
     char stats[MAX_STATS_SIZE];
     char extra_cmdline[MAX_CMDLINE];
@@ -164,7 +158,6 @@ typedef struct
     int i_keyint_min;
     int i_keyint_max;
     int i_scenecut_threshold;
-    int b_pre_scenecut;
     int i_bframe;
     int i_bframe_adaptive;
     int i_bframe_bias;
@@ -271,12 +264,11 @@ typedef struct
     AVFrame           *decoder_frame;
     void              *decoder_buf;
     unsigned int      decoder_buf_size;
+    AVPacket          decoder_pkt;
     enum PixelFormat  decoder_pix_fmt;
     int               decoder_vflip;
     int               decoder_swap_UV;
-#if !FFMPEG_HAVE_IMG_CONVERT
     struct SwsContext *sws;
-#endif
 #endif
 } CODEC;
 

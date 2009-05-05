@@ -113,6 +113,7 @@ static const reg_int_t reg_int_table[] =
     { "passbitrate",      &reg.i_passbitrate,        800, 1,   X264_BITRATE_MAX    },
     { "pass_number",      &reg.i_pass,               1,   1,   2                   },
     { "fast1pass",        &reg.b_fast1pass,          0,   0,   1                   },
+    { "createstats",      &reg.b_createstats,        0,   0,   1                   },
     { "updatestats",      &reg.b_updatestats,        1,   0,   1                   },
 
     /* Misc */
@@ -153,8 +154,7 @@ static const reg_int_t reg_int_table[] =
     { "chroma_me",        &reg.b_chroma_me,          1,   0,   1                   },
     { "keyint_min",       &reg.i_keyint_min,         25,  1,   9999                },
     { "keyint_max",       &reg.i_keyint_max,         250, 1,   9999                },
-    { "scenecut",         &reg.i_scenecut_threshold, 40,  -1,  100                 },
-    { "pre_scenecut",     &reg.b_pre_scenecut,       0,   0,   1                   },
+    { "scenecut",         &reg.i_scenecut_threshold, 40,  0,   100                 },
     { "bmax",             &reg.i_bframe,             0,   0,   X264_BFRAME_MAX     },
     { "b_adapt",          &reg.i_bframe_adaptive,    1,   0,   2                   },
     { "b_bias",           &reg.i_bframe_bias,        0,   -90, 100                 },
@@ -412,9 +412,10 @@ void tabs_enable_items(CONFIG *config)
     ShowWindow(GetDlgItem(hTabs[0], IDC_MAIN_RC_VAL_SLIDER), config->i_encoding_type > 0);
     ShowWindow(GetDlgItem(hTabs[0], IDC_MAIN_RC_LOW_LABEL), config->i_encoding_type > 0);
     ShowWindow(GetDlgItem(hTabs[0], IDC_MAIN_RC_HIGH_LABEL), config->i_encoding_type > 0);
-    EnableWindow(GetDlgItem(hTabs[0], IDC_MAIN_STATS_UPDATE), config->i_encoding_type == 4 && config->i_pass > 1);
-    EnableWindow(GetDlgItem(hTabs[0], IDC_MAIN_STATS), config->i_encoding_type == 4);
-    EnableWindow(GetDlgItem(hTabs[0], IDC_MAIN_STATS_BROWSE), config->i_encoding_type == 4);
+    ShowWindow(GetDlgItem(hTabs[0], IDC_MAIN_STATS_CREATE), config->i_encoding_type != 4);
+    ShowWindow(GetDlgItem(hTabs[0], IDC_MAIN_STATS_UPDATE), config->i_encoding_type == 4 && config->i_pass > 1);
+    EnableWindow(GetDlgItem(hTabs[0], IDC_MAIN_STATS), config->i_encoding_type == 4 || config->b_createstats);
+    EnableWindow(GetDlgItem(hTabs[0], IDC_MAIN_STATS_BROWSE), config->i_encoding_type == 4 || config->b_createstats);
 
     /* Debug */
     EnableWindow(GetDlgItem(hTabs[0], IDC_DEBUG_PSNR), config->i_encoding_type > 0 && config->i_log_level >= 3);
@@ -430,7 +431,6 @@ void tabs_enable_items(CONFIG *config)
     EnableWindow(GetDlgItem(hTabs[1], IDC_ANALYSIS_MIXED_REFS), config->i_refmax > 1);
     EnableWindow(GetDlgItem(hTabs[1], IDC_ANALYSIS_CHROMA_ME), config->i_subpel_refine >= 5);
     EnableWindow(GetDlgItem(hTabs[1], IDC_ANALYSIS_PSY_RDO), config->i_encoding_type > 0 && config->i_subpel_refine >= 6);
-    EnableWindow(GetDlgItem(hTabs[1], IDC_ANALYSIS_PRE_SCENECUT), config->i_scenecut_threshold >= 0);
     EnableWindow(GetDlgItem(hTabs[1], IDC_ANALYSIS_B_ADAPT), config->i_bframe > 0);
     EnableWindow(GetDlgItem(hTabs[1], IDC_ANALYSIS_B_BIAS), config->i_bframe > 0 && config->i_bframe_adaptive > 0);
     EnableWindow(GetDlgItem(hTabs[1], IDC_ANALYSIS_B_BIAS_SPIN), config->i_bframe > 0 && config->i_bframe_adaptive > 0);
@@ -585,6 +585,7 @@ void tabs_update_items(CONFIG *config)
             assert(0);
             break;
     }
+    CheckDlgButton(hTabs[0], IDC_MAIN_STATS_CREATE, config->b_createstats);
     CheckDlgButton(hTabs[0], IDC_MAIN_STATS_UPDATE, config->b_updatestats);
     SendMessage(GetDlgItem(hTabs[0], IDC_MAIN_STATS), EM_LIMITTEXT, MAX_STATS_PATH - 1, 0);
     SetDlgItemText(hTabs[0], IDC_MAIN_STATS, config->stats);
@@ -692,8 +693,7 @@ void tabs_update_items(CONFIG *config)
     SendMessage(GetDlgItem(hTabs[1], IDC_ANALYSIS_KEYINT), EM_LIMITTEXT, 8, 0);
     SetDlgItemInt(hTabs[1], IDC_ANALYSIS_KEYINT, config->i_keyint_max, FALSE);
     SendMessage(GetDlgItem(hTabs[1], IDC_ANALYSIS_SCENECUT), EM_LIMITTEXT, 8, 0);
-    SetDlgItemInt(hTabs[1], IDC_ANALYSIS_SCENECUT, config->i_scenecut_threshold, TRUE);
-    CheckDlgButton(hTabs[1], IDC_ANALYSIS_PRE_SCENECUT, config->b_pre_scenecut);
+    SetDlgItemInt(hTabs[1], IDC_ANALYSIS_SCENECUT, config->i_scenecut_threshold, FALSE);
     SendMessage(GetDlgItem(hTabs[1], IDC_ANALYSIS_BFRAMES), EM_LIMITTEXT, 8, 0);
     SetDlgItemInt(hTabs[1], IDC_ANALYSIS_BFRAMES, config->i_bframe, FALSE);
     if (SendMessage(GetDlgItem(hTabs[1], IDC_ANALYSIS_B_ADAPT), CB_GETCOUNT, 0, 0) == 0)
@@ -1386,6 +1386,10 @@ INT_PTR CALLBACK callback_tabs(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lPara
                 case BN_CLICKED:
                     switch (LOWORD(wParam))
                     {
+                        case IDC_MAIN_STATS_CREATE:
+                            config->b_createstats = IsDlgButtonChecked(hTabs[0], IDC_MAIN_STATS_CREATE);
+                            break;
+
                         case IDC_MAIN_STATS_UPDATE:
                             config->b_updatestats = IsDlgButtonChecked(hTabs[0], IDC_MAIN_STATS_UPDATE);
                             break;
@@ -1483,10 +1487,6 @@ INT_PTR CALLBACK callback_tabs(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lPara
 
                         case IDC_ANALYSIS_CHROMA_ME:
                             config->b_chroma_me = IsDlgButtonChecked(hTabs[1], IDC_ANALYSIS_CHROMA_ME);
-                            break;
-
-                        case IDC_ANALYSIS_PRE_SCENECUT:
-                            config->b_pre_scenecut = IsDlgButtonChecked(hTabs[1], IDC_ANALYSIS_PRE_SCENECUT);
                             break;
 
                         case IDC_ANALYSIS_B_PYRAMID:
@@ -1620,7 +1620,7 @@ INT_PTR CALLBACK callback_tabs(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lPara
                             break;
 
                         case IDC_ANALYSIS_SCENECUT:
-                            CHECKED_SET_INT(config->i_scenecut_threshold, hTabs[1], IDC_ANALYSIS_SCENECUT, TRUE, -1, 100);
+                            CHECKED_SET_MAX_INT(config->i_scenecut_threshold, hTabs[1], IDC_ANALYSIS_SCENECUT, FALSE, 0, 100);
                             break;
 
                         case IDC_ANALYSIS_BFRAMES:
@@ -1841,7 +1841,7 @@ INT_PTR CALLBACK callback_tabs(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lPara
                             break;
 
                         case IDC_ANALYSIS_SCENECUT:
-                            CHECKED_SET_SHOW_INT(config->i_scenecut_threshold, hTabs[1], IDC_ANALYSIS_SCENECUT, TRUE, -1, 100);
+                            CHECKED_SET_SHOW_INT(config->i_scenecut_threshold, hTabs[1], IDC_ANALYSIS_SCENECUT, FALSE, 0, 100);
                             break;
 
                         case IDC_ANALYSIS_BFRAMES:
@@ -2009,8 +2009,8 @@ INT_PTR CALLBACK callback_tabs(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lPara
                     break;
 
                 case IDC_ANALYSIS_SCENECUT_SPIN:
-                    config->i_scenecut_threshold = X264_CLIP(config->i_scenecut_threshold - lpnmud->iDelta, -1, 100);
-                    SetDlgItemInt(hTabs[1], IDC_ANALYSIS_SCENECUT, config->i_scenecut_threshold, TRUE);
+                    config->i_scenecut_threshold = X264_CLIP(config->i_scenecut_threshold - lpnmud->iDelta, 0, 100);
+                    SetDlgItemInt(hTabs[1], IDC_ANALYSIS_SCENECUT, config->i_scenecut_threshold, FALSE);
                     break;
 
                 case IDC_ANALYSIS_BFRAMES_SPIN:

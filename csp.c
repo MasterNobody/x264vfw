@@ -27,7 +27,7 @@
 #include <assert.h>
 
 static inline void plane_copy( uint8_t *dst, int i_dst,
-                               uint8_t *src, int i_src, int w, int h)
+                               uint8_t *src, int i_src, int w, int h )
 {
     while( h-- )
     {
@@ -38,20 +38,20 @@ static inline void plane_copy( uint8_t *dst, int i_dst,
 }
 
 static inline void plane_copy_vflip( uint8_t *dst, int i_dst,
-                                     uint8_t *src, int i_src, int w, int h)
+                                     uint8_t *src, int i_src, int w, int h )
 {
-    plane_copy( dst, i_dst, src + (h -1)*i_src, -i_src, w, h );
+    plane_copy( dst, i_dst, src + (h - 1) * i_src, -i_src, w, h );
 }
 
 static inline void plane_subsamplev2( uint8_t *dst, int i_dst,
-                                      uint8_t *src, int i_src, int w, int h)
+                                      uint8_t *src, int i_src, int w, int h )
 {
     for( ; h > 0; h-- )
     {
         uint8_t *d = dst;
         uint8_t *s = src;
         int     i;
-        for( i = 0; i < w; i++ )
+        for( i = w; i > 0; i-- )
         {
             *d++ = ( s[0] + s[i_src] + 1 ) >> 1;
             s++;
@@ -61,21 +61,21 @@ static inline void plane_subsamplev2( uint8_t *dst, int i_dst,
     }
 }
 
-static inline void plane_subsamplev2_vlip( uint8_t *dst, int i_dst,
-                                           uint8_t *src, int i_src, int w, int h)
+static inline void plane_subsamplev2_vflip( uint8_t *dst, int i_dst,
+                                            uint8_t *src, int i_src, int w, int h )
 {
-    plane_subsamplev2( dst, i_dst, src + (2*h-1)*i_src, -i_src, w, h );
+    plane_subsamplev2( dst, i_dst, src + (2 * h - 1) * i_src, -i_src, w, h );
 }
 
 static inline void plane_subsamplehv2( uint8_t *dst, int i_dst,
-                                       uint8_t *src, int i_src, int w, int h)
+                                       uint8_t *src, int i_src, int w, int h )
 {
     for( ; h > 0; h-- )
     {
         uint8_t *d = dst;
         uint8_t *s = src;
         int     i;
-        for( i = 0; i < w; i++ )
+        for( i = w; i > 0; i-- )
         {
             *d++ = ( s[0] + s[1] + s[i_src] + s[i_src+1] + 2 ) >> 2;
             s += 2;
@@ -85,10 +85,10 @@ static inline void plane_subsamplehv2( uint8_t *dst, int i_dst,
     }
 }
 
-static inline void plane_subsamplehv2_vlip( uint8_t *dst, int i_dst,
-                                            uint8_t *src, int i_src, int w, int h)
+static inline void plane_subsamplehv2_vflip( uint8_t *dst, int i_dst,
+                                             uint8_t *src, int i_src, int w, int h )
 {
-    plane_subsamplehv2( dst, i_dst, src + (2*h-1)*i_src, -i_src, w, h );
+    plane_subsamplehv2( dst, i_dst, src + (2 * h - 1) * i_src, -i_src, w, h );
 }
 
 static void i420_to_i420( x264_image_t *img_dst, x264_image_t *img_src,
@@ -158,12 +158,12 @@ static void i422_to_i420( x264_image_t *img_dst, x264_image_t *img_src,
                           img_src->plane[0], img_src->i_stride[0],
                           i_width, i_height );
 
-        plane_subsamplev2_vlip( img_dst->plane[1], img_dst->i_stride[1],
-                                img_src->plane[1], img_src->i_stride[1],
-                                i_width / 2, i_height / 2 );
-        plane_subsamplev2_vlip( img_dst->plane[2], img_dst->i_stride[2],
-                                img_src->plane[2], img_src->i_stride[2],
-                                i_width / 2, i_height / 2 );
+        plane_subsamplev2_vflip( img_dst->plane[1], img_dst->i_stride[1],
+                                 img_src->plane[1], img_src->i_stride[1],
+                                 i_width / 2, i_height / 2 );
+        plane_subsamplev2_vflip( img_dst->plane[2], img_dst->i_stride[2],
+                                 img_src->plane[2], img_src->i_stride[2],
+                                 i_width / 2, i_height / 2 );
     }
     else
     {
@@ -189,12 +189,12 @@ static void i444_to_i420( x264_image_t *img_dst, x264_image_t *img_src,
                           img_src->plane[0], img_src->i_stride[0],
                           i_width, i_height );
 
-        plane_subsamplehv2_vlip( img_dst->plane[1], img_dst->i_stride[1],
-                                 img_src->plane[1], img_src->i_stride[1],
-                                 i_width / 2, i_height / 2 );
-        plane_subsamplehv2_vlip( img_dst->plane[2], img_dst->i_stride[2],
-                                 img_src->plane[2], img_src->i_stride[2],
-                                 i_width / 2, i_height / 2 );
+        plane_subsamplehv2_vflip( img_dst->plane[1], img_dst->i_stride[1],
+                                  img_src->plane[1], img_src->i_stride[1],
+                                  i_width / 2, i_height / 2 );
+        plane_subsamplehv2_vflip( img_dst->plane[2], img_dst->i_stride[2],
+                                  img_src->plane[2], img_src->i_stride[2],
+                                  i_width / 2, i_height / 2 );
     }
     else
     {

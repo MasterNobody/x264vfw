@@ -29,6 +29,7 @@
 #define IDC_MAIN_RC_VAL_SLIDER          1013
 #define IDC_MAIN_RC_LOW_LABEL           1014
 #define IDC_MAIN_RC_HIGH_LABEL          1015
+#define IDC_MAIN_STATS_CREATE           1114
 #define IDC_MAIN_STATS_UPDATE           1016
 #define IDC_MAIN_STATS                  1017
 #define IDC_MAIN_STATS_BROWSE           1018
@@ -69,7 +70,6 @@
 #define IDC_ANALYSIS_KEYINT             1049
 #define IDC_ANALYSIS_SCENECUT           1050
 #define IDC_ANALYSIS_SCENECUT_SPIN      1051
-#define IDC_ANALYSIS_PRE_SCENECUT       1052
 #define IDC_ANALYSIS_BFRAMES            1053
 #define IDC_ANALYSIS_BFRAMES_SPIN       1054
 #define IDC_ANALYSIS_B_ADAPT            1055
@@ -144,7 +144,7 @@
 #ifndef APSTUDIO_READONLY_SYMBOLS
 #define _APS_NEXT_RESOURCE_VALUE        109
 #define _APS_NEXT_COMMAND_VALUE         40001
-#define _APS_NEXT_CONTROL_VALUE         1114
+#define _APS_NEXT_CONTROL_VALUE         1115
 #define _APS_NEXT_SYMED_VALUE           101
 #endif
 #endif
