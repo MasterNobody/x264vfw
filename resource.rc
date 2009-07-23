@@ -60,7 +60,7 @@ BEGIN
     DEFPUSHBUTTON   "OK",IDOK,158,109,48,14
     CTEXT           "x264vfw - H.264/MPEG-4 AVC codec",IDC_STATIC,6,6,199,8
     CTEXT           "IDC_ABOUT_BUILD_LABEL",IDC_ABOUT_BUILD_LABEL,6,18,199,18
-    CTEXT           "Copyleft 2005-2009 Laurent Aimar, Justin Clay, Min Chen,\nEric Petit, Mans Rullgård, Loren Merritt,\nAnton Mitrofanov (a.k.a. BugMaster)",IDC_STATIC,6,42,199,30
+    CTEXT           "Copyleft 2005-2009 Laurent Aimar, Justin Clay, Min Chen,\nEric Petit, Mans Rullgard, Loren Merritt,\nAnton Mitrofanov (a.k.a. BugMaster)",IDC_STATIC,6,42,199,30
     CTEXT           "This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation.",IDC_STATIC,6,78,199,26
     PUSHBUTTON      "Visit Homepage",IDC_ABOUT_HOMEPAGE,7,109,77,14
 END
@@ -264,12 +264,6 @@ BEGIN
     COMBOBOX        IDC_AQ_MODE,264,16,54,84,CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
     LTEXT           "Strength",IDC_STATIC,180,32,84,12,SS_CENTERIMAGE
     EDITTEXT        IDC_AQ_STRENGTH,264,32,54,12,ES_AUTOHSCROLL
-#if X264_PATCH_VAQ_MOD
-    LTEXT           "Metric",IDC_STATIC,180,48,84,12,SS_CENTERIMAGE
-    COMBOBOX        IDC_AQ_METRIC,264,48,54,84,CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
-    LTEXT           "Sensitivity",IDC_STATIC,180,64,84,12,SS_CENTERIMAGE
-    EDITTEXT        IDC_AQ_SENSITIVITY,264,64,54,12,ES_AUTOHSCROLL
-#endif
 #if X264VFW_USE_THREADS
     GROUPBOX        "Multithreading",IDC_STATIC,330,6,162,76
     LTEXT           "Threads",IDC_STATIC,342,16,84,12,SS_CENTERIMAGE

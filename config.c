@@ -159,7 +159,7 @@ static const reg_int_t reg_int_table[] =
     { "b_adapt",          &reg.i_bframe_adaptive,    1,   0,   2                   },
     { "b_bias",           &reg.i_bframe_bias,        0,   -90, 100                 },
     { "direct_pred",      &reg.i_direct_mv_pred,     1,   0,   3                   },
-    { "b_refs",           &reg.b_b_refs,             1,   0,   1                   },
+    { "b_refs",           &reg.b_b_refs,             0,   0,   1                   },
     { "b_wpred",          &reg.b_b_wpred,            1,   0,   1                   },
 
     /* Encoding */
@@ -189,10 +189,7 @@ static const reg_int_t reg_int_table[] =
     { "chroma_qp_offset", &reg.i_chroma_qp_offset,   0,   -12, 12                  },
 
     /* AQ */
-    { "aq_mode",          &reg.i_aq_mode,            1,   0,   1                   },
-#if X264_PATCH_VAQ_MOD
-    { "aq_metric",        &reg.i_aq_metric,          0,   0,   2                   },
-#endif
+    { "aq_mode",          &reg.i_aq_mode,            2,   0,   2                   },
 
     /* Multithreading */
 #if X264VFW_USE_THREADS
@@ -234,9 +231,6 @@ static const reg_float_t reg_float_table[] =
 
     /* AQ */
     { "aq_strength",    &reg.f_aq_strength,    1.00,  0.00, 1000.00 }
-#if X264_PATCH_VAQ_MOD
-   ,{ "aq_sensitivity", &reg.f_aq_sensitivity, 10.00, 0.00, 1000.00 }
-#endif
 };
 
 static const reg_str_t reg_str_table[] =
@@ -479,10 +473,6 @@ void tabs_enable_items(CONFIG *config)
     /* AQ */
     EnableWindow(GetDlgItem(hTabs[2], IDC_AQ_MODE), config->i_encoding_type > 1);
     EnableWindow(GetDlgItem(hTabs[2], IDC_AQ_STRENGTH), config->i_encoding_type > 1 && config->i_aq_mode > 0);
-#if X264_PATCH_VAQ_MOD
-    EnableWindow(GetDlgItem(hTabs[2], IDC_AQ_METRIC), config->i_encoding_type > 1 && config->i_aq_mode > 0);
-    EnableWindow(GetDlgItem(hTabs[2], IDC_AQ_SENSITIVITY), config->i_encoding_type > 1 && config->i_aq_mode > 0);
-#endif
 
     /* Multithreading */
 #if X264VFW_USE_THREADS
@@ -792,23 +782,13 @@ void tabs_update_items(CONFIG *config)
     /* AQ */
     if (SendMessage(GetDlgItem(hTabs[2], IDC_AQ_MODE), CB_GETCOUNT, 0, 0) == 0)
     {
-        SendDlgItemMessage(hTabs[2], IDC_AQ_MODE, CB_ADDSTRING, 0, (LPARAM)"Off");
-        SendDlgItemMessage(hTabs[2], IDC_AQ_MODE, CB_ADDSTRING, 0, (LPARAM)"On");
+        SendDlgItemMessage(hTabs[2], IDC_AQ_MODE, CB_ADDSTRING, 0, (LPARAM)"None");
+        SendDlgItemMessage(hTabs[2], IDC_AQ_MODE, CB_ADDSTRING, 0, (LPARAM)"VAQ");
+        SendDlgItemMessage(hTabs[2], IDC_AQ_MODE, CB_ADDSTRING, 0, (LPARAM)"AutoVAQ");
     }
     SendDlgItemMessage(hTabs[2], IDC_AQ_MODE, CB_SETCURSEL, config->i_aq_mode, 0);
     SendMessage(GetDlgItem(hTabs[2], IDC_AQ_STRENGTH), EM_LIMITTEXT, 8, 0);
     SetDlgItemDouble(hTabs[2], IDC_AQ_STRENGTH, config->f_aq_strength, "%.2f");
-#if X264_PATCH_VAQ_MOD
-    if (SendMessage(GetDlgItem(hTabs[2], IDC_AQ_METRIC), CB_GETCOUNT, 0, 0) == 0)
-    {
-        SendDlgItemMessage(hTabs[2], IDC_AQ_METRIC, CB_ADDSTRING, 0, (LPARAM)"Original");
-        SendDlgItemMessage(hTabs[2], IDC_AQ_METRIC, CB_ADDSTRING, 0, (LPARAM)"BM ver. 0");
-        SendDlgItemMessage(hTabs[2], IDC_AQ_METRIC, CB_ADDSTRING, 0, (LPARAM)"BM ver. 1");
-    }
-    SendDlgItemMessage(hTabs[2], IDC_AQ_METRIC, CB_SETCURSEL, config->i_aq_metric, 0);
-    SendMessage(GetDlgItem(hTabs[2], IDC_AQ_SENSITIVITY), EM_LIMITTEXT, 8, 0);
-    SetDlgItemDouble(hTabs[2], IDC_AQ_SENSITIVITY, config->f_aq_sensitivity, "%.2f");
-#endif
 
     /* Multithreading */
 #if X264VFW_USE_THREADS
@@ -1342,12 +1322,6 @@ INT_PTR CALLBACK callback_tabs(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lPara
                             config->i_aq_mode = SendDlgItemMessage(hTabs[2], IDC_AQ_MODE, CB_GETCURSEL, 0, 0);
                             break;
 
-#if X264_PATCH_VAQ_MOD
-                        case IDC_AQ_METRIC:
-                            config->i_aq_metric = SendDlgItemMessage(hTabs[2], IDC_AQ_METRIC, CB_GETCURSEL, 0, 0);
-                            break;
-#endif
-
                         case IDC_VUI_OVERSCAN:
                             config->i_overscan = SendDlgItemMessage(hTabs[2], IDC_VUI_OVERSCAN, CB_GETCURSEL, 0, 0);
                             config->i_overscan = VUI_loc2abs(config->i_overscan, overscan);
@@ -1716,26 +1690,16 @@ INT_PTR CALLBACK callback_tabs(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lPara
                             CHECKED_SET_MAX_FLOAT(config->f_aq_strength, hTabs[2], IDC_AQ_STRENGTH, FALSE, 0.00, 1000.00, 2, "%.2f");
                             break;
 
-#if X264_PATCH_VAQ_MOD
-                        case IDC_AQ_SENSITIVITY:
-                            CHECKED_SET_MAX_FLOAT(config->f_aq_sensitivity, hTabs[2], IDC_AQ_SENSITIVITY, FALSE, 0.00, 1000.00, 2, "%.2f");
-                            break;
-#endif
-
 #if X264VFW_USE_THREADS
-#if !X264_PATCH_THREAD_POOL
                         case IDC_MT_THREADS:
                             CHECKED_SET_MAX_INT(config->i_threads, hTabs[2], IDC_MT_THREADS, FALSE, 0, X264_THREAD_MAX);
+#if !X264_PATCH_THREAD_POOL
                             break;
 #else
-                        case IDC_MT_THREADS:
-                            if (config->i_thread_queue == 0)
+                            if (config->i_thread_queue < config->i_threads && config->i_thread_queue != 0)
                             {
-                                CHECKED_SET_MAX_INT(config->i_threads, hTabs[2], IDC_MT_THREADS, FALSE, 0, X264_THREAD_MAX);
-                            }
-                            else
-                            {
-                                CHECKED_SET_MAX_INT(config->i_threads, hTabs[2], IDC_MT_THREADS, FALSE, 0, config->i_thread_queue);
+                                config->i_thread_queue = 0;
+                                SetDlgItemInt(hTabs[2], IDC_MT_THREAD_QUEUE, config->i_thread_queue, FALSE);
                             }
                             break;
 
@@ -1938,26 +1902,16 @@ INT_PTR CALLBACK callback_tabs(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lPara
                             CHECKED_SET_SHOW_FLOAT(config->f_aq_strength, hTabs[2], IDC_AQ_STRENGTH, FALSE, 0.00, 1000.00, 2, "%.2f");
                             break;
 
-#if X264_PATCH_VAQ_MOD
-                        case IDC_AQ_SENSITIVITY:
-                            CHECKED_SET_SHOW_FLOAT(config->f_aq_sensitivity, hTabs[2], IDC_AQ_SENSITIVITY, FALSE, 0.00, 1000.00, 2, "%.2f");
-                            break;
-#endif
-
 #if X264VFW_USE_THREADS
-#if !X264_PATCH_THREAD_POOL
                         case IDC_MT_THREADS:
                             CHECKED_SET_SHOW_INT(config->i_threads, hTabs[2], IDC_MT_THREADS, FALSE, 0, X264_THREAD_MAX);
+#if !X264_PATCH_THREAD_POOL
                             break;
 #else
-                        case IDC_MT_THREADS:
-                            if (config->i_thread_queue == 0)
+                            if (config->i_thread_queue < config->i_threads && config->i_thread_queue != 0)
                             {
-                                CHECKED_SET_SHOW_INT(config->i_threads, hTabs[2], IDC_MT_THREADS, FALSE, 0, X264_THREAD_MAX);
-                            }
-                            else
-                            {
-                                CHECKED_SET_SHOW_INT(config->i_threads, hTabs[2], IDC_MT_THREADS, FALSE, 0, config->i_thread_queue);
+                                config->i_thread_queue = 0;
+                                SetDlgItemInt(hTabs[2], IDC_MT_THREAD_QUEUE, config->i_thread_queue, FALSE);
                             }
                             break;
 
@@ -1965,7 +1919,7 @@ INT_PTR CALLBACK callback_tabs(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lPara
                             CheckControlTextIsNumber(GetDlgItem(hTabs[2], IDC_MT_THREAD_QUEUE), FALSE, 0);
                             config->i_thread_queue = GetDlgItemInt(hTabs[2], IDC_MT_THREAD_QUEUE, NULL, FALSE);
                             if (config->i_thread_queue < config->i_threads && config->i_thread_queue != 0)
-                                config->i_thread_queue = config->i_threads;
+                                config->i_thread_queue = 0;
                             else if (config->i_thread_queue > X264_THREAD_MAX)
                                 config->i_thread_queue = X264_THREAD_MAX;
                             SetDlgItemInt(hTabs[2], IDC_MT_THREAD_QUEUE, config->i_thread_queue, FALSE);
@@ -2069,24 +2023,25 @@ INT_PTR CALLBACK callback_tabs(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lPara
                     break;
 
 #if X264VFW_USE_THREADS
-#if !X264_PATCH_THREAD_POOL
                 case IDC_MT_THREADS_SPIN:
                     config->i_threads = X264_CLIP(config->i_threads - lpnmud->iDelta, 0, X264_THREAD_MAX);
                     SetDlgItemInt(hTabs[2], IDC_MT_THREADS, config->i_threads, FALSE);
+#if !X264_PATCH_THREAD_POOL
                     break;
 #else
-                case IDC_MT_THREADS_SPIN:
-                    if (config->i_thread_queue == 0)
-                        config->i_threads = X264_CLIP(config->i_threads - lpnmud->iDelta, 0, X264_THREAD_MAX);
-                    else
-                        config->i_threads = X264_CLIP(config->i_threads - lpnmud->iDelta, 0, config->i_thread_queue);
-                    SetDlgItemInt(hTabs[2], IDC_MT_THREADS, config->i_threads, FALSE);
+                    if (config->i_thread_queue < config->i_threads && config->i_thread_queue != 0)
+                    {
+                        config->i_thread_queue = 0;
+                        SetDlgItemInt(hTabs[2], IDC_MT_THREAD_QUEUE, config->i_thread_queue, FALSE);
+                    }
                     break;
 
                 case IDC_MT_THREAD_QUEUE_SPIN:
+                    if (config->i_thread_queue == 0 && config->i_threads > 0)
+                        config->i_thread_queue = config->i_threads - 1;
                     config->i_thread_queue = X264_CLIP(config->i_thread_queue - lpnmud->iDelta, 0, X264_THREAD_MAX);
                     if (config->i_thread_queue < config->i_threads && config->i_thread_queue != 0)
-                        config->i_thread_queue = config->i_threads;
+                        config->i_thread_queue = 0;
                     SetDlgItemInt(hTabs[2], IDC_MT_THREAD_QUEUE, config->i_thread_queue, FALSE);
                     break;
 #endif

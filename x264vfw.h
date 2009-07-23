@@ -198,10 +198,6 @@ typedef struct
     /* AQ */
     int i_aq_mode;
     float f_aq_strength;
-#if X264_PATCH_VAQ_MOD
-    int i_aq_metric;
-    float f_aq_sensitivity;
-#endif
 
     /* Multithreading */
 #if X264VFW_USE_THREADS

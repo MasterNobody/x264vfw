@@ -116,10 +116,6 @@
 #define IDC_RC_RATETOL                  1096
 #define IDC_AQ_MODE                     1097
 #define IDC_AQ_STRENGTH                 1098
-#if X264_PATCH_VAQ_MOD
-#define IDC_AQ_METRIC                   1099
-#define IDC_AQ_SENSITIVITY              1100
-#endif
 #if X264VFW_USE_THREADS
 #define IDC_MT_THREADS                  1101
 #define IDC_MT_THREADS_SPIN             1102
