@@ -150,7 +150,7 @@ static const reg_int_t reg_int_table[] =
     { "mixedref",         &reg.b_mixedref,           1,   0,   1                   },
     { "me_method",        &reg.i_me_method,          2,   0,   4                   },
     { "me_range",         &reg.i_me_range,           16,  4,   64                  },
-    { "subpel",           &reg.i_subpel_refine,      7,   0,   9                   },
+    { "subpel",           &reg.i_subpel_refine,      7,   0,   10                  },
     { "chroma_me",        &reg.b_chroma_me,          1,   0,   1                   },
     { "keyint_min",       &reg.i_keyint_min,         25,  1,   9999                },
     { "keyint_max",       &reg.i_keyint_max,         250, 1,   9999                },
@@ -673,6 +673,7 @@ void tabs_update_items(CONFIG *config)
         SendDlgItemMessage(hTabs[1], IDC_ANALYSIS_SUBME, CB_ADDSTRING, 0, (LPARAM)"7 RD on all");
         SendDlgItemMessage(hTabs[1], IDC_ANALYSIS_SUBME, CB_ADDSTRING, 0, (LPARAM)"8 RDr on I/P");
         SendDlgItemMessage(hTabs[1], IDC_ANALYSIS_SUBME, CB_ADDSTRING, 0, (LPARAM)"9 RDr on all");
+        SendDlgItemMessage(hTabs[1], IDC_ANALYSIS_SUBME, CB_ADDSTRING, 0, (LPARAM)"10 QPRD");
     }
     SendDlgItemMessage(hTabs[1], IDC_ANALYSIS_SUBME, CB_SETCURSEL, config->i_subpel_refine, 0);
     CheckDlgButton(hTabs[1], IDC_ANALYSIS_CHROMA_ME, config->b_chroma_me);
