@@ -5,7 +5,7 @@
  * $Id: csp.c,v 1.1 2004/06/03 19:27:06 fenrir Exp $
  *
  * Authors: Laurent Aimar <fenrir@via.ecp.fr>
- *          Anton Mitrofanov (a.k.a. BugMaster)
+ *          Anton Mitrofanov <BugMaster@narod.ru>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -94,7 +94,7 @@ static inline void plane_subsamplehv2_vflip( uint8_t *dst, int i_dst,
 static void i420_to_i420( x264_image_t *img_dst, x264_image_t *img_src,
                           int i_width, int i_height )
 {
-    if( img_src->i_csp & X264_CSP_VFLIP )
+    if( img_src->i_csp & X264VFW_CSP_VFLIP )
     {
         plane_copy_vflip( img_dst->plane[0], img_dst->i_stride[0],
                           img_src->plane[0], img_src->i_stride[0],
@@ -123,7 +123,7 @@ static void i420_to_i420( x264_image_t *img_dst, x264_image_t *img_src,
 static void yv12_to_i420( x264_image_t *img_dst, x264_image_t *img_src,
                           int i_width, int i_height )
 {
-    if( img_src->i_csp & X264_CSP_VFLIP )
+    if( img_src->i_csp & X264VFW_CSP_VFLIP )
     {
         plane_copy_vflip( img_dst->plane[0], img_dst->i_stride[0],
                           img_src->plane[0], img_src->i_stride[0],
@@ -152,7 +152,7 @@ static void yv12_to_i420( x264_image_t *img_dst, x264_image_t *img_src,
 static void i422_to_i420( x264_image_t *img_dst, x264_image_t *img_src,
                           int i_width, int i_height )
 {
-    if( img_src->i_csp & X264_CSP_VFLIP )
+    if( img_src->i_csp & X264VFW_CSP_VFLIP )
     {
         plane_copy_vflip( img_dst->plane[0], img_dst->i_stride[0],
                           img_src->plane[0], img_src->i_stride[0],
@@ -183,7 +183,7 @@ static void i422_to_i420( x264_image_t *img_dst, x264_image_t *img_src,
 static void i444_to_i420( x264_image_t *img_dst, x264_image_t *img_src,
                           int i_width, int i_height )
 {
-    if( img_src->i_csp & X264_CSP_VFLIP )
+    if( img_src->i_csp & X264VFW_CSP_VFLIP )
     {
         plane_copy_vflip( img_dst->plane[0], img_dst->i_stride[0],
                           img_src->plane[0], img_src->i_stride[0],
@@ -221,7 +221,7 @@ static void yuyv_to_i420( x264_image_t *img_dst, x264_image_t *img_src,
     uint8_t *u   = img_dst->plane[1];
     uint8_t *v   = img_dst->plane[2];
 
-    if( img_src->i_csp & X264_CSP_VFLIP )
+    if( img_src->i_csp & X264VFW_CSP_VFLIP )
     {
         src += ( i_height - 1 ) * i_src;
         i_src = -i_src;
@@ -256,6 +256,58 @@ static void yuyv_to_i420( x264_image_t *img_dst, x264_image_t *img_src,
         {
             *yy++ = ss[0];
             *yy++ = ss[2];
+            ss += 4;
+        }
+        src += i_src;
+        y += img_dst->i_stride[0];
+    }
+}
+
+static void uyvy_to_i420( x264_image_t *img_dst, x264_image_t *img_src,
+                          int i_width, int i_height )
+{
+    uint8_t *src = img_src->plane[0];
+    int     i_src= img_src->i_stride[0];
+
+    uint8_t *y   = img_dst->plane[0];
+    uint8_t *u   = img_dst->plane[1];
+    uint8_t *v   = img_dst->plane[2];
+
+    if( img_src->i_csp & X264VFW_CSP_VFLIP )
+    {
+        src += ( i_height - 1 ) * i_src;
+        i_src = -i_src;
+    }
+
+    for( ; i_height > 0; i_height -= 2 )
+    {
+        uint8_t *ss = src;
+        uint8_t *yy = y;
+        uint8_t *uu = u;
+        uint8_t *vv = v;
+        int w;
+
+        for( w = i_width; w > 0; w -= 2 )
+        {
+            *yy++ = ss[1];
+            *yy++ = ss[3];
+
+            *uu++ = ( ss[0] + ss[0+i_src] + 1 ) >> 1;
+            *vv++ = ( ss[2] + ss[2+i_src] + 1 ) >> 1;
+
+            ss += 4;
+        }
+        src += i_src;
+        y += img_dst->i_stride[0];
+        u += img_dst->i_stride[1];
+        v += img_dst->i_stride[2];
+
+        ss = src;
+        yy = y;
+        for( w = i_width; w > 0; w -= 2 )
+        {
+            *yy++ = ss[1];
+            *yy++ = ss[3];
             ss += 4;
         }
         src += i_src;
@@ -332,7 +384,7 @@ static void name( x264_image_t *img_dst, x264_image_t *img_src, \
     uint8_t *u   = img_dst->plane[1];                           \
     uint8_t *v   = img_dst->plane[2];                           \
                                                                 \
-    if( img_src->i_csp & X264_CSP_VFLIP )                       \
+    if( img_src->i_csp & X264VFW_CSP_VFLIP )                    \
     {                                                           \
         src += ( i_height - 1 ) * i_src;                        \
         i_src = -i_src;                                         \
@@ -394,19 +446,20 @@ RGB_TO_I420( rgb_to_i420,  0, 1, 2, 3 );
 RGB_TO_I420( bgr_to_i420,  2, 1, 0, 3 );
 RGB_TO_I420( bgra_to_i420, 2, 1, 0, 4 );
 
-void x264_csp_init( x264_csp_function_t *pf, int i_csp )
+void x264vfw_csp_init( x264vfw_csp_function_t *pf, int i_x264_csp )
 {
-    switch( i_csp )
+    switch( i_x264_csp )
     {
         case X264_CSP_I420:
-            pf->convert[X264_CSP_I420] = i420_to_i420;
-            pf->convert[X264_CSP_I422] = i422_to_i420;
-            pf->convert[X264_CSP_I444] = i444_to_i420;
-            pf->convert[X264_CSP_YV12] = yv12_to_i420;
-            pf->convert[X264_CSP_YUYV] = yuyv_to_i420;
-            pf->convert[X264_CSP_RGB ] =  rgb_to_i420;
-            pf->convert[X264_CSP_BGR ] =  bgr_to_i420;
-            pf->convert[X264_CSP_BGRA] = bgra_to_i420;
+            pf->convert[X264VFW_CSP_I420] = i420_to_i420;
+            pf->convert[X264VFW_CSP_I422] = i422_to_i420;
+            pf->convert[X264VFW_CSP_I444] = i444_to_i420;
+            pf->convert[X264VFW_CSP_YV12] = yv12_to_i420;
+            pf->convert[X264VFW_CSP_YUYV] = yuyv_to_i420;
+            pf->convert[X264VFW_CSP_UYVY] = uyvy_to_i420;
+            pf->convert[X264VFW_CSP_RGB ] =  rgb_to_i420;
+            pf->convert[X264VFW_CSP_BGR ] =  bgr_to_i420;
+            pf->convert[X264VFW_CSP_BGRA] = bgra_to_i420;
             break;
 
         default:

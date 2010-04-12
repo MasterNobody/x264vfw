@@ -7,7 +7,7 @@
  * Authors: Justin Clay
  *          Laurent Aimar <fenrir@via.ecp.fr>
  *          Antony Boucher <proximodo@free.fr>
- *          Anton Mitrofanov (a.k.a. BugMaster)
+ *          Anton Mitrofanov <BugMaster@narod.ru>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -26,15 +26,8 @@
 
 #include "x264vfw.h"
 
-#include <stdio.h> /* sprintf */
-#include <commctrl.h>
 #include <assert.h>
-
-#ifdef _MSC_VER
-#define X264_VERSION ""
-#else
-#include "config.h"
-#endif
+#include <commctrl.h>
 
 /* Registry */
 #define X264_REG_KEY     HKEY_CURRENT_USER
@@ -42,7 +35,8 @@
 #ifdef _WIN64
 #define X264_REG_CHILD   "x264vfw64"
 #else
-#define X264_REG_CHILD   "x264"            /* not "x264vfw" because of GordianKnot compatibility */
+/* Not "x264vfw" because of GordianKnot compatibility */
+#define X264_REG_CHILD   "x264"
 #endif
 #define X264_REG_CLASS   "config"
 
@@ -86,7 +80,7 @@ typedef struct
     char *reg_value;
     char *config_str;
     char *default_str;
-    int  max_len;      /* maximum string length, including the terminating NULL char */
+    int  max_len;      /* Maximum string length, including the terminating NULL char */
 } reg_str_t;
 
 typedef struct
@@ -107,9 +101,9 @@ int    b_tabs_updated;
 static const reg_int_t reg_int_table[] =
 {
     /* Main */
-    { "encoding_type",    &reg.i_encoding_type,      4,   0,   4                   }, /* take into account GordianKnot workaround */
-    { "quantizer",        &reg.i_qp,                 26,  1,   X264_QUANT_MAX      },
-    { "ratefactor",       &reg.i_rf_constant,        260, 10,  X264_QUANT_MAX * 10 },
+    { "encoding_type",    &reg.i_encoding_type,      4,   0,   4                   }, /* Take into account GordianKnot workaround */
+    { "quantizer",        &reg.i_qp,                 23,  1,   X264_QUANT_MAX      },
+    { "ratefactor",       &reg.i_rf_constant,        230, 10,  X264_QUANT_MAX * 10 },
     { "passbitrate",      &reg.i_passbitrate,        800, 1,   X264_BITRATE_MAX    },
     { "pass_number",      &reg.i_pass,               1,   1,   2                   },
     { "fast1pass",        &reg.b_fast1pass,          0,   0,   1                   },
@@ -132,7 +126,7 @@ static const reg_int_t reg_int_table[] =
 #if X264VFW_USE_VIRTUALDUB_HACK
     { "vd_hack",          &reg.b_vd_hack,            0,   0,   1                   },
 #endif
-#if X264VFW_USE_DECODER
+#if defined(HAVE_FFMPEG) && X264VFW_USE_DECODER
     { "disable_decoder",  &reg.b_disable_decoder,    0,   0,   1                   },
 #endif
 
@@ -146,31 +140,28 @@ static const reg_int_t reg_int_table[] =
     { "psub8x8",          &reg.b_psub8x8,            0,   0,   1                   },
     { "bsub16x16",        &reg.b_bsub16x16,          1,   0,   1                   },
     { "fast_pskip",       &reg.b_fast_pskip,         1,   0,   1                   },
-    { "refmax",           &reg.i_refmax,             1,   1,   16                  },
+    { "refmax",           &reg.i_refmax,             3,   1,   16                  },
     { "mixedref",         &reg.b_mixedref,           1,   0,   1                   },
     { "me_method",        &reg.i_me_method,          2,   0,   4                   },
     { "me_range",         &reg.i_me_range,           16,  4,   64                  },
     { "subpel",           &reg.i_subpel_refine,      7,   0,   10                  },
     { "chroma_me",        &reg.b_chroma_me,          1,   0,   1                   },
-    { "keyint_min",       &reg.i_keyint_min,         25,  1,   9999                },
+    { "keyint_min",       &reg.i_keyint_min,         0,   0,   9999                },
     { "keyint_max",       &reg.i_keyint_max,         250, 1,   9999                },
     { "scenecut",         &reg.i_scenecut_threshold, 40,  0,   100                 },
+    { "p_wpred",          &reg.i_p_wpred,            2,   0,   2                   },
     { "bmax",             &reg.i_bframe,             0,   0,   X264_BFRAME_MAX     },
     { "b_adapt",          &reg.i_bframe_adaptive,    1,   0,   2                   },
     { "b_bias",           &reg.i_bframe_bias,        0,   -90, 100                 },
     { "direct_pred",      &reg.i_direct_mv_pred,     1,   0,   3                   },
-    { "b_refs",           &reg.b_b_refs,             0,   0,   1                   },
+    { "b_refs",           &reg.i_b_refs,             2,   0,   2                   },
     { "b_wpred",          &reg.b_b_wpred,            1,   0,   1                   },
 
     /* Encoding */
     { "loop_filter",      &reg.b_filter,             1,   0,   1                   },
     { "inloop_a",         &reg.i_inloop_a,           0,   -6,  6                   },
     { "inloop_b",         &reg.i_inloop_b,           0,   -6,  6                   },
-#if !X264_PATCH_HDR
-    { "interlaced",       &reg.i_interlaced,         0,   0,   1                   },
-#else
     { "interlaced",       &reg.i_interlaced,         0,   0,   2                   },
-#endif
     { "cabac",            &reg.b_cabac,              1,   0,   1                   },
     { "dct_decimate",     &reg.b_dct_decimate,       1,   0,   1                   },
     { "noise_reduction",  &reg.i_noise_reduction,    0,   0,   9999                },
@@ -180,24 +171,22 @@ static const reg_int_t reg_int_table[] =
     { "cqm",              &reg.i_cqm,                0,   0,   2                   },
 
     /* Rate control */
-    { "vbv_maxrate",      &reg.i_vbv_maxrate,        0,   0,   999999              },
-    { "vbv_bufsize",      &reg.i_vbv_bufsize,        0,   0,   999999              },
+    { "vbv_maxrate",      &reg.i_vbv_maxrate,        0,   0,   X264_BITRATE_MAX    },
+    { "vbv_bufsize",      &reg.i_vbv_bufsize,        0,   0,   X264_BITRATE_MAX    },
     { "vbv_occupancy",    &reg.i_vbv_occupancy,      90,  0,   100                 },
-    { "qp_min",           &reg.i_qp_min,             10,  1,   X264_QUANT_MAX      },
-    { "qp_max",           &reg.i_qp_max,             51,  1,   X264_QUANT_MAX      },
+    { "qp_min",           &reg.i_qp_min,             10,  0,   X264_QUANT_MAX      },
+    { "qp_max",           &reg.i_qp_max,             51,  0,   X264_QUANT_MAX      },
     { "qp_step",          &reg.i_qp_step,            4,   1,   X264_QUANT_MAX      },
     { "chroma_qp_offset", &reg.i_chroma_qp_offset,   0,   -12, 12                  },
 
     /* AQ */
-    { "aq_mode",          &reg.i_aq_mode,            2,   0,   2                   },
+    { "aq_mode",          &reg.i_aq_mode,            1,   0,   2                   },
 
     /* Multithreading */
 #if X264VFW_USE_THREADS
-    { "threads",          &reg.i_threads,            1,   0,   X264_THREAD_MAX     },
+    { "threads",          &reg.i_threads,            0,   0,   X264_THREAD_MAX     },
     { "mt_deterministic", &reg.b_mt_deterministic,   1,   0,   1                   },
-#if X264_PATCH_THREAD_POOL
-    { "thread_queue",     &reg.i_thread_queue,       0,   0,   X264_THREAD_MAX     },
-#endif
+    { "mt_sliced",        &reg.b_mt_sliced,          1,   0,   1                   },
 #endif
 
     /* VUI */
@@ -216,7 +205,7 @@ static const reg_int_t reg_int_table[] =
 static const reg_float_t reg_float_table[] =
 {
     /* Analysis */
-    { "psy_rdo",        &reg.f_psy_rdo,        0.0,   0.00, 1000.00 },
+    { "psy_rdo",        &reg.f_psy_rdo,        1.0,   0.00, 1000.00 },
 
     /* Encoding */
     { "psy_trellis",    &reg.f_psy_trellis,    0.0,   0.00, 1000.00 },
@@ -249,7 +238,7 @@ static const reg_str_t reg_str_table[] =
     { "cmdline",       reg.cmdline,       "",                        MAX_CMDLINE        }
 };
 
-double GetDlgItemDouble(HWND hDlg, int nIDDlgItem)
+static double GetDlgItemDouble(HWND hDlg, int nIDDlgItem)
 {
     char temp[1024];
 
@@ -257,12 +246,53 @@ double GetDlgItemDouble(HWND hDlg, int nIDDlgItem)
     return atof(temp);
 }
 
-void SetDlgItemDouble(HWND hDlg, int nIDDlgItem, double dblValue, const char *format)
+static void SetDlgItemDouble(HWND hDlg, int nIDDlgItem, double dblValue, const char *format)
 {
     char temp[1024];
 
     sprintf(temp, format, dblValue);
     SetDlgItemText(hDlg, nIDDlgItem, temp);
+}
+
+static int pos2scale(int i_pos)
+{
+    int res;
+    if (i_pos <= 100)
+        res = i_pos;
+    else
+    {
+        int i = 1;
+        i_pos -= 10;
+        while (i_pos > 90)
+        {
+            i_pos -= 90;
+            i *= 10;
+        }
+        res = (i_pos + 10) * i;
+    }
+    return res;
+}
+
+static int scale2pos(int i_scale)
+{
+    int res;
+    if (i_scale <= 100)
+        res = i_scale;
+    else
+    {
+        int i = 900;
+        res = 100;
+        i_scale -= 100;
+        while (i_scale > i)
+        {
+            res += 90;
+            i_scale -= i;
+            i *= 10;
+        }
+        i /= 90;
+        res += (i_scale + (i >> 1)) / i;
+    }
+    return res;
 }
 
 #define VUI_abs2loc(val, name)\
@@ -398,7 +428,7 @@ void config_defaults(CONFIG *config)
 }
 
 /* Tabs */
-void tabs_enable_items(CONFIG *config)
+static void tabs_enable_items(CONFIG *config)
 {
     /* Main */
     ShowWindow(GetDlgItem(hTabs[0], IDC_MAIN_RC_LABEL), config->i_encoding_type > 0);
@@ -420,17 +450,19 @@ void tabs_enable_items(CONFIG *config)
     EnableWindow(GetDlgItem(hTabs[1], IDC_ANALYSIS_I_I8X8), (config->i_encoding_type > 0 || config->b_cabac) && config->b_dct8x8);
     EnableWindow(GetDlgItem(hTabs[1], IDC_ANALYSIS_PB_I8X8), (config->i_encoding_type > 0 || config->b_cabac) && config->b_dct8x8);
     EnableWindow(GetDlgItem(hTabs[1], IDC_ANALYSIS_PB_P4X4), config->b_psub16x16);
-    EnableWindow(GetDlgItem(hTabs[1], IDC_ANALYSIS_PB_B8X8), config->i_bframe > 0);
+    EnableWindow(GetDlgItem(hTabs[1], IDC_ANALYSIS_PB_B8X8), config->i_encoding_type > 0 && config->i_bframe > 0);
     EnableWindow(GetDlgItem(hTabs[1], IDC_ANALYSIS_FAST_PSKIP), config->i_encoding_type > 0);
     EnableWindow(GetDlgItem(hTabs[1], IDC_ANALYSIS_MIXED_REFS), config->i_refmax > 1);
     EnableWindow(GetDlgItem(hTabs[1], IDC_ANALYSIS_CHROMA_ME), config->i_subpel_refine >= 5);
     EnableWindow(GetDlgItem(hTabs[1], IDC_ANALYSIS_PSY_RDO), config->i_encoding_type > 0 && config->i_subpel_refine >= 6);
-    EnableWindow(GetDlgItem(hTabs[1], IDC_ANALYSIS_B_ADAPT), config->i_bframe > 0);
-    EnableWindow(GetDlgItem(hTabs[1], IDC_ANALYSIS_B_BIAS), config->i_bframe > 0 && config->i_bframe_adaptive > 0);
-    EnableWindow(GetDlgItem(hTabs[1], IDC_ANALYSIS_B_BIAS_SPIN), config->i_bframe > 0 && config->i_bframe_adaptive > 0);
-    EnableWindow(GetDlgItem(hTabs[1], IDC_ANALYSIS_DIRECT), config->i_bframe > 0);
-    EnableWindow(GetDlgItem(hTabs[1], IDC_ANALYSIS_B_PYRAMID), config->i_bframe > 1);
-    EnableWindow(GetDlgItem(hTabs[1], IDC_ANALYSIS_WEIGHTB), config->i_bframe > 0);
+    EnableWindow(GetDlgItem(hTabs[1], IDC_ANALYSIS_BFRAMES), config->i_encoding_type > 0);
+    EnableWindow(GetDlgItem(hTabs[1], IDC_ANALYSIS_BFRAMES_SPIN), config->i_encoding_type > 0);
+    EnableWindow(GetDlgItem(hTabs[1], IDC_ANALYSIS_B_ADAPT), config->i_encoding_type > 0 && config->i_bframe > 0);
+    EnableWindow(GetDlgItem(hTabs[1], IDC_ANALYSIS_B_BIAS), config->i_encoding_type > 0 && config->i_bframe > 0 && config->i_bframe_adaptive > 0);
+    EnableWindow(GetDlgItem(hTabs[1], IDC_ANALYSIS_B_BIAS_SPIN), config->i_encoding_type > 0 && config->i_bframe > 0 && config->i_bframe_adaptive > 0);
+    EnableWindow(GetDlgItem(hTabs[1], IDC_ANALYSIS_DIRECT), config->i_encoding_type > 0 && config->i_bframe > 0);
+    EnableWindow(GetDlgItem(hTabs[1], IDC_ANALYSIS_B_PYRAMID), config->i_encoding_type > 0 && config->i_bframe > 1);
+    EnableWindow(GetDlgItem(hTabs[1], IDC_ANALYSIS_WEIGHTB), config->i_encoding_type > 0 && config->i_bframe > 0);
 
     /* Encoding */
     EnableWindow(GetDlgItem(hTabs[1], IDC_ENC_DEBLOCK), config->i_encoding_type > 0);
@@ -477,17 +509,14 @@ void tabs_enable_items(CONFIG *config)
     /* Multithreading */
 #if X264VFW_USE_THREADS
     EnableWindow(GetDlgItem(hTabs[2], IDC_MT_DETERMINISTIC), config->i_threads != 1);
-#if X264_PATCH_THREAD_POOL
-    EnableWindow(GetDlgItem(hTabs[2], IDC_MT_THREAD_QUEUE), config->i_threads != 1);
-    EnableWindow(GetDlgItem(hTabs[2], IDC_MT_THREAD_QUEUE_SPIN), config->i_threads != 1);
-#endif
+    EnableWindow(GetDlgItem(hTabs[2], IDC_MT_SLICED), config->i_threads != 1);
 #endif
 
     /* Config */
     EnableWindow(GetDlgItem(hMainDlg, IDC_CONFIG_CMDLINE), config->b_use_cmdline);
 }
 
-void tabs_update_items(CONFIG *config)
+static void tabs_update_items(CONFIG *config)
 {
     char szTmp[1024];
 
@@ -550,8 +579,8 @@ void tabs_update_items(CONFIG *config)
             SetDlgItemText(hTabs[0], IDC_MAIN_RC_HIGH_LABEL, szTmp);
             SetDlgItemInt(hTabs[0], IDC_MAIN_RC_VAL, config->i_passbitrate, FALSE);
             SendDlgItemMessage(hTabs[0], IDC_MAIN_RC_VAL_SLIDER, TBM_SETRANGEMIN, TRUE, 1);
-            SendDlgItemMessage(hTabs[0], IDC_MAIN_RC_VAL_SLIDER, TBM_SETRANGEMAX, TRUE, X264_BITRATE_MAX);
-            SendDlgItemMessage(hTabs[0], IDC_MAIN_RC_VAL_SLIDER, TBM_SETPOS, TRUE, config->i_passbitrate);
+            SendDlgItemMessage(hTabs[0], IDC_MAIN_RC_VAL_SLIDER, TBM_SETRANGEMAX, TRUE, scale2pos(X264_BITRATE_MAX));
+            SendDlgItemMessage(hTabs[0], IDC_MAIN_RC_VAL_SLIDER, TBM_SETPOS, TRUE, scale2pos(config->i_passbitrate));
             break;
 
         case 4: /* 2 pass */
@@ -567,8 +596,8 @@ void tabs_update_items(CONFIG *config)
             SetDlgItemText(hTabs[0], IDC_MAIN_RC_HIGH_LABEL, szTmp);
             SetDlgItemInt(hTabs[0], IDC_MAIN_RC_VAL, config->i_passbitrate, FALSE);
             SendDlgItemMessage(hTabs[0], IDC_MAIN_RC_VAL_SLIDER, TBM_SETRANGEMIN, TRUE, 1);
-            SendDlgItemMessage(hTabs[0], IDC_MAIN_RC_VAL_SLIDER, TBM_SETRANGEMAX, TRUE, X264_BITRATE_MAX);
-            SendDlgItemMessage(hTabs[0], IDC_MAIN_RC_VAL_SLIDER, TBM_SETPOS, TRUE, config->i_passbitrate);
+            SendDlgItemMessage(hTabs[0], IDC_MAIN_RC_VAL_SLIDER, TBM_SETRANGEMAX, TRUE, scale2pos(X264_BITRATE_MAX));
+            SendDlgItemMessage(hTabs[0], IDC_MAIN_RC_VAL_SLIDER, TBM_SETPOS, TRUE, scale2pos(config->i_passbitrate));
             break;
 
         default:
@@ -633,7 +662,7 @@ void tabs_update_items(CONFIG *config)
 #if X264VFW_USE_VIRTUALDUB_HACK
     CheckDlgButton(hTabs[0], IDC_VFW_VD_HACK, config->b_vd_hack);
 #endif
-#if X264VFW_USE_DECODER
+#if defined(HAVE_FFMPEG) && X264VFW_USE_DECODER
     CheckDlgButton(hTabs[0], IDC_VFW_DISABLE_DECODER, config->b_disable_decoder);
 #endif
 
@@ -685,6 +714,13 @@ void tabs_update_items(CONFIG *config)
     SetDlgItemInt(hTabs[1], IDC_ANALYSIS_KEYINT, config->i_keyint_max, FALSE);
     SendMessage(GetDlgItem(hTabs[1], IDC_ANALYSIS_SCENECUT), EM_LIMITTEXT, 8, 0);
     SetDlgItemInt(hTabs[1], IDC_ANALYSIS_SCENECUT, config->i_scenecut_threshold, FALSE);
+    if (SendMessage(GetDlgItem(hTabs[1], IDC_ANALYSIS_WEIGHTP), CB_GETCOUNT, 0, 0) == 0)
+    {
+        SendDlgItemMessage(hTabs[1], IDC_ANALYSIS_WEIGHTP, CB_ADDSTRING, 0, (LPARAM)"None");
+        SendDlgItemMessage(hTabs[1], IDC_ANALYSIS_WEIGHTP, CB_ADDSTRING, 0, (LPARAM)"Blind");
+        SendDlgItemMessage(hTabs[1], IDC_ANALYSIS_WEIGHTP, CB_ADDSTRING, 0, (LPARAM)"Smart");
+    }
+    SendDlgItemMessage(hTabs[1], IDC_ANALYSIS_WEIGHTP, CB_SETCURSEL, config->i_p_wpred, 0);
     SendMessage(GetDlgItem(hTabs[1], IDC_ANALYSIS_BFRAMES), EM_LIMITTEXT, 8, 0);
     SetDlgItemInt(hTabs[1], IDC_ANALYSIS_BFRAMES, config->i_bframe, FALSE);
     if (SendMessage(GetDlgItem(hTabs[1], IDC_ANALYSIS_B_ADAPT), CB_GETCOUNT, 0, 0) == 0)
@@ -704,7 +740,13 @@ void tabs_update_items(CONFIG *config)
         SendDlgItemMessage(hTabs[1], IDC_ANALYSIS_DIRECT, CB_ADDSTRING, 0, (LPARAM)"Auto");
     }
     SendDlgItemMessage(hTabs[1], IDC_ANALYSIS_DIRECT, CB_SETCURSEL, config->i_direct_mv_pred, 0);
-    CheckDlgButton(hTabs[1], IDC_ANALYSIS_B_PYRAMID, config->b_b_refs);
+    if (SendMessage(GetDlgItem(hTabs[1], IDC_ANALYSIS_B_PYRAMID), CB_GETCOUNT, 0, 0) == 0)
+    {
+        SendDlgItemMessage(hTabs[1], IDC_ANALYSIS_B_PYRAMID, CB_ADDSTRING, 0, (LPARAM)"None");
+        SendDlgItemMessage(hTabs[1], IDC_ANALYSIS_B_PYRAMID, CB_ADDSTRING, 0, (LPARAM)"Strict");
+        SendDlgItemMessage(hTabs[1], IDC_ANALYSIS_B_PYRAMID, CB_ADDSTRING, 0, (LPARAM)"Normal");
+    }
+    SendDlgItemMessage(hTabs[1], IDC_ANALYSIS_B_PYRAMID, CB_SETCURSEL, config->i_b_refs, 0);
     CheckDlgButton(hTabs[1], IDC_ANALYSIS_WEIGHTB, config->b_b_wpred);
 
     /* Encoding */
@@ -716,12 +758,8 @@ void tabs_update_items(CONFIG *config)
     if (SendMessage(GetDlgItem(hTabs[1], IDC_ENC_INTERLACED), CB_GETCOUNT, 0, 0) == 0)
     {
         SendDlgItemMessage(hTabs[1], IDC_ENC_INTERLACED, CB_ADDSTRING, 0, (LPARAM)"Off");
-#if !X264_PATCH_HDR
-        SendDlgItemMessage(hTabs[1], IDC_ENC_INTERLACED, CB_ADDSTRING, 0, (LPARAM)"On");
-#else
         SendDlgItemMessage(hTabs[1], IDC_ENC_INTERLACED, CB_ADDSTRING, 0, (LPARAM)"TFF");
         SendDlgItemMessage(hTabs[1], IDC_ENC_INTERLACED, CB_ADDSTRING, 0, (LPARAM)"BFF");
-#endif
     }
     SendDlgItemMessage(hTabs[1], IDC_ENC_INTERLACED, CB_SETCURSEL, config->i_interlaced, 0);
     CheckDlgButton(hTabs[1], IDC_ENC_CABAC, config->b_cabac);
@@ -796,10 +834,7 @@ void tabs_update_items(CONFIG *config)
     SendMessage(GetDlgItem(hTabs[2], IDC_MT_THREADS), EM_LIMITTEXT, 8, 0);
     SetDlgItemInt(hTabs[2], IDC_MT_THREADS, config->i_threads, FALSE);
     CheckDlgButton(hTabs[2], IDC_MT_DETERMINISTIC, config->b_mt_deterministic);
-#if X264_PATCH_THREAD_POOL
-    SendMessage(GetDlgItem(hTabs[2], IDC_MT_THREAD_QUEUE), EM_LIMITTEXT, 8, 0);
-    SetDlgItemInt(hTabs[2], IDC_MT_THREAD_QUEUE, config->i_thread_queue, FALSE);
-#endif
+    CheckDlgButton(hTabs[2], IDC_MT_SLICED, config->b_mt_sliced);
 #endif
 
     /* VUI */
@@ -855,7 +890,7 @@ void tabs_update_items(CONFIG *config)
 }
 
 /* Assigns tooltips */
-BOOL CALLBACK enum_tooltips(HWND hWnd, LPARAM lParam)
+static BOOL CALLBACK enum_tooltips(HWND hWnd, LPARAM lParam)
 {
     char help[1024];
 
@@ -896,12 +931,15 @@ INT_PTR CALLBACK callback_main(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lPara
 
             b_tabs_updated = FALSE;
 
-            // insert tabs in tab control
+            /* Insert tabs in tab control */
             tie.mask = TCIF_TEXT;
             tie.iImage = -1;
-            tie.pszText = "Main";                    TabCtrl_InsertItem(hTabCtrl, 0, &tie);
-            tie.pszText = "Analysis && Encoding";    TabCtrl_InsertItem(hTabCtrl, 1, &tie);
-            tie.pszText = "Rate control && Other";   TabCtrl_InsertItem(hTabCtrl, 2, &tie);
+            tie.pszText = "Main";
+            TabCtrl_InsertItem(hTabCtrl, 0, &tie);
+            tie.pszText = "Analysis && Encoding";
+            TabCtrl_InsertItem(hTabCtrl, 1, &tie);
+            tie.pszText = "Rate control && Other";
+            TabCtrl_InsertItem(hTabCtrl, 2, &tie);
             hTabs[0] = CreateDialogParam(g_hInst, MAKEINTRESOURCE(IDD_TAB_MAIN),         hMainDlg, (DLGPROC)callback_tabs, lParam);
             hTabs[1] = CreateDialogParam(g_hInst, MAKEINTRESOURCE(IDD_TAB_ANALYSIS_ENC), hMainDlg, (DLGPROC)callback_tabs, lParam);
             hTabs[2] = CreateDialogParam(g_hInst, MAKEINTRESOURCE(IDD_TAB_RC_OTHER),     hMainDlg, (DLGPROC)callback_tabs, lParam);
@@ -922,8 +960,8 @@ INT_PTR CALLBACK callback_main(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lPara
             tabs_update_items(config);
             b_tabs_updated = TRUE;
             SetWindowPos(hTabs[0], hTabCtrl, 0, 0, 0, 0, SWP_NOACTIVATE | SWP_NOMOVE | SWP_NOSIZE);
-            ShowWindow(hTabs[0], SW_SHOW);
-            break;
+            ShowWindow(hTabs[0], SW_SHOWNORMAL);
+            return TRUE;
         }
 
         case WM_NOTIFY:
@@ -947,7 +985,7 @@ INT_PTR CALLBACK callback_main(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lPara
                 SetFocus(hTabCtrl);
                 num = TabCtrl_GetCurSel(hTabCtrl);
                 SetWindowPos(hTabs[num], hTabCtrl, 0, 0, 0, 0, SWP_NOACTIVATE | SWP_NOMOVE | SWP_NOSIZE);
-                ShowWindow(hTabs[num], SW_SHOW);
+                ShowWindow(hTabs[num], SW_SHOWNORMAL);
             }
             else
                 return FALSE;
@@ -1030,14 +1068,14 @@ INT_PTR CALLBACK callback_main(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lPara
     return TRUE;
 }
 
-void CheckControlTextIsNumber(HWND hDlgItem, BOOL bSigned, int iDecimalPlacesNum)
+static void CheckControlTextIsNumber(HWND hDlgItem, int bSigned, int iDecimalPlacesNum)
 {
     char text_old[MAX_PATH];
     char text_new[MAX_PATH];
     char *src, *dest;
     DWORD start, end, num, pos;
-    BOOL bChanged = FALSE;
-    BOOL bCopy = FALSE;
+    int bChanged = FALSE;
+    int bCopy = FALSE;
     int q = !bSigned;
 
     SendMessage(hDlgItem, EM_GETSEL, (WPARAM)&start, (LPARAM)&end);
@@ -1299,12 +1337,20 @@ INT_PTR CALLBACK callback_tabs(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lPara
                             config->i_subpel_refine = SendDlgItemMessage(hTabs[1], IDC_ANALYSIS_SUBME, CB_GETCURSEL, 0, 0);
                             break;
 
+                        case IDC_ANALYSIS_WEIGHTP:
+                            config->i_p_wpred = SendDlgItemMessage(hTabs[1], IDC_ANALYSIS_WEIGHTP, CB_GETCURSEL, 0, 0);
+                            break;
+
                         case IDC_ANALYSIS_B_ADAPT:
                             config->i_bframe_adaptive = SendDlgItemMessage(hTabs[1], IDC_ANALYSIS_B_ADAPT, CB_GETCURSEL, 0, 0);
                             break;
 
                         case IDC_ANALYSIS_DIRECT:
                             config->i_direct_mv_pred = SendDlgItemMessage(hTabs[1], IDC_ANALYSIS_DIRECT, CB_GETCURSEL, 0, 0);
+                            break;
+
+                        case IDC_ANALYSIS_B_PYRAMID:
+                            config->i_b_refs = SendDlgItemMessage(hTabs[1], IDC_ANALYSIS_B_PYRAMID, CB_GETCURSEL, 0, 0);
                             break;
 
                         case IDC_ENC_INTERLACED:
@@ -1414,7 +1460,7 @@ INT_PTR CALLBACK callback_tabs(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lPara
                             break;
 #endif
 
-#if X264VFW_USE_DECODER
+#if defined(HAVE_FFMPEG) && X264VFW_USE_DECODER
                         case IDC_VFW_DISABLE_DECODER:
                             config->b_disable_decoder = IsDlgButtonChecked(hTabs[0], IDC_VFW_DISABLE_DECODER);
                             break;
@@ -1464,10 +1510,6 @@ INT_PTR CALLBACK callback_tabs(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lPara
                             config->b_chroma_me = IsDlgButtonChecked(hTabs[1], IDC_ANALYSIS_CHROMA_ME);
                             break;
 
-                        case IDC_ANALYSIS_B_PYRAMID:
-                            config->b_b_refs = IsDlgButtonChecked(hTabs[1], IDC_ANALYSIS_B_PYRAMID);
-                            break;
-
                         case IDC_ANALYSIS_WEIGHTB:
                             config->b_b_wpred = IsDlgButtonChecked(hTabs[1], IDC_ANALYSIS_WEIGHTB);
                             break;
@@ -1509,6 +1551,10 @@ INT_PTR CALLBACK callback_tabs(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lPara
                         case IDC_MT_DETERMINISTIC:
                             config->b_mt_deterministic = IsDlgButtonChecked(hTabs[2], IDC_MT_DETERMINISTIC);
                             break;
+
+                        case IDC_MT_SLICED:
+                            config->b_mt_sliced = IsDlgButtonChecked(hTabs[2], IDC_MT_SLICED);
+                            break;
 #endif
 
                         default:
@@ -1547,7 +1593,7 @@ INT_PTR CALLBACK callback_tabs(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lPara
                                 case 3:
                                 case 4:
                                     CHECKED_SET_MAX_INT(config->i_passbitrate, hTabs[0], IDC_MAIN_RC_VAL, FALSE, 1, X264_BITRATE_MAX);
-                                    SendDlgItemMessage(hTabs[0], IDC_MAIN_RC_VAL_SLIDER, TBM_SETPOS, TRUE, config->i_passbitrate);
+                                    SendDlgItemMessage(hTabs[0], IDC_MAIN_RC_VAL_SLIDER, TBM_SETPOS, TRUE, scale2pos(config->i_passbitrate));
                                     break;
 
                                 default:
@@ -1587,11 +1633,11 @@ INT_PTR CALLBACK callback_tabs(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lPara
                             break;
 
                         case IDC_ANALYSIS_MIN_KEYINT:
-                            CHECKED_SET_MAX_INT(config->i_keyint_min, hTabs[1], IDC_ANALYSIS_MIN_KEYINT, FALSE, 1, config->i_keyint_max);
+                            CHECKED_SET_MAX_INT(config->i_keyint_min, hTabs[1], IDC_ANALYSIS_MIN_KEYINT, FALSE, 0, config->i_keyint_max);
                             break;
 
                         case IDC_ANALYSIS_KEYINT:
-                            CHECKED_SET_MAX_INT(config->i_keyint_max, hTabs[1], IDC_ANALYSIS_KEYINT, FALSE, config->i_keyint_min, 9999);
+                            CHECKED_SET_MAX_INT(config->i_keyint_max, hTabs[1], IDC_ANALYSIS_KEYINT, FALSE, X264_MAX(config->i_keyint_min, 1), 9999);
                             break;
 
                         case IDC_ANALYSIS_SCENECUT:
@@ -1636,11 +1682,11 @@ INT_PTR CALLBACK callback_tabs(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lPara
                             break;
 
                         case IDC_RC_VBV_MAXRATE:
-                            CHECKED_SET_MAX_INT(config->i_vbv_maxrate, hTabs[2], IDC_RC_VBV_MAXRATE, FALSE, 0, 999999);
+                            CHECKED_SET_MAX_INT(config->i_vbv_maxrate, hTabs[2], IDC_RC_VBV_MAXRATE, FALSE, 0, X264_BITRATE_MAX);
                             break;
 
                         case IDC_RC_VBV_BUFSIZE:
-                            CHECKED_SET_MAX_INT(config->i_vbv_bufsize, hTabs[2], IDC_RC_VBV_BUFSIZE, FALSE, 0, 999999);
+                            CHECKED_SET_MAX_INT(config->i_vbv_bufsize, hTabs[2], IDC_RC_VBV_BUFSIZE, FALSE, 0, X264_BITRATE_MAX);
                             break;
 
                         case IDC_RC_VBV_INIT:
@@ -1648,7 +1694,7 @@ INT_PTR CALLBACK callback_tabs(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lPara
                             break;
 
                         case IDC_RC_QPMIN:
-                            CHECKED_SET_MAX_INT(config->i_qp_min, hTabs[2], IDC_RC_QPMIN, FALSE, 1, config->i_qp_max);
+                            CHECKED_SET_MAX_INT(config->i_qp_min, hTabs[2], IDC_RC_QPMIN, FALSE, 0, config->i_qp_max);
                             break;
 
                         case IDC_RC_QPMAX:
@@ -1694,29 +1740,7 @@ INT_PTR CALLBACK callback_tabs(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lPara
 #if X264VFW_USE_THREADS
                         case IDC_MT_THREADS:
                             CHECKED_SET_MAX_INT(config->i_threads, hTabs[2], IDC_MT_THREADS, FALSE, 0, X264_THREAD_MAX);
-#if !X264_PATCH_THREAD_POOL
                             break;
-#else
-                            if (config->i_thread_queue < config->i_threads && config->i_thread_queue != 0)
-                            {
-                                config->i_thread_queue = 0;
-                                SetDlgItemInt(hTabs[2], IDC_MT_THREAD_QUEUE, config->i_thread_queue, FALSE);
-                            }
-                            break;
-
-                        case IDC_MT_THREAD_QUEUE:
-                            CheckControlTextIsNumber(GetDlgItem(hTabs[2], IDC_MT_THREAD_QUEUE), FALSE, 0);
-                            config->i_thread_queue = GetDlgItemInt(hTabs[2], IDC_MT_THREAD_QUEUE, NULL, FALSE);
-                            if (config->i_thread_queue < config->i_threads && config->i_thread_queue != 0)
-                                config->i_thread_queue = 0;
-                            else if (config->i_thread_queue > X264_THREAD_MAX)
-                            {
-                                config->i_thread_queue = X264_THREAD_MAX;
-                                SetDlgItemInt(hTabs[2], IDC_MT_THREAD_QUEUE, config->i_thread_queue, FALSE);
-                                SendMessage(GetDlgItem(hTabs[2], IDC_MT_THREAD_QUEUE), EM_SETSEL, -2, -2);
-                            }
-                            break;
-#endif
 #endif
 
                         case IDC_VUI_CHROMALOC:
@@ -1756,7 +1780,7 @@ INT_PTR CALLBACK callback_tabs(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lPara
                                 case 3:
                                 case 4:
                                     CHECKED_SET_SHOW_INT(config->i_passbitrate, hTabs[0], IDC_MAIN_RC_VAL, FALSE, 1, X264_BITRATE_MAX);
-                                    SendDlgItemMessage(hTabs[0], IDC_MAIN_RC_VAL_SLIDER, TBM_SETPOS, TRUE, config->i_passbitrate);
+                                    SendDlgItemMessage(hTabs[0], IDC_MAIN_RC_VAL_SLIDER, TBM_SETPOS, TRUE, scale2pos(config->i_passbitrate));
                                     break;
 
                                 default:
@@ -1798,11 +1822,11 @@ INT_PTR CALLBACK callback_tabs(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lPara
                             break;
 
                         case IDC_ANALYSIS_MIN_KEYINT:
-                            CHECKED_SET_SHOW_INT(config->i_keyint_min, hTabs[1], IDC_ANALYSIS_MIN_KEYINT, FALSE, 1, config->i_keyint_max);
+                            CHECKED_SET_SHOW_INT(config->i_keyint_min, hTabs[1], IDC_ANALYSIS_MIN_KEYINT, FALSE, 0, config->i_keyint_max);
                             break;
 
                         case IDC_ANALYSIS_KEYINT:
-                            CHECKED_SET_SHOW_INT(config->i_keyint_max, hTabs[1], IDC_ANALYSIS_KEYINT, FALSE, config->i_keyint_min, 9999);
+                            CHECKED_SET_SHOW_INT(config->i_keyint_max, hTabs[1], IDC_ANALYSIS_KEYINT, FALSE, X264_MAX(config->i_keyint_min, 1), 9999);
                             break;
 
                         case IDC_ANALYSIS_SCENECUT:
@@ -1848,11 +1872,11 @@ INT_PTR CALLBACK callback_tabs(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lPara
                             break;
 
                         case IDC_RC_VBV_MAXRATE:
-                            CHECKED_SET_SHOW_INT(config->i_vbv_maxrate, hTabs[2], IDC_RC_VBV_MAXRATE, FALSE, 0, 999999);
+                            CHECKED_SET_SHOW_INT(config->i_vbv_maxrate, hTabs[2], IDC_RC_VBV_MAXRATE, FALSE, 0, X264_BITRATE_MAX);
                             break;
 
                         case IDC_RC_VBV_BUFSIZE:
-                            CHECKED_SET_SHOW_INT(config->i_vbv_bufsize, hTabs[2], IDC_RC_VBV_BUFSIZE, FALSE, 0, 999999);
+                            CHECKED_SET_SHOW_INT(config->i_vbv_bufsize, hTabs[2], IDC_RC_VBV_BUFSIZE, FALSE, 0, X264_BITRATE_MAX);
                             break;
 
                         case IDC_RC_VBV_INIT:
@@ -1860,7 +1884,7 @@ INT_PTR CALLBACK callback_tabs(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lPara
                             break;
 
                         case IDC_RC_QPMIN:
-                            CHECKED_SET_SHOW_INT(config->i_qp_min, hTabs[2], IDC_RC_QPMIN, FALSE, 1, config->i_qp_max);
+                            CHECKED_SET_SHOW_INT(config->i_qp_min, hTabs[2], IDC_RC_QPMIN, FALSE, 0, config->i_qp_max);
                             break;
 
                         case IDC_RC_QPMAX:
@@ -1906,26 +1930,7 @@ INT_PTR CALLBACK callback_tabs(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lPara
 #if X264VFW_USE_THREADS
                         case IDC_MT_THREADS:
                             CHECKED_SET_SHOW_INT(config->i_threads, hTabs[2], IDC_MT_THREADS, FALSE, 0, X264_THREAD_MAX);
-#if !X264_PATCH_THREAD_POOL
                             break;
-#else
-                            if (config->i_thread_queue < config->i_threads && config->i_thread_queue != 0)
-                            {
-                                config->i_thread_queue = 0;
-                                SetDlgItemInt(hTabs[2], IDC_MT_THREAD_QUEUE, config->i_thread_queue, FALSE);
-                            }
-                            break;
-
-                        case IDC_MT_THREAD_QUEUE:
-                            CheckControlTextIsNumber(GetDlgItem(hTabs[2], IDC_MT_THREAD_QUEUE), FALSE, 0);
-                            config->i_thread_queue = GetDlgItemInt(hTabs[2], IDC_MT_THREAD_QUEUE, NULL, FALSE);
-                            if (config->i_thread_queue < config->i_threads && config->i_thread_queue != 0)
-                                config->i_thread_queue = 0;
-                            else if (config->i_thread_queue > X264_THREAD_MAX)
-                                config->i_thread_queue = X264_THREAD_MAX;
-                            SetDlgItemInt(hTabs[2], IDC_MT_THREAD_QUEUE, config->i_thread_queue, FALSE);
-                            break;
-#endif
 #endif
 
                         case IDC_VUI_CHROMALOC:
@@ -2004,7 +2009,7 @@ INT_PTR CALLBACK callback_tabs(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lPara
                     break;
 
                 case IDC_RC_QPMIN_SPIN:
-                    config->i_qp_min = X264_CLIP(config->i_qp_min - lpnmud->iDelta, 1, config->i_qp_max);
+                    config->i_qp_min = X264_CLIP(config->i_qp_min - lpnmud->iDelta, 0, config->i_qp_max);
                     SetDlgItemInt(hTabs[2], IDC_RC_QPMIN, config->i_qp_min, FALSE);
                     break;
 
@@ -2027,25 +2032,7 @@ INT_PTR CALLBACK callback_tabs(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lPara
                 case IDC_MT_THREADS_SPIN:
                     config->i_threads = X264_CLIP(config->i_threads - lpnmud->iDelta, 0, X264_THREAD_MAX);
                     SetDlgItemInt(hTabs[2], IDC_MT_THREADS, config->i_threads, FALSE);
-#if !X264_PATCH_THREAD_POOL
                     break;
-#else
-                    if (config->i_thread_queue < config->i_threads && config->i_thread_queue != 0)
-                    {
-                        config->i_thread_queue = 0;
-                        SetDlgItemInt(hTabs[2], IDC_MT_THREAD_QUEUE, config->i_thread_queue, FALSE);
-                    }
-                    break;
-
-                case IDC_MT_THREAD_QUEUE_SPIN:
-                    if (config->i_thread_queue == 0 && config->i_threads > 0)
-                        config->i_thread_queue = config->i_threads - 1;
-                    config->i_thread_queue = X264_CLIP(config->i_thread_queue - lpnmud->iDelta, 0, X264_THREAD_MAX);
-                    if (config->i_thread_queue < config->i_threads && config->i_thread_queue != 0)
-                        config->i_thread_queue = 0;
-                    SetDlgItemInt(hTabs[2], IDC_MT_THREAD_QUEUE, config->i_thread_queue, FALSE);
-                    break;
-#endif
 #endif
 
                 case IDC_VUI_CHROMALOC_SPIN:
@@ -2079,7 +2066,8 @@ INT_PTR CALLBACK callback_tabs(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lPara
 
                     case 3:
                     case 4:
-                        config->i_passbitrate = SendDlgItemMessage(hTabs[0], IDC_MAIN_RC_VAL_SLIDER, TBM_GETPOS, 0, 0);
+                        config->i_passbitrate = pos2scale(SendDlgItemMessage(hTabs[0], IDC_MAIN_RC_VAL_SLIDER, TBM_GETPOS, 0, 0));
+                        config->i_passbitrate = X264_CLIP(config->i_passbitrate, 1, X264_BITRATE_MAX);
                         SetDlgItemInt(hTabs[0], IDC_MAIN_RC_VAL, config->i_passbitrate, FALSE);
                         break;
 
@@ -2111,7 +2099,7 @@ INT_PTR CALLBACK callback_about(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lPar
 
             sprintf(temp, "Build date: %s %s\nlibx264 core %d%s", __DATE__, __TIME__, X264_BUILD, X264_VERSION);
             SetDlgItemText(hDlg, IDC_ABOUT_BUILD_LABEL, temp);
-            break;
+            return TRUE;
         }
 
         case WM_COMMAND:
@@ -2144,7 +2132,7 @@ INT_PTR CALLBACK callback_err_console(HWND hWnd, UINT uMsg, WPARAM wParam, LPARA
     switch (uMsg)
     {
         case WM_INITDIALOG:
-            break;
+            return FALSE;
 
         case WM_COMMAND:
             if (HIWORD(wParam) == BN_CLICKED)
@@ -2153,7 +2141,7 @@ INT_PTR CALLBACK callback_err_console(HWND hWnd, UINT uMsg, WPARAM wParam, LPARA
                 {
                     case IDOK:
                     case IDCANCEL:
-                        DestroyWindow(hWnd);
+                        ShowWindow(hWnd, SW_HIDE);
                         break;
 
                     case IDC_ERRCONSOLE_COPYCLIP:
@@ -2189,7 +2177,7 @@ INT_PTR CALLBACK callback_err_console(HWND hWnd, UINT uMsg, WPARAM wParam, LPARA
                                 memcpy(buffer, &msg_buf, strlen(msg_buf));
                                 buffer += strlen(msg_buf);
                             }
-                            *buffer = 0; /* null-terminate the buffer */
+                            *buffer = 0; /* NULL-terminate the buffer */
 
                             GlobalUnlock(clipbuffer);
                             SetClipboardData(CF_TEXT, clipbuffer);

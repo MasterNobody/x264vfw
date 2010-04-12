@@ -6,7 +6,7 @@
  *
  * Authors: Justin Clay
  *          Laurent Aimar <fenrir@via.ecp.fr>
- *          Anton Mitrofanov (a.k.a. BugMaster)
+ *          Anton Mitrofanov <BugMaster@narod.ru>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -26,54 +26,25 @@
 #ifndef X264VFW_X264VFW_H
 #define X264VFW_X264VFW_H
 
-#include "x264vfw_config.h"
-
-#include <stdlib.h>
-#include <string.h>
-#include <stdint.h>
-
-#include <windows.h>
+#include "common.h"
 #include <vfw.h>
 
-#include <x264.h>
-#if X264VFW_USE_DECODER
-#include <avcodec.h>
-#include <avutil.h>
-#include <swscale.h>
+#if defined(HAVE_FFMPEG)
+#include <libavformat/avformat.h>
+#include <libavcodec/avcodec.h>
+#include <libavutil/avutil.h>
+#include <libswscale/swscale.h>
 #endif
 
 #include "csp.h"
+#include "muxers.h"
 #include "resource.h"
-
-#ifdef _MSC_VER
-#define inline __inline
-#endif
-
-#if defined(__GNUC__) && (__GNUC__ > 3 || __GNUC__ == 3 && __GNUC_MINOR__ > 0)
-#define UNUSED __attribute__((unused))
-#define ALWAYS_INLINE __attribute__((always_inline)) inline
-#define NOINLINE __attribute__((noinline))
-#else
-#define UNUSED
-#define ALWAYS_INLINE inline
-#define NOINLINE
-#endif
-
-#if defined(__GNUC__) && (__GNUC__ > 4 || __GNUC__ == 4 && __GNUC_MINOR__>1)
-#define attribute_align_arg __attribute__((force_align_arg_pointer))
-#else
-#define attribute_align_arg
-#endif
-
-#define X264_MAX(a, b) (((a)>(b)) ? (a) : (b))
-#define X264_MIN(a, b) (((a)<(b)) ? (a) : (b))
-#define X264_CLIP(v, min, max) (((v)<(min)) ? (min) : ((v)>(max)) ? (max) : (v))
 
 /* Name */
 #define X264_NAME_L     L"x264vfw"
 #define X264_DESC_L     L"x264vfw - H.264/MPEG-4 AVC codec"
 
-/* Codec fcc */
+/* Codec FourCC */
 #define FOURCC_X264 mmioFOURCC('X','2','6','4')
 
 /* YUV 4:2:0 planar */
@@ -82,25 +53,27 @@
 #define FOURCC_YV12 mmioFOURCC('Y','V','1','2')
 
 /* YUV 4:2:2 packed */
-#define FOURCC_YUY2 mmioFOURCC('Y','U','Y','2')
 #define FOURCC_YUYV mmioFOURCC('Y','U','Y','V')
+#define FOURCC_YUY2 mmioFOURCC('Y','U','Y','2')
+#define FOURCC_UYVY mmioFOURCC('U','Y','V','Y')
+#define FOURCC_HDYC mmioFOURCC('H','D','Y','C')
 
 #define X264VFW_WEBSITE "http://sourceforge.net/projects/x264vfw/"
 
 /* Limits */
-#define X264_BITRATE_MAX 20000
+#define X264_BITRATE_MAX 999999
 #define X264_QUANT_MAX   51
 #define X264_BFRAME_MAX  16
 #define X264_THREAD_MAX  128
 
-#define MAX_STATS_PATH   (MAX_PATH - 5) // -5 because x264 add ".temp" for temp file
+#define MAX_STATS_PATH   (MAX_PATH - 5) /* -5 because x264 add ".temp" for temp file */
 #define MAX_STATS_SIZE   X264_MAX(MAX_STATS_PATH, MAX_PATH)
 #define MAX_CMDLINE      4096
 #define MAX_ZONES_SIZE   4096
 
 typedef char fourcc_str[4 + 1];
 
-/* CONFIG: vfw config */
+/* CONFIG: VFW config */
 typedef struct
 {
     int b_save;
@@ -111,9 +84,9 @@ typedef struct
     int i_rf_constant;  /* 1pass VBR, nominal QP */
     int i_passbitrate;
     int i_pass;
-    int b_fast1pass;    /* turns off some flags during 1st pass */
-    int b_createstats;  /* creates the statsfile in single pass mode */
-    int b_updatestats;  /* updates the statsfile during 2nd pass */
+    int b_fast1pass;    /* Turns off some flags during 1st pass */
+    int b_createstats;  /* Creates the statsfile in single pass mode */
+    int b_updatestats;  /* Updates the statsfile during 2nd pass */
     char stats[MAX_STATS_SIZE];
     char extra_cmdline[MAX_CMDLINE];
 
@@ -130,11 +103,11 @@ typedef struct
 
     /* VFW */
     int i_fcc_num;
-    fourcc_str fcc;     /* fourcc used */
+    fourcc_str fcc;     /* FourCC used */
 #if X264VFW_USE_VIRTUALDUB_HACK
     int b_vd_hack;
 #endif
-#if X264VFW_USE_DECODER
+#if defined(HAVE_FFMPEG) && X264VFW_USE_DECODER
     int b_disable_decoder;
 #endif
 
@@ -158,11 +131,12 @@ typedef struct
     int i_keyint_min;
     int i_keyint_max;
     int i_scenecut_threshold;
+    int i_p_wpred;
     int i_bframe;
     int i_bframe_adaptive;
     int i_bframe_bias;
     int i_direct_mv_pred;
-    int b_b_refs;
+    int i_b_refs;
     int b_b_wpred;
 
     /* Encoding */
@@ -203,9 +177,7 @@ typedef struct
 #if X264VFW_USE_THREADS
     int i_threads;
     int b_mt_deterministic;
-#if X264_PATCH_THREAD_POOL
-    int i_thread_queue;
-#endif
+    int b_mt_sliced;
 #endif
 
     /* VUI */
@@ -222,7 +194,7 @@ typedef struct
     char cmdline[MAX_CMDLINE];
 } CONFIG;
 
-/* CODEC: vfw codec instance */
+/* CODEC: VFW codec instance */
 typedef struct
 {
     CONFIG config;
@@ -235,13 +207,14 @@ typedef struct
     /* x264 handle */
     x264_t *h;
 
-    /* log console handle */
+    /* Log console handle */
     HWND hCons;
-    BOOL b_visible;
+    int b_visible;
 
 #if X264VFW_USE_BUGGY_APPS_HACK
     BITMAPINFOHEADER *prev_lpbiOutput;
     DWORD prev_output_biSizeImage;
+    int b_check_size;
 #endif
 #if X264VFW_USE_VIRTUALDUB_HACK
     int b_use_vd_hack;
@@ -249,11 +222,16 @@ typedef struct
 #endif
     int b_no_output;
     int i_frame_remain;
+    int b_encoder_error;
 
-    x264_csp_function_t csp;
+    x264vfw_csp_function_t csp;
     x264_picture_t conv_pic;
 
-#if X264VFW_USE_DECODER
+    int b_cli_output;
+    cli_output_t cli_output;
+    hnd_t cli_hout;
+
+#if defined(HAVE_FFMPEG) && X264VFW_USE_DECODER
     int               decoder_enabled;
     AVCodec           *decoder;
     AVCodecContext    *decoder_context;
@@ -278,7 +256,7 @@ LRESULT compress_end(CODEC *);
 LRESULT compress_frames_info(CODEC *, ICCOMPRESSFRAMES *);
 void default_compress_frames_info(CODEC *);
 
-#if X264VFW_USE_DECODER
+#if defined(HAVE_FFMPEG) && X264VFW_USE_DECODER
 /* Decompress functions */
 LRESULT decompress_get_format(CODEC *, BITMAPINFO *, BITMAPINFO *);
 LRESULT decompress_query(CODEC *, BITMAPINFO *, BITMAPINFO *);
@@ -290,10 +268,12 @@ LRESULT decompress_end(CODEC *);
 /* Log functions */
 void x264_log_vfw_create(CODEC *codec);
 void x264_log_vfw_destroy(CODEC *codec);
+void x264vfw_log(CODEC *codec, int i_level, const char *psz_fmt, ...);
 
 /* Config functions */
 void config_reg_load(CONFIG *config);
 void config_reg_save(CONFIG *config);
+void config_defaults(CONFIG *config);
 
 /* Dialog callbacks */
 INT_PTR CALLBACK callback_main (HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lParam);
@@ -316,30 +296,5 @@ static const fourcc_str fcc_str_table[] =
     "avc1\0",
     "VSSH\0"
 };
-
-#ifdef _DEBUG
-#include <stdio.h> /* vsprintf */
-#define DPRINTF_BUF_SZ 1024
-static inline void DPRINTF(const char *fmt, ...)
-{
-    va_list args;
-    char buf[DPRINTF_BUF_SZ];
-
-    va_start(args, fmt);
-    vsprintf(buf, fmt, args);
-    va_end(args);
-    OutputDebugString(buf);
-}
-static inline void DVPRINTF(const char *fmt, va_list args)
-{
-    char buf[DPRINTF_BUF_SZ];
-
-    vsprintf(buf, fmt, args);
-    OutputDebugString(buf);
-}
-#else
-static inline void DPRINTF(const char *fmt, ...) { }
-static inline void DVPRINTF(const char *fmt, va_list args) {}
-#endif
 
 #endif

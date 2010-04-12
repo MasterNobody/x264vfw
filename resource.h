@@ -9,7 +9,7 @@
 #define IDD_CONFIG                      103
 #define IDD_TAB_MAIN                    104
 #define IDB_X264_LOGO                   105
-#if X264VFW_USE_DECODER
+#if defined(HAVE_FFMPEG)
 #define IDB_FFMPEG_LOGO                 106
 #endif
 #define IDD_TAB_ANALYSIS_ENC            107
@@ -45,7 +45,7 @@
 #if X264VFW_USE_VIRTUALDUB_HACK
 #define IDC_VFW_VD_HACK                 1028
 #endif
-#if X264VFW_USE_DECODER
+#if defined(HAVE_FFMPEG) && X264VFW_USE_DECODER
 #define IDC_VFW_DISABLE_DECODER         1029
 #endif
 #define IDC_ANALYSIS_8X8DCT             1030
@@ -70,6 +70,7 @@
 #define IDC_ANALYSIS_KEYINT             1049
 #define IDC_ANALYSIS_SCENECUT           1050
 #define IDC_ANALYSIS_SCENECUT_SPIN      1051
+#define IDC_ANALYSIS_WEIGHTP            1052
 #define IDC_ANALYSIS_BFRAMES            1053
 #define IDC_ANALYSIS_BFRAMES_SPIN       1054
 #define IDC_ANALYSIS_B_ADAPT            1055
@@ -120,10 +121,7 @@
 #define IDC_MT_THREADS                  1101
 #define IDC_MT_THREADS_SPIN             1102
 #define IDC_MT_DETERMINISTIC            1103
-#if X264_PATCH_THREAD_POOL
-#define IDC_MT_THREAD_QUEUE             1104
-#define IDC_MT_THREAD_QUEUE_SPIN        1105
-#endif
+#define IDC_MT_SLICED                   1104
 #endif
 #define IDC_VUI_OVERSCAN                1106
 #define IDC_VUI_VIDEOFORMAT             1107

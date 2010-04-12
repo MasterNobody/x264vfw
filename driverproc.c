@@ -6,7 +6,7 @@
  *
  * Authors: Justin Clay
  *          Laurent Aimar <fenrir@via.ecp.fr>
- *          Anton Mitrofanov (a.k.a. BugMaster)
+ *          Anton Mitrofanov <BugMaster@narod.ru>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -63,15 +63,15 @@ BOOL WINAPI DllMain(HANDLE hModule, DWORD ul_reason_for_call, LPVOID lpReserved)
     return TRUE;
 }
 
-#if X264VFW_USE_DECODER
-static void log_callback(void* ptr, int level, const char* fmt, va_list vl)
+#if defined(HAVE_FFMPEG)
+static void log_callback(void *ptr, int level, const char *fmt, va_list vl)
 {
     if (level <= av_log_get_level())
         DVPRINTF(fmt, vl);
 }
 #endif
 
-/* This little puppy handles the calls which vfw programs send out to the codec */
+/* This little puppy handles the calls which VFW programs send out to the codec */
 LRESULT WINAPI attribute_align_arg DriverProc(DWORD_PTR dwDriverId, HDRVR hDriver, UINT uMsg, LPARAM lParam1, LPARAM lParam2)
 {
     CODEC *codec = (CODEC *)dwDriverId;
@@ -79,7 +79,7 @@ LRESULT WINAPI attribute_align_arg DriverProc(DWORD_PTR dwDriverId, HDRVR hDrive
     switch (uMsg)
     {
         case DRV_LOAD:
-#if X264VFW_USE_DECODER
+#if defined(HAVE_FFMPEG)
             avcodec_init();
             avcodec_register_all();
             av_log_set_callback(log_callback);
@@ -105,7 +105,7 @@ LRESULT WINAPI attribute_align_arg DriverProc(DWORD_PTR dwDriverId, HDRVR hDrive
 
             memset(codec, 0, sizeof(CODEC));
             config_reg_load(&codec->config);
-#if X264VFW_USE_DECODER
+#if defined(HAVE_FFMPEG) && X264VFW_USE_DECODER
             codec->decoder_enabled = !codec->config.b_disable_decoder;
 #endif
             default_compress_frames_info(codec);
@@ -118,7 +118,7 @@ LRESULT WINAPI attribute_align_arg DriverProc(DWORD_PTR dwDriverId, HDRVR hDrive
         case DRV_CLOSE:
             /* From xvid: compress_end/decompress_end don't always get called */
             compress_end(codec);
-#if X264VFW_USE_DECODER
+#if defined(HAVE_FFMPEG) && X264VFW_USE_DECODER
             decompress_end(codec);
 #endif
             x264_log_vfw_destroy(codec);
@@ -149,7 +149,7 @@ LRESULT WINAPI attribute_align_arg DriverProc(DWORD_PTR dwDriverId, HDRVR hDrive
                 return ICERR_BADSIZE;
             memcpy((void *)lParam1, &codec->config, sizeof(CONFIG));
             /* Reset params that don't need saving */
-            ((CONFIG *)lParam1)->b_save = 0;
+            ((CONFIG *)lParam1)->b_save = FALSE;
             return ICERR_OK;
 
         case ICM_SETSTATE:
@@ -175,13 +175,17 @@ LRESULT WINAPI attribute_align_arg DriverProc(DWORD_PTR dwDriverId, HDRVR hDrive
             icinfo->fccType      = ICTYPE_VIDEO;
             icinfo->fccHandler   = FOURCC_X264;
             icinfo->dwFlags      = VIDCF_COMPRESSFRAMES | VIDCF_FASTTEMPORALC;
-#if X264VFW_USE_DECODER
+#if defined(HAVE_FFMPEG) && X264VFW_USE_DECODER
             /* ICM_GETINFO may be called before DRV_OPEN so 'codec' can point to NULL */
             if (!codec || codec->decoder_enabled)
                 icinfo->dwFlags |= VIDCF_FASTTEMPORALD;
 #endif
             icinfo->dwVersion    = 0;
+#ifdef ICVERSION
             icinfo->dwVersionICM = ICVERSION;
+#else
+            icinfo->dwVersionICM = 0x0104; /* MinGW's vfw.h doesn't define ICVERSION for some weird reason */
+#endif
             wcscpy(icinfo->szName, X264_NAME_L);
             wcscpy(icinfo->szDescription, X264_DESC_L);
 
@@ -242,7 +246,7 @@ LRESULT WINAPI attribute_align_arg DriverProc(DWORD_PTR dwDriverId, HDRVR hDrive
         case ICM_COMPRESS_FRAMES_INFO:
             return compress_frames_info(codec, (ICCOMPRESSFRAMES *)lParam1);
 
-#if X264VFW_USE_DECODER
+#if defined(HAVE_FFMPEG) && X264VFW_USE_DECODER
         /* Decompressor */
         case ICM_DECOMPRESS_GET_FORMAT:
             if (codec->decoder_enabled)
