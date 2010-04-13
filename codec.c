@@ -1007,7 +1007,7 @@ LRESULT compress_begin(CODEC *codec, BITMAPINFO *lpbiInput, BITMAPINFO *lpbiOutp
         if (config->i_encoding_type > 0 && config->i_bframe > 0 && config->b_bsub16x16)
             param.analyse.inter |= X264_ANALYSE_BSUB16x16;
 
-        param.analyse.b_transform_8x8 = config->i_encoding_type > 0 && config->b_dct8x8;
+        param.analyse.b_transform_8x8 = (config->i_encoding_type > 0 || config->b_cabac) && config->b_dct8x8;
         param.analyse.i_weighted_pred = config->i_p_wpred;
         param.analyse.b_weighted_bipred = config->i_encoding_type > 0 && config->i_bframe > 0 && config->b_b_wpred;
         param.analyse.i_direct_mv_pred = config->i_encoding_type > 0 && config->i_bframe > 0 ? config->i_direct_mv_pred : 0;
@@ -1098,10 +1098,13 @@ LRESULT compress_begin(CODEC *codec, BITMAPINFO *lpbiInput, BITMAPINFO *lpbiOutp
                         param.analyse.inter = 0;
                         param.analyse.b_transform_8x8 = FALSE;
                         param.analyse.i_me_method = X264_ME_DIA;
-                        param.analyse.i_subpel_refine = X264_MIN(2, param.analyse.i_subpel_refine); /* subme=1 may lead for significant quality decrease */
+                        param.analyse.i_subpel_refine = X264_MIN(2, param.analyse.i_subpel_refine); /* subme=1 may lead to significant quality decrease */
                         param.analyse.b_chroma_me = FALSE;
                         param.analyse.b_mixed_references = FALSE;
+                        param.analyse.i_trellis = 0;
+                        param.analyse.b_fast_pskip = TRUE;
                         param.analyse.f_psy_rd = 0.0;
+                        param.analyse.f_psy_trellis = 0.0;
                     }
                 }
                 else
