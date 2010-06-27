@@ -442,9 +442,9 @@ static void name( x264_image_t *img_dst, x264_image_t *img_src, \
     }                                                           \
 }
 
-RGB_TO_I420( rgb_to_i420,  0, 1, 2, 3 );
-RGB_TO_I420( bgr_to_i420,  2, 1, 0, 3 );
-RGB_TO_I420( bgra_to_i420, 2, 1, 0, 4 );
+RGB_TO_I420( rgb_to_i420,  0, 1, 2, 3 )
+RGB_TO_I420( bgr_to_i420,  2, 1, 0, 3 )
+RGB_TO_I420( bgra_to_i420, 2, 1, 0, 4 )
 
 void x264vfw_csp_init( x264vfw_csp_function_t *pf, int i_x264_csp )
 {

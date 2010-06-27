@@ -31,6 +31,81 @@
 #define _GNU_SOURCE
 #include <getopt.h>
 
+const named_str_t preset_table[COUNT_PRESET] =
+{
+    { "Ultrafast", "ultrafast" },
+    { "Superfast", "superfast" },
+    { "Veryfast",  "veryfast"  },
+    { "Faster",    "faster"    },
+    { "Fast",      "fast"      },
+    { "Medium",    "medium"    },
+    { "Slow",      "slow"      },
+    { "Slower",    "slower"    },
+    { "Veryslow",  "veryslow"  },
+    { "Placebo",   "placebo"   }
+};
+
+const named_str_t tune_table[COUNT_TUNE] =
+{
+    { "None",        ""           },
+    { "Film",        "film"       },
+    { "Animation",   "animation"  },
+    { "Grain",       "grain"      },
+    { "Still image", "stillimage" },
+    { "PSNR",        "psnr"       },
+    { "SSIM",        "ssim"       }
+};
+
+const named_str_t profile_table[COUNT_PROFILE] =
+{
+    { "Auto",     ""         },
+    { "Baseline", "baseline" },
+    { "Main",     "main"     },
+    { "High",     "high"     }
+};
+
+const named_int_t level_table[COUNT_LEVEL] =
+{
+    { "Auto", -1 },
+    { "1.0",  10 },
+    { "1.1",  11 },
+    { "1.2",  12 },
+    { "1.3",  13 },
+    { "2.0",  20 },
+    { "2.1",  21 },
+    { "2.2",  22 },
+    { "3.0",  30 },
+    { "3.1",  31 },
+    { "3.2",  32 },
+    { "4.0",  40 },
+    { "4.1",  41 },
+    { "4.2",  42 },
+    { "5.0",  50 },
+    { "5.1",  51 }
+};
+
+const named_fourcc_t fourcc_table[COUNT_FOURCC] =
+{
+    { "H264", mmioFOURCC('H','2','6','4') },
+    { "h264", mmioFOURCC('h','2','6','4') },
+    { "X264", mmioFOURCC('X','2','6','4') },
+    { "x264", mmioFOURCC('x','2','6','4') },
+    { "AVC1", mmioFOURCC('A','V','C','1') },
+    { "avc1", mmioFOURCC('a','v','c','1') },
+    { "VSSH", mmioFOURCC('V','S','S','H') }
+};
+
+const char * const muxer_names[] =
+{
+    "auto",
+    "raw",
+    "mkv",
+    "flv",
+    "mp4",
+    "avi",
+    NULL
+};
+
 /* Return a valid x264 colorspace or X264VFW_CSP_NONE if it is not supported */
 static int get_csp(BITMAPINFOHEADER *hdr)
 {
@@ -142,10 +217,10 @@ static int x264vfw_picture_get_size(enum PixelFormat pix_fmt, int width, int hei
 static int supported_fourcc(DWORD fourcc)
 {
     int i;
-    for (i = 0; i < sizeof(fcc_str_table) / sizeof(fourcc_str); i++)
-        if (fourcc == mmioFOURCC(fcc_str_table[i][0], fcc_str_table[i][1], fcc_str_table[i][2], fcc_str_table[i][3]))
-            return 1;
-    return 0;
+    for (i = 0; i < COUNT_FOURCC; i++)
+        if (fourcc == fourcc_table[i].value)
+            return TRUE;
+    return FALSE;
 }
 
 /* Return the output format of the compressed data */
@@ -177,7 +252,9 @@ LRESULT compress_get_format(CODEC *codec, BITMAPINFO *lpbiInput, BITMAPINFO *lpb
     outhdr->biHeight      = iHeight;
     outhdr->biPlanes      = 1;
     outhdr->biBitCount    = 24;
-    outhdr->biCompression = mmioFOURCC(config->fcc[0], config->fcc[1], config->fcc[2], config->fcc[3]);
+    outhdr->biCompression = config->i_fourcc >= 0 && config->i_fourcc < COUNT_FOURCC
+                            ? fourcc_table[config->i_fourcc].value
+                            : fourcc_table[0].value;
     outhdr->biSizeImage   = compress_get_size(codec, lpbiInput, lpbiOutput);
 
     return ICERR_OK;
@@ -229,7 +306,7 @@ void x264_log_vfw_create(CODEC *codec)
 {
     x264_log_vfw_destroy(codec);
     if (codec->config.i_log_level > 0)
-        codec->hCons = CreateDialog(g_hInst, MAKEINTRESOURCE(IDD_ERRCONSOLE), GetDesktopWindow(), callback_err_console);
+        codec->hCons = CreateDialog(g_hInst, MAKEINTRESOURCE(IDD_LOG), GetDesktopWindow(), callback_log);
 }
 
 void x264_log_vfw_destroy(CODEC *codec)
@@ -244,7 +321,7 @@ void x264_log_vfw_destroy(CODEC *codec)
 
 static void x264_log_vfw(void *p_private, int i_level, const char *psz_fmt, va_list arg)
 {
-    char  error_msg[1024];
+    char  msg[1024];
     int   idx;
     CODEC *codec = p_private;
     char  *psz_prefix;
@@ -275,13 +352,13 @@ static void x264_log_vfw(void *p_private, int i_level, const char *psz_fmt, va_l
             psz_prefix = "unknown";
             break;
     }
-    sprintf(error_msg, "x264vfw [%s]: ", psz_prefix);
-    vsprintf(error_msg+strlen(error_msg), psz_fmt, arg);
+    sprintf(msg, "x264vfw [%s]: ", psz_prefix);
+    vsprintf(msg+strlen(msg), psz_fmt, arg);
 
     /* Strip final linefeeds (required) */
-    idx = strlen(error_msg) - 1;
-    while (idx >= 0 && error_msg[idx] == '\n')
-        error_msg[idx--] = 0;
+    idx = strlen(msg) - 1;
+    while (idx >= 0 && (msg[idx] == '\n' || msg[idx] == '\r'))
+        msg[idx--] = 0;
 
     if (codec->hCons)
     {
@@ -290,8 +367,8 @@ static void x264_log_vfw(void *p_private, int i_level, const char *psz_fmt, va_l
             ShowWindow(codec->hCons, SW_SHOWNORMAL);
             codec->b_visible = TRUE;
         }
-        h_console = GetDlgItem(codec->hCons, IDC_ERRCONSOLE_CONSOLE);
-        idx = SendMessage(h_console, LB_ADDSTRING, 0, (LPARAM)&error_msg);
+        h_console = GetDlgItem(codec->hCons, LOG_IDC_CONSOLE);
+        idx = SendMessage(h_console, LB_ADDSTRING, 0, (LPARAM)msg);
 
         /* Make sure that the last added item is visible (autoscroll) */
         if (idx >= 0)
@@ -303,9 +380,9 @@ static void x264_log_vfw(void *p_private, int i_level, const char *psz_fmt, va_l
             HFONT hfntDefault;
             SIZE  sz;
 
-            strcat(error_msg, "X"); /* Otherwise item may be clipped */
+            strcat(msg, "X"); /* Otherwise item may be clipped */
             hfntDefault = SelectObject(hdc, (HFONT)SendMessage(h_console, WM_GETFONT, 0, 0));
-            GetTextExtentPoint32(hdc, error_msg, strlen(error_msg), &sz);
+            GetTextExtentPoint32(hdc, msg, strlen(msg), &sz);
             if (sz.cx > SendMessage(h_console, LB_GETHORIZONTALEXTENT, 0, 0))
                 SendMessage(h_console, LB_SETHORIZONTALEXTENT, (WPARAM)sz.cx, 0);
             SelectObject(hdc, hfntDefault);
@@ -329,32 +406,34 @@ void x264vfw_log(CODEC *codec, int i_level, const char *psz_fmt, ...)
     va_end(arg);
 }
 
-#define OPT_FRAMES 256
-#define OPT_SEEK 257
-#define OPT_QPFILE 258
-#define OPT_THREAD_INPUT 259
-#define OPT_QUIET 260
-#define OPT_NOPROGRESS 261
-#define OPT_VISUALIZE 262
-#define OPT_LONGHELP 263
-#define OPT_PROFILE 264
-#define OPT_PRESET 265
-#define OPT_TUNE 266
-#define OPT_SLOWFIRSTPASS 267
-#define OPT_FULLHELP 268
-#define OPT_FPS 269
-#define OPT_MUXER 270
-#define OPT_DEMUXER 271
-#define OPT_INDEX 272
-#define OPT_INTERLACED 273
-#define OPT_TCFILE_IN 274
-#define OPT_TCFILE_OUT 275
-#define OPT_TIMEBASE 276
-#define OPT_PULLDOWN 277
+enum {
+    OPT_FRAMES = 256,
+    OPT_SEEK,
+    OPT_QPFILE,
+    OPT_THREAD_INPUT,
+    OPT_QUIET,
+    OPT_NOPROGRESS,
+    OPT_VISUALIZE,
+    OPT_LONGHELP,
+    OPT_PROFILE,
+    OPT_PRESET,
+    OPT_TUNE,
+    OPT_SLOWFIRSTPASS,
+    OPT_FULLHELP,
+    OPT_FPS,
+    OPT_MUXER,
+    OPT_DEMUXER,
+    OPT_INDEX,
+    OPT_INTERLACED,
+    OPT_TCFILE_IN,
+    OPT_TCFILE_OUT,
+    OPT_TIMEBASE,
+    OPT_PULLDOWN,
 #if X264VFW_USE_VIRTUALDUB_HACK
-#define OPT_VD_HACK 512
+    OPT_VD_HACK,
 #endif
-#define OPT_NO_OUTPUT 513
+    OPT_NO_OUTPUT,
+} OptionsOPT;
 
 static char short_options[] = "8A:B:b:f:hI:i:m:o:p:q:r:t:Vvw";
 static struct option long_options[] =
@@ -373,6 +452,7 @@ static struct option long_options[] =
     { "no-b-adapt",        no_argument,       NULL, 0                 },
     { "b-bias",            required_argument, NULL, 0                 },
     { "b-pyramid",         required_argument, NULL, 0                 },
+    { "open-gop",          required_argument, NULL, 0                 },
     { "min-keyint",        required_argument, NULL, 'i'               },
     { "keyint",            required_argument, NULL, 'I'               },
     { "intra-refresh",     no_argument,       NULL, 0                 },
@@ -505,26 +585,28 @@ static struct option long_options[] =
     { "pic-struct",        no_argument,       NULL, 0                 },
     { "nal-hrd",           required_argument, NULL, 0                 },
     { "pulldown",          required_argument, NULL, OPT_PULLDOWN      },
+    { "fake-interlaced",   no_argument,       NULL, 0                 },
 #if X264VFW_USE_VIRTUALDUB_HACK
     { "vd-hack",           no_argument,       NULL, OPT_VD_HACK       },
 #endif
     { "no-output",         no_argument,       NULL, OPT_NO_OUTPUT     },
-    { 0,                   0,                 0,    0                 }
+    { NULL,                0,                 NULL, 0                 }
 };
 
 #define MAX_ARG_NUM (MAX_CMDLINE / 2 + 1)
 
 /* Split command line (for quote in parameter it must be tripled) */
-static int split_cmd(const char *cmdline, char **argv, char *arg_mem)
+static int split_cmdline(const char *cmdline, char **argv, char *arg_mem)
 {
     int  argc = 1;
-    char *p, *q;
     int  s = 0;
+    char *p;
+    const char *q;
 
     memset(argv, 0, sizeof(char *) * MAX_ARG_NUM);
     argv[0] = "x264vfw";
     p = arg_mem;
-    q = (char *)cmdline;
+    q = cmdline;
     while (*q != 0)
     {
         switch (s)
@@ -621,17 +703,6 @@ static int split_cmd(const char *cmdline, char **argv, char *arg_mem)
     return argc;
 }
 
-static const char * const muxer_names[] =
-{
-    "auto",
-    "raw",
-    "mkv",
-    "flv",
-    "mp4",
-    "avi",
-    0
-};
-
 static int select_output(const char *muxer, char *filename, x264_param_t *param, CODEC *codec)
 {
     const char *ext = get_filename_extension(filename);
@@ -644,7 +715,7 @@ static int select_output(const char *muxer, char *filename, x264_param_t *param,
 
     if (!strcasecmp(ext, "mp4"))
     {
-#ifdef MP4_OUTPUT
+#if HAVE_GPAC
         codec->cli_output = mp4_output;
         param->b_annexb = 0;
         param->b_dts_compress = 0;
@@ -696,18 +767,49 @@ static int select_output(const char *muxer, char *filename, x264_param_t *param,
     return 0;
 }
 
-/*****************************************************************************
- * Parse:
- *****************************************************************************/
-static int Parse(int argc, char **argv, x264_param_t *param, CODEC *codec)
+/* Parse command line for preset/tune options */
+static int parse_preset_tune(int argc, char **argv, x264_param_t *param, CODEC *codec)
 {
-    char *output_filename = "-";
-    const char *muxer = muxer_names[0];
-
     opterr = 0; /* Suppress error messages printing in getopt */
     optind = 0; /* Initialize getopt */
 
-    /* Parse command line options */
+    for (;;)
+    {
+        int checked_optind = optind > 0 ? optind : 1;
+        int c = getopt_long(argc, argv, short_options, long_options, NULL);
+        if (c == -1)
+            break;
+        if (c == OPT_PRESET)
+            codec->preset = optarg;
+        else if (c == OPT_TUNE)
+            codec->tune = optarg;
+        else if (c == '?')
+        {
+            x264vfw_log(codec, X264_LOG_ERROR, "unknown option or absent argument: '%s'\n", argv[checked_optind]);
+            return -1;
+        }
+    }
+    return 0;
+}
+
+static int parse_enum_name(const char *arg, const char * const *names, const char **dst)
+{
+    int i;
+    for (i = 0; names[i]; i++)
+        if (!strcasecmp(arg, names[i]))
+        {
+            *dst = names[i];
+            return 0;
+        }
+    return -1;
+}
+
+/* Parse command line for all other options */
+static int parse_cmdline(int argc, char **argv, x264_param_t *param, CODEC *codec)
+{
+    opterr = 0; /* Suppress error messages printing in getopt */
+    optind = 0; /* Initialize getopt */
+
     for (;;)
     {
         int b_error = 0;
@@ -732,10 +834,6 @@ static int Parse(int argc, char **argv, x264_param_t *param, CODEC *codec)
             case OPT_THREAD_INPUT:
             case OPT_NOPROGRESS:
             case OPT_VISUALIZE:
-            case OPT_TUNE:
-            case OPT_PRESET:
-            case OPT_PROFILE:
-            case OPT_SLOWFIRSTPASS:
             case OPT_TCFILE_IN:
             case OPT_TCFILE_OUT:
             case OPT_TIMEBASE:
@@ -744,23 +842,16 @@ static int Parse(int argc, char **argv, x264_param_t *param, CODEC *codec)
                 break;
 
             case 'o':
-                output_filename = optarg;
+                codec->cli_output_file = optarg;
                 break;
 
             case OPT_MUXER:
-            {
-                int i;
-
-                for (i = 0; muxer_names[i] && strcasecmp(muxer_names[i], optarg);)
-                    i++;
-                if (!muxer_names[i])
+                if (parse_enum_name(optarg, muxer_names, &codec->cli_output_muxer) < 0)
                 {
-                    x264vfw_log(codec, X264_LOG_ERROR, "invalid muxer '%s'\n", optarg);
+                    x264vfw_log(codec, X264_LOG_ERROR, "unknown muxer '%s'\n", optarg);
                     return -1;
                 }
-                muxer = optarg;
                 break;
-            }
 
             case OPT_QUIET:
                 param->i_log_level = X264_LOG_NONE;
@@ -769,6 +860,22 @@ static int Parse(int argc, char **argv, x264_param_t *param, CODEC *codec)
             case 'v':
                 param->i_log_level = X264_LOG_DEBUG;
                 break;
+
+            case OPT_TUNE:
+            case OPT_PRESET:
+                break;
+
+            case OPT_PROFILE:
+                codec->profile = optarg;
+                break;
+
+            case OPT_SLOWFIRSTPASS:
+                codec->b_fast1pass = FALSE;
+                break;
+
+            case 'r':
+                codec->b_user_ref = TRUE;
+                goto generic_option;
 
 #if X264VFW_USE_VIRTUALDUB_HACK
             case OPT_VD_HACK:
@@ -781,6 +888,7 @@ static int Parse(int argc, char **argv, x264_param_t *param, CODEC *codec)
                 break;
 
             default:
+generic_option:
                 if (long_options_index < 0)
                 {
                     int i;
@@ -820,25 +928,6 @@ static int Parse(int argc, char **argv, x264_param_t *param, CODEC *codec)
             return -1;
         }
     }
-
-    param->b_vfr_input = 0; /* VFW supports only CFR */
-    param->i_timebase_num = param->i_fps_den;
-    param->i_timebase_den = param->i_fps_num;
-
-    if (select_output(muxer, output_filename, param, codec) < 0)
-        return -1;
-    if (!codec->b_cli_output)
-    {
-        param->b_annexb = 1;
-        param->b_dts_compress = 0;
-        param->b_repeat_headers = 1; /* VFW needs SPS/PPS before each keyframe */
-    }
-    if (codec->b_cli_output && codec->cli_output.open_file(output_filename, &codec->cli_hout) < 0)
-    {
-        x264vfw_log(codec, X264_LOG_ERROR, "could not open output file: '%s'\n", output_filename);
-        return -1;
-    }
-
     return 0;
 }
 
@@ -846,13 +935,18 @@ static int Parse(int argc, char **argv, x264_param_t *param, CODEC *codec)
 LRESULT compress_begin(CODEC *codec, BITMAPINFO *lpbiInput, BITMAPINFO *lpbiOutput)
 {
     CONFIG *config = &codec->config;
+    char tune_buf[64];
     x264_param_t param;
-    char cqm_file[MAX_PATH];
+    char *argv[MAX_ARG_NUM];
+    char arg_mem[MAX_CMDLINE];
+    int argc;
     char stat_out[MAX_STATS_SIZE];
     char stat_in[MAX_STATS_SIZE];
 
     /* Destroy previous handle */
     compress_end(codec);
+    /* Create log window (or clear it) */
+    x264_log_vfw_create(codec);
 
     if (compress_query(codec, lpbiInput, lpbiOutput) != ICERR_OK)
     {
@@ -861,29 +955,70 @@ LRESULT compress_begin(CODEC *codec, BITMAPINFO *lpbiInput, BITMAPINFO *lpbiOutp
         return ICERR_BADFORMAT;
     }
 
+    /* Default internal codec params */
 #if X264VFW_USE_BUGGY_APPS_HACK
     codec->prev_lpbiOutput = NULL;
     codec->prev_output_biSizeImage = 0;
     codec->b_check_size = lpbiOutput->bmiHeader.biSizeImage != 0;
 #endif
-
-    /* Get default param */
-    x264_param_default(&param);
 #if X264VFW_USE_VIRTUALDUB_HACK
-    codec->b_use_vd_hack = FALSE; /* Don't use "VD hack" by default */
-    codec->save_fcc = lpbiOutput->bmiHeader.biCompression;
+    codec->b_use_vd_hack = config->b_vd_hack;
+    codec->save_fourcc = lpbiOutput->bmiHeader.biCompression;
 #endif
-    codec->b_no_output   = FALSE;
+    codec->b_no_output = FALSE;
+    codec->b_fast1pass = FALSE;
+    codec->b_user_ref = FALSE;
     codec->i_frame_remain = codec->i_frame_total ? codec->i_frame_total : -1;
+
+    /* Preset/Tuning/Profile */
+    codec->preset = config->i_preset >= 0 && config->i_preset < COUNT_PRESET
+                    ? preset_table[config->i_preset].value
+                    : NULL;
+    if (codec->preset && !codec->preset[0])
+        codec->preset = NULL;
+    codec->profile = config->i_profile >= 0 && config->i_profile < COUNT_PROFILE
+                     ? profile_table[config->i_profile].value
+                     : NULL;
+    if (codec->profile && !codec->profile[0])
+        codec->profile = NULL;
+    if (config->i_tuning >= 0 && config->i_tuning < COUNT_TUNE)
+        strcpy(tune_buf, tune_table[config->i_tuning].value);
+    else
+        strcpy(tune_buf, "");
+    if (config->b_fastdecode)
+    {
+        if (tune_buf[0])
+            strcat(tune_buf, ",");
+        strcat(tune_buf, "fastdecode");
+    }
+    if (config->b_zerolatency)
+    {
+        if (tune_buf[0])
+            strcat(tune_buf, ",");
+        strcat(tune_buf, "zerolatency");
+    }
+    codec->tune = tune_buf[0] ? tune_buf : NULL;
+
+    /* Split extra command line on separate args for getopt processing */
+    argc = split_cmdline(config->extra_cmdline, argv, arg_mem);
+
+    /* Presets are applied before all other options. */
+    if (parse_preset_tune(argc, argv, &param, codec) < 0)
+        goto fail;
+
+    /* Get default x264 params */
+    if (x264_param_default_preset(&param, codec->preset, codec->tune) < 0)
+    {
+        x264vfw_log(codec, X264_LOG_ERROR, "x264_param_default_preset failed\n");
+        goto fail;
+    }
 
     /* Video Properties */
     param.i_width  = lpbiInput->bmiHeader.biWidth;
     param.i_height = abs(lpbiInput->bmiHeader.biHeight);
     param.i_csp    = X264_CSP_I420;
 
-    x264vfw_csp_init(&codec->csp, param.i_csp);
-    x264_picture_alloc(&codec->conv_pic, param.i_csp, param.i_width, param.i_height);
-
+    /* ICM_COMPRESS_FRAMES_INFO params */
     param.i_frame_total = codec->i_frame_total;
     if (codec->i_fps_num > 0 && codec->i_fps_den > 0)
     {
@@ -891,251 +1026,146 @@ LRESULT compress_begin(CODEC *codec, BITMAPINFO *lpbiInput, BITMAPINFO *lpbiOutp
         param.i_fps_den = codec->i_fps_den;
     }
 
-    /* Log */
-    x264_log_vfw_create(codec);
-    param.pf_log = x264_log_vfw;
-    param.p_log_private = codec;
+    /* Colorspace conversion */
+    x264vfw_csp_init(&codec->csp, param.i_csp);
+    x264_picture_alloc(&codec->conv_pic, param.i_csp, param.i_width, param.i_height);
 
-    if (config->b_use_cmdline)
+    /* Basic */
+    param.i_level_idc = config->i_level >= 0 && config->i_level < COUNT_LEVEL
+                        ? level_table[config->i_level].value
+                        : -1;
+
+    /* Rate control */
+    param.rc.b_stat_write = 0;
+    param.rc.b_stat_read = 0;
+    switch (config->i_encoding_type)
     {
-        char *argv[MAX_ARG_NUM];
-        char arg_mem[MAX_CMDLINE];
-        int argc = split_cmd(config->cmdline, argv, (char *)&arg_mem);
+        case 0: /* 1 PASS LOSSLESS */
+            param.rc.i_rc_method = X264_RC_CQP;
+            param.rc.i_qp_constant = 0;
+            param.rc.b_stat_write = config->b_createstats;
+            break;
 
-        /* Parse command line */
-        if (Parse(argc, argv, &param, codec) < 0)
-        {
-            codec->b_encoder_error = TRUE;
-            compress_end(codec);
-            return ICERR_ERROR;
-        }
+        case 1: /* 1 PASS CQP */
+            param.rc.i_rc_method = X264_RC_CQP;
+            param.rc.i_qp_constant = config->i_qp;
+            param.rc.b_stat_write = config->b_createstats;
+            break;
+
+        case 2: /* 1 PASS VBR */
+            param.rc.i_rc_method = X264_RC_CRF;
+            param.rc.f_rf_constant = (float)config->i_rf_constant * 0.1;
+            param.rc.b_stat_write = config->b_createstats;
+            break;
+
+        case 3: /* 1 PASS ABR */
+            param.rc.i_rc_method = X264_RC_ABR;
+            param.rc.i_bitrate = config->i_passbitrate;
+            param.rc.b_stat_write = config->b_createstats;
+            break;
+
+        case 4: /* 2 PASS */
+            param.rc.i_rc_method = X264_RC_ABR;
+            param.rc.i_bitrate = config->i_passbitrate;
+            if (config->i_pass <= 1)
+            {
+                codec->b_no_output = TRUE;
+                codec->b_fast1pass = config->b_fast1pass;
+                param.rc.b_stat_write = 1;
+            }
+            else
+            {
+                param.rc.b_stat_write = config->b_updatestats;
+                param.rc.b_stat_read = 1;
+            }
+            break;
+
+        default:
+            assert(0);
+            break;
     }
-    else
+
+    if (param.rc.b_stat_write || param.rc.b_stat_read)
     {
-#if X264VFW_USE_VIRTUALDUB_HACK
-        codec->b_use_vd_hack = config->b_vd_hack;
-#endif
-
-        /* CPU flags */
-        param.cpu = config->b_no_asm ? 0 : param.cpu;
-#if X264VFW_USE_THREADS
-        param.i_threads = config->i_threads;
-        param.b_deterministic = config->i_threads != 1 ? config->b_mt_deterministic : TRUE;
-        param.b_sliced_threads = config->i_threads != 1 ? config->b_mt_sliced : FALSE;
-#else
-        param.i_threads = 1;
-        param.b_deterministic = TRUE;
-        param.b_sliced_threads = FALSE;
-#endif
-
-        /* Video Properties */
-        switch (config->i_avc_level)
-        {
-            case  1: param.i_level_idc = 10; break;
-            case  2: param.i_level_idc = 11; break;
-            case  3: param.i_level_idc = 12; break;
-            case  4: param.i_level_idc = 13; break;
-            case  5: param.i_level_idc = 20; break;
-            case  6: param.i_level_idc = 21; break;
-            case  7: param.i_level_idc = 22; break;
-            case  8: param.i_level_idc = 30; break;
-            case  9: param.i_level_idc = 31; break;
-            case 10: param.i_level_idc = 32; break;
-            case 11: param.i_level_idc = 40; break;
-            case 12: param.i_level_idc = 41; break;
-            case 13: param.i_level_idc = 42; break;
-            case 14: param.i_level_idc = 50; break;
-            case 15: param.i_level_idc = 51; break;
-            default: param.i_level_idc = -1; break;
-        }
-        param.vui.i_sar_width = config->i_sar_width;
-        param.vui.i_sar_height = config->i_sar_height;
-        param.vui.i_overscan = config->i_overscan;
-        param.vui.i_vidformat = config->i_vidformat;
-        param.vui.b_fullrange = config->i_fullrange > 0;
-        param.vui.i_colorprim = config->i_colorprim;
-        param.vui.i_transfer = config->i_transfer;
-        param.vui.i_colmatrix = config->i_colmatrix;
-        param.vui.i_chroma_loc = config->i_chromaloc;
-
-        /* Bitstream parameters */
-        param.i_frame_reference = config->i_refmax;
-        param.i_keyint_max = config->i_keyint_max;
-        param.i_keyint_min = config->i_keyint_min;
-        param.i_scenecut_threshold = config->i_scenecut_threshold;
-        param.i_bframe = config->i_encoding_type > 0 ? config->i_bframe : 0;
-        param.i_bframe_adaptive = config->i_encoding_type > 0 && config->i_bframe > 0 ? config->i_bframe_adaptive : 0;
-        param.i_bframe_bias = config->i_encoding_type > 0 && config->i_bframe > 0 && config->i_bframe_adaptive > 0 ? config->i_bframe_bias : 0;
-        param.i_bframe_pyramid = config->i_encoding_type > 0 && config->i_bframe > 1 ? config->i_b_refs : 0;
-
-        param.b_deblocking_filter = config->i_encoding_type > 0 && config->b_filter;
-        param.i_deblocking_filter_alphac0 = config->i_encoding_type > 0 && config->b_filter ? config->i_inloop_a : 0;
-        param.i_deblocking_filter_beta = config->i_encoding_type > 0 && config->b_filter ? config->i_inloop_b : 0;
-
-        param.b_cabac = config->b_cabac;
-
-        param.b_interlaced = config->i_interlaced > 0;
-        param.b_tff = config->i_interlaced != 2;
-
-        strcpy(cqm_file, config->cqmfile);
-        param.i_cqm_preset = config->i_encoding_type > 0 ? config->i_cqm : 0;
-        param.psz_cqm_file = config->i_encoding_type > 0 && config->i_cqm == 2 ? (char *)&cqm_file : NULL;
-
-        /* Log */
-        param.i_log_level = config->i_log_level - 1;
-
-        /* Encoder analyser parameters */
-        param.analyse.intra = 0;
-        param.analyse.inter = 0;
-        if ((config->i_encoding_type > 0 || config->b_cabac) && config->b_dct8x8)
-        {
-            if (config->b_intra_i8x8)
-                param.analyse.intra |= X264_ANALYSE_I8x8;
-            if (config->b_i8x8)
-                param.analyse.inter |= X264_ANALYSE_I8x8;
-        }
-        if (config->b_intra_i4x4)
-            param.analyse.intra |= X264_ANALYSE_I4x4;
-        if (config->b_i4x4)
-            param.analyse.inter |= X264_ANALYSE_I4x4;
-        if (config->b_psub16x16)
-        {
-            param.analyse.inter |= X264_ANALYSE_PSUB16x16;
-            if (config->b_psub8x8)
-                param.analyse.inter |= X264_ANALYSE_PSUB8x8;
-        }
-        if (config->i_encoding_type > 0 && config->i_bframe > 0 && config->b_bsub16x16)
-            param.analyse.inter |= X264_ANALYSE_BSUB16x16;
-
-        param.analyse.b_transform_8x8 = (config->i_encoding_type > 0 || config->b_cabac) && config->b_dct8x8;
-        param.analyse.i_weighted_pred = config->i_p_wpred;
-        param.analyse.b_weighted_bipred = config->i_encoding_type > 0 && config->i_bframe > 0 && config->b_b_wpred;
-        param.analyse.i_direct_mv_pred = config->i_encoding_type > 0 && config->i_bframe > 0 ? config->i_direct_mv_pred : 0;
-        param.analyse.i_chroma_qp_offset = config->i_encoding_type > 0 ? config->i_chroma_qp_offset : 0;
-
-        param.analyse.i_me_method = config->i_me_method;
-        param.analyse.i_me_range = config->i_me_range;
-        param.analyse.i_subpel_refine = config->i_subpel_refine;
-        param.analyse.b_chroma_me = config->i_subpel_refine >= 5 && config->b_chroma_me;
-        param.analyse.b_mixed_references = config->i_refmax > 1 && config->b_mixedref;
-        param.analyse.i_trellis = config->i_encoding_type > 0 && config->b_cabac ? config->i_trellis : 0;
-        param.analyse.b_fast_pskip = config->i_encoding_type > 0 && config->b_fast_pskip;
-        param.analyse.b_dct_decimate = config->i_encoding_type > 0 && config->b_dct_decimate;
-        param.analyse.i_noise_reduction = config->i_encoding_type > 0 ? config->i_noise_reduction : 0;
-        param.analyse.f_psy_rd = config->i_encoding_type > 0 && config->i_subpel_refine >= 6 ? config->f_psy_rdo : 0.0;
-        param.analyse.f_psy_trellis = config->i_encoding_type > 0 && config->b_cabac && config->i_trellis > 0 ? config->f_psy_trellis : 0.0;
-
-        param.analyse.i_luma_deadzone[0] = config->i_encoding_type > 0 ? config->i_inter_deadzone : 0;
-        param.analyse.i_luma_deadzone[1] = config->i_encoding_type > 0 ? config->i_intra_deadzone : 0;
-
-        param.analyse.b_psnr = config->i_encoding_type > 0 && config->i_log_level >= 3 && config->b_psnr;
-        param.analyse.b_ssim = config->i_encoding_type > 0 && config->i_log_level >= 3 && config->b_ssim;
-
-        /* Rate control parameters */
-        param.rc.i_qp_min = config->i_encoding_type > 1 ? config->i_qp_min : param.rc.i_qp_min;
-        param.rc.i_qp_max = config->i_encoding_type > 1 ? config->i_qp_max : param.rc.i_qp_max;
-        param.rc.i_qp_step = config->i_encoding_type > 1 ? config->i_qp_step : param.rc.i_qp_step;
-
-        param.rc.f_rate_tolerance = config->i_encoding_type > 2 ? config->f_ratetol : param.rc.f_rate_tolerance;
-        param.rc.i_vbv_max_bitrate = config->i_encoding_type > 1 ? config->i_vbv_maxrate : 0;
-        param.rc.i_vbv_buffer_size = config->i_encoding_type > 1 ? config->i_vbv_bufsize : 0;
-        param.rc.f_vbv_buffer_init = config->i_encoding_type > 1 ? (float)config->i_vbv_occupancy / 100.0 : param.rc.f_vbv_buffer_init;
-        param.rc.f_ip_factor = config->i_encoding_type > 0 ? config->f_ipratio : 1.0;
-        param.rc.f_pb_factor = config->i_encoding_type > 0 && config->i_bframe > 0 ? config->f_pbratio : 1.0;
-
-        param.rc.i_aq_mode = config->i_encoding_type > 1 ? config->i_aq_mode : 0;
-        param.rc.f_aq_strength = config->i_encoding_type > 1 && config->i_aq_mode > 0 ? config->f_aq_strength : 0.0;
-
         strcpy(stat_out, config->stats);
         strcpy(stat_in, config->stats);
-        param.rc.b_stat_write = FALSE;
-        param.rc.psz_stat_out = (char *)&stat_out;
-        param.rc.b_stat_read = FALSE;
-        param.rc.psz_stat_in = (char *)&stat_in;
+        param.rc.psz_stat_out = stat_out;
+        param.rc.psz_stat_in = stat_in;
+    }
 
-        param.rc.f_qcompress = config->i_encoding_type > 1 ? config->f_qcomp : 1.0;
-        param.rc.f_qblur = config->i_encoding_type == 4 && config->i_pass > 1 ? config->f_qblur : param.rc.f_qblur;
-        param.rc.f_complexity_blur = config->i_encoding_type == 4 && config->i_pass > 1 ? config->f_cplxblur : param.rc.f_complexity_blur;
+    /* Output */
+    codec->b_cli_output = FALSE;
+    codec->cli_output_file = config->i_output_mode == 1 ? config->output_file : "-";
+    codec->cli_output_muxer = muxer_names[0];
 
-        switch (config->i_encoding_type)
-        {
-            case 0: /* 1 PASS LOSSLESS */
-                param.rc.i_rc_method = X264_RC_CQP;
-                param.rc.i_qp_constant = 0;
-                param.rc.b_stat_write = config->b_createstats;
-                break;
+    /* Sample Aspect Ratio */
+    param.vui.i_sar_width = config->i_sar_width;
+    param.vui.i_sar_height = config->i_sar_height;
 
-            case 1: /* 1 PASS CQP */
-                param.rc.i_rc_method = X264_RC_CQP;
-                param.rc.i_qp_constant = config->i_qp;
-                param.rc.b_stat_write = config->b_createstats;
-                break;
+    /* Debug */
+    param.pf_log = x264_log_vfw;
+    param.p_log_private = codec;
+    param.i_log_level = config->i_log_level - 1;
+    param.analyse.b_psnr = config->i_encoding_type > 0 && config->i_log_level >= 3 && config->b_psnr;
+    param.analyse.b_ssim = config->i_encoding_type > 0 && config->i_log_level >= 3 && config->b_ssim;
+    param.cpu = config->b_no_asm ? 0 : param.cpu;
 
-            case 2: /* 1 PASS VBR */
-                param.rc.i_rc_method = X264_RC_CRF;
-                param.rc.f_rf_constant = (float)config->i_rf_constant * 0.1;
-                param.rc.b_stat_write = config->b_createstats;
-                break;
+    /* Parse extra command line options */
+    if (parse_cmdline(argc, argv, &param, codec) < 0)
+        goto fail;
 
-            case 3: /* 1 PASS ABR */
-                param.rc.i_rc_method = X264_RC_ABR;
-                param.rc.i_bitrate = config->i_passbitrate;
-                param.rc.b_stat_write = config->b_createstats;
-                break;
+    /* VFW supports only CFR */
+    param.b_vfr_input = 0;
+    param.i_timebase_num = param.i_fps_den;
+    param.i_timebase_den = param.i_fps_num;
 
-            case 4: /* 2 PASS */
-                param.rc.i_rc_method = X264_RC_ABR;
-                param.rc.i_bitrate = config->i_passbitrate;
-                if (config->i_pass <= 1)
-                {
-                    codec->b_no_output = TRUE;
-                    param.rc.b_stat_write = TRUE;
-                    if (config->b_fast1pass)
-                    {
-                        /* Adjust or turn off some flags to gain speed, if needed */
-                        param.i_frame_reference = 1;
-                        param.analyse.intra = 0;
-                        param.analyse.inter = 0;
-                        param.analyse.b_transform_8x8 = FALSE;
-                        param.analyse.i_me_method = X264_ME_DIA;
-                        param.analyse.i_subpel_refine = X264_MIN(2, param.analyse.i_subpel_refine); /* subme=1 may lead to significant quality decrease */
-                        param.analyse.b_chroma_me = FALSE;
-                        param.analyse.b_mixed_references = FALSE;
-                        param.analyse.i_trellis = 0;
-                        param.analyse.b_fast_pskip = TRUE;
-                        param.analyse.f_psy_rd = 0.0;
-                        param.analyse.f_psy_trellis = 0.0;
-                    }
-                }
-                else
-                {
-                    param.rc.b_stat_write = config->b_updatestats;
-                    param.rc.b_stat_read = TRUE;
-                }
-                break;
+/*
+    if (codec->preset && !strcasecmp(codec->preset, "placebo"))
+        codec->b_fast1pass = 0;
+*/
 
-            default:
-                assert(0);
-                break;
-        }
+    /* If "1st pass (fast)" mode is used, apply faster settings. */
+    if (codec->b_fast1pass)
+        x264_param_apply_fastfirstpass(&param);
 
-        /* For default zero latency */
-        param.i_sync_lookahead = 0;
-        param.rc.i_lookahead = 0;
+    /* Apply profile restrictions. */
+    if (x264_param_apply_profile(&param, codec->profile) < 0)
+    {
+        x264vfw_log(codec, X264_LOG_ERROR, "x264_param_apply_profile failed\n");
+        goto fail;
+    }
 
-        {
-            char *argv[MAX_ARG_NUM];
-            char arg_mem[MAX_CMDLINE];
-            int argc = split_cmd(config->extra_cmdline, argv, (char *)&arg_mem);
-
-            /* Parse extra command line options */
-            if (Parse(argc, argv, &param, codec) < 0)
+    /* Automatically reduce reference frame count to match the user's target level
+     * if the user didn't explicitly set a reference frame count. */
+    if (!codec->b_user_ref)
+    {
+        int i;
+        int mbs = (((param.i_width)+15)>>4) * (((param.i_height)+15)>>4);
+        for (i = 0; x264_levels[i].level_idc != 0; i++)
+            if (param.i_level_idc == x264_levels[i].level_idc)
             {
-                codec->b_encoder_error = TRUE;
-                compress_end(codec);
-                return ICERR_ERROR;
+                while (mbs * 384 * param.i_frame_reference > x264_levels[i].dpb &&
+                       param.i_frame_reference > 1)
+                {
+                    param.i_frame_reference--;
+                }
+                break;
             }
-        }
+    }
+
+    /* Configure CLI output */
+    if (select_output(codec->cli_output_muxer, codec->cli_output_file, &param, codec) < 0)
+        goto fail;
+    if (!codec->b_cli_output)
+    {
+        param.b_annexb = 1;
+        param.b_dts_compress = 0;
+        param.b_repeat_headers = 1; /* VFW needs SPS/PPS before each keyframe */
+    }
+    if (!codec->b_no_output && codec->b_cli_output && codec->cli_output.open_file(codec->cli_output_file, &codec->cli_hout) < 0)
+    {
+        x264vfw_log(codec, X264_LOG_ERROR, "could not open output file: '%s'\n", codec->cli_output_file);
+        goto fail;
     }
 
     /* Open the encoder */
@@ -1143,9 +1173,7 @@ LRESULT compress_begin(CODEC *codec, BITMAPINFO *lpbiInput, BITMAPINFO *lpbiOutp
     if (!codec->h)
     {
         x264vfw_log(codec, X264_LOG_ERROR, "x264_encoder_open failed\n");
-        codec->b_encoder_error = TRUE;
-        compress_end(codec);
-        return ICERR_ERROR;
+        goto fail;
     }
 
     x264_encoder_parameters(codec->h, &param);
@@ -1155,38 +1183,44 @@ LRESULT compress_begin(CODEC *codec, BITMAPINFO *lpbiInput, BITMAPINFO *lpbiOutp
 #if X264VFW_USE_VIRTUALDUB_HACK
         codec->b_use_vd_hack = FALSE;
 #endif
-        codec->b_no_output = TRUE;
-        if (codec->cli_output.set_param(codec->cli_hout, &param) < 0)
+        if (!codec->b_no_output)
         {
-            x264vfw_log(codec, X264_LOG_ERROR, "can't set outfile param\n");
-            codec->b_encoder_error = TRUE;
-            compress_end(codec);
-            return ICERR_ERROR;
-        }
-        if (!param.b_repeat_headers)
-        {
-            /* Write SPS/PPS/SEI */
-            x264_nal_t *headers;
-            int i_nal;
-
-            if (x264_encoder_headers(codec->h, &headers, &i_nal) < 0)
+            if (codec->cli_output.set_param(codec->cli_hout, &param) < 0)
             {
-                x264vfw_log(codec, X264_LOG_ERROR, "x264_encoder_headers failed\n");
-                codec->b_encoder_error = TRUE;
-                compress_end(codec);
-                return ICERR_ERROR;
+                x264vfw_log(codec, X264_LOG_ERROR, "can't set outfile param\n");
+                goto fail;
             }
-            if (codec->cli_output.write_headers(codec->cli_hout, headers) < 0)
+            if (!param.b_repeat_headers)
             {
-                x264vfw_log(codec, X264_LOG_ERROR, "can't write SPS/PPS/SEI to outfile\n");
-                codec->b_encoder_error = TRUE;
-                compress_end(codec);
-                return ICERR_ERROR;
+                /* Write SPS/PPS/SEI */
+                x264_nal_t *headers;
+                int i_nal;
+
+                if (x264_encoder_headers(codec->h, &headers, &i_nal) < 0)
+                {
+                    x264vfw_log(codec, X264_LOG_ERROR, "x264_encoder_headers failed\n");
+                    goto fail;
+                }
+                if (codec->cli_output.write_headers(codec->cli_hout, headers) < 0)
+                {
+                    x264vfw_log(codec, X264_LOG_ERROR, "can't write SPS/PPS/SEI to outfile\n");
+                    goto fail;
+                }
             }
         }
     }
 
+#if X264VFW_USE_VIRTUALDUB_HACK
+    codec->b_warn_frame_loss = !(codec->b_use_vd_hack || codec->b_cli_output);
+#else
+    codec->b_warn_frame_loss = !codec->b_cli_output;
+#endif
+
     return ICERR_OK;
+fail:
+    codec->b_encoder_error = TRUE;
+    compress_end(codec);
+    return ICERR_ERROR;
 }
 
 static int encode_frame(CODEC *codec, x264_picture_t *pic, x264_picture_t *pic_out, uint8_t *buf, DWORD buf_size, int *got_picture)
@@ -1205,13 +1239,13 @@ static int encode_frame(CODEC *codec, x264_picture_t *pic, x264_picture_t *pic_o
     if (i_frame_size)
     {
         *got_picture = 1;
-        if (codec->b_cli_output)
+        if (!codec->b_no_output && codec->b_cli_output)
             if (codec->cli_output.write_frame(codec->cli_hout, nal[0].p_payload, i_frame_size, pic_out) < 0)
             {
                 x264vfw_log(codec, X264_LOG_ERROR, "can't write frame to outfile\n");
                 return -1;
             }
-        if (!codec->b_no_output && buf)
+        if (!(codec->b_no_output || codec->b_cli_output) && buf)
         {
 #if X264VFW_USE_BUGGY_APPS_HACK
             if (i_frame_size > buf_size && codec->b_check_size)
@@ -1328,6 +1362,17 @@ LRESULT compress(CODEC *codec, ICCOMPRESS *icc)
         return ICERR_ERROR;
     }
 
+    if (!got_picture && codec->b_warn_frame_loss)
+    {
+        codec->b_warn_frame_loss = FALSE;
+        x264vfw_log(codec, X264_LOG_WARNING, "Few frames probably would be lost. Ways to fix this:\n");
+#if X264VFW_USE_VIRTUALDUB_HACK
+        x264vfw_log(codec, X264_LOG_WARNING, " - if you use VirtualDub or its fork than you can enable 'VirtualDub Hack' option\n");
+#endif
+        x264vfw_log(codec, X264_LOG_WARNING, " - you can enable 'File' output mode\n");
+        x264vfw_log(codec, X264_LOG_WARNING, " - you can enable 'Zero Latency' option\n");
+    }
+
 #if X264VFW_USE_VIRTUALDUB_HACK
     if (codec->b_use_vd_hack && !got_picture)
     {
@@ -1345,7 +1390,7 @@ LRESULT compress(CODEC *codec, ICCOMPRESS *icc)
             *icc->lpdwFlags = 0;
         outhdr->biSizeImage = i_out;
 #if X264VFW_USE_VIRTUALDUB_HACK
-        outhdr->biCompression = codec->save_fcc;
+        outhdr->biCompression = codec->save_fourcc;
     }
 #endif
 
@@ -1651,7 +1696,7 @@ LRESULT decompress(CODEC *codec, ICDECOMPRESS *icd)
         }
     }
 
-    sws_scale(codec->sws, (const uint8_t *const *)codec->decoder_frame->data, codec->decoder_frame->linesize, 0, inhdr->biHeight, picture.data, picture.linesize);
+    sws_scale(codec->sws, (const uint8_t * const *)codec->decoder_frame->data, codec->decoder_frame->linesize, 0, inhdr->biHeight, picture.data, picture.linesize);
     //icd->lpbiOutput->biSizeImage = x264vfw_picture_get_size(codec->decoder_pix_fmt, inhdr->biWidth, inhdr->biHeight);
 
     return ICERR_OK;

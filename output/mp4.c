@@ -24,7 +24,7 @@
 #include "muxers.h"
 #include <gpac/isomedia.h>
 
-#ifdef HAVE_GF_MALLOC
+#if HAVE_GF_MALLOC
 #undef malloc
 #undef free
 #define malloc gf_malloc
@@ -38,7 +38,7 @@ typedef struct
     GF_ISOSample *p_sample;
     int i_track;
     uint32_t i_descidx;
-    int i_time_res;
+    uint32_t i_time_res;
     int64_t i_time_inc;
     int i_numframe;
     int i_delay_time;
@@ -112,6 +112,7 @@ static int close_file( hnd_t handle, int64_t largest_pts, int64_t second_largest
         if( p_mp4->p_sample->data )
             free( p_mp4->p_sample->data );
 
+        p_mp4->p_sample->dataLength = 0;
         gf_isom_sample_del( &p_mp4->p_sample );
     }
 
@@ -135,7 +136,7 @@ static int close_file( hnd_t handle, int64_t largest_pts, int64_t second_largest
          * The reason is that an Edit Box maps the presentation time-line to the media time-line.
          * Any demuxers should follow the Edit Box if it exists. */
         GF_ISOSample *sample = gf_isom_get_sample_info( p_mp4->p_file, p_mp4->i_track, 1, NULL, NULL );
-        if( sample->CTS_Offset > 0 )
+        if( sample && sample->CTS_Offset > 0 )
         {
             uint32_t mvhd_timescale = gf_isom_get_timescale( p_mp4->p_file );
             uint64_t tkhd_duration = (uint64_t)( mdhd_duration * ( (double)mvhd_timescale / p_mp4->i_time_res ) );
@@ -164,6 +165,7 @@ static int open_file( char *psz_filename, hnd_t *p_handle )
         return -1;
     else if( !x264_is_regular_file( fh ) )
     {
+        fclose( fh );
         DPRINTF( "mp4 [error]: MP4 output is incompatible with non-regular file `%s'\n", psz_filename );
         return -1;
     }

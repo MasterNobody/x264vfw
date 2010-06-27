@@ -30,219 +30,120 @@
 #include <commctrl.h>
 
 /* Registry */
-#define X264_REG_KEY     HKEY_CURRENT_USER
-#define X264_REG_PARENT  "Software\\GNU"
+#define X264VFW_REG_KEY    HKEY_CURRENT_USER
+#define X264VFW_REG_PARENT "Software\\GNU"
 #ifdef _WIN64
-#define X264_REG_CHILD   "x264vfw64"
+#define X264VFW_REG_CHILD  "x264vfw64"
 #else
 /* Not "x264vfw" because of GordianKnot compatibility */
-#define X264_REG_CHILD   "x264"
+#define X264VFW_REG_CHILD  "x264"
 #endif
-#define X264_REG_CLASS   "config"
+#define X264VFW_REG_CLASS  "config"
 
 /* Description */
-#define X264_NAME        "x264vfw"
-#define X264_DEF_TEXT    "Are you sure you want to load default values?"
-
-static const char * const overscan_names[]  = { "undef", "show", "crop" };
-static const char * const vidformat_names[] = { "undef", "component", "pal", "ntsc", "secam", "mac" };
-static const char * const fullrange_names[] = { "off", "on" };
-static const char * const colorprim_names[] = { "undef", "bt709", "bt470m", "bt470bg", "smpte170m", "smpte240m", "film" };
-static const char * const transfer_names[]  = { "undef", "bt709", "bt470m", "bt470bg", "smpte170m", "smpte240m", "linear", "log100", "log316" };
-static const char * const colmatrix_names[] = { "undef", "bt709", "fcc", "bt470bg", "smpte170m", "smpte240m", "YCgCo", "GBR" };
-
-static const int overscan_loc2abs[]  = { 0, 1, 2 };
-static const int vidformat_loc2abs[] = { 5, 0, 1, 2, 3, 4 };
-static const int fullrange_loc2abs[] = { 0, 1 };
-static const int colorprim_loc2abs[] = { 2, 1, 4, 5, 6, 7, 8 };
-static const int transfer_loc2abs[]  = { 2, 1, 4, 5, 6, 7, 8, 9, 10 };
-static const int colmatrix_loc2abs[] = { 2, 1, 4, 5, 6, 7, 8, 0 };
-
-static const int overscan_abs2loc[]  = { 0, 1, 2 };
-static const int vidformat_abs2loc[] = { 1, 2, 3, 4, 5, 0 };
-static const int fullrange_abs2loc[] = { 0, 1 };
-static const int colorprim_abs2loc[] = { 0, 1, 0, 0, 2, 3, 4, 5, 6 };
-static const int transfer_abs2loc[]  = { 0, 1, 0, 0, 2, 3, 4, 5, 6, 7, 8 };
-static const int colmatrix_abs2loc[] = { 7, 1, 0, 0, 2, 3, 4, 5, 6 };
+#define X264VFW_NAME       "x264vfw"
+#define X264VFW_DEF_TEXT   "Are you sure you want to load default values?"
 
 /* Registery handling */
 typedef struct
 {
-    char *reg_value;
-    int  *config_int;
-    int  default_int;
-    int  min_int;
-    int  max_int;
+    const char * const reg_value;
+    int * const config_int;
+    const char * const default_str;
+    const named_str_t * const list;
+    const int list_count;
+} reg_named_str_t;
+
+typedef struct
+{
+    const char * const reg_value;
+    int * const config_int;
+    const int default_int;
+    const int min_int;
+    const int max_int;
 } reg_int_t;
 
 typedef struct
 {
-    char *reg_value;
-    char *config_str;
-    char *default_str;
-    int  max_len;      /* Maximum string length, including the terminating NULL char */
+    const char * const reg_value;
+    char * const config_str;
+    const char * const default_str;
+    const int max_len; /* Maximum string length, including the terminating NULL char */
 } reg_str_t;
 
-typedef struct
-{
-    char  *reg_value;
-    float *config_float;
-    float default_float;
-    float min_float;
-    float max_float;
-} reg_float_t;
-
 CONFIG reg;
-HWND   hMainDlg;
-HWND   hTabs[3];
-HWND   hTooltip;
-int    b_tabs_updated;
+
+extern const named_str_t preset_table[COUNT_PRESET];
+
+extern const named_str_t tune_table[COUNT_TUNE];
+
+extern const named_str_t profile_table[COUNT_PROFILE];
+
+extern const named_int_t level_table[COUNT_LEVEL];
+
+extern const named_fourcc_t fourcc_table[COUNT_FOURCC];
+
+extern const char * const muxer_names[];
+
+static const reg_named_str_t reg_named_str_table[] =
+{
+    /* Basic */
+    { "preset",  &reg.i_preset,  "medium", preset_table,  COUNT_PRESET  },
+    { "tuning",  &reg.i_tuning,  "",       tune_table,    COUNT_TUNE    },
+    { "profile", &reg.i_profile, "",       profile_table, COUNT_PROFILE }
+};
 
 static const reg_int_t reg_int_table[] =
 {
-    /* Main */
-    { "encoding_type",    &reg.i_encoding_type,      4,   0,   4                   }, /* Take into account GordianKnot workaround */
-    { "quantizer",        &reg.i_qp,                 23,  1,   X264_QUANT_MAX      },
-    { "ratefactor",       &reg.i_rf_constant,        230, 10,  X264_QUANT_MAX * 10 },
-    { "passbitrate",      &reg.i_passbitrate,        800, 1,   X264_BITRATE_MAX    },
-    { "pass_number",      &reg.i_pass,               1,   1,   2                   },
-    { "fast1pass",        &reg.b_fast1pass,          0,   0,   1                   },
-    { "createstats",      &reg.b_createstats,        0,   0,   1                   },
-    { "updatestats",      &reg.b_updatestats,        1,   0,   1                   },
-
-    /* Misc */
-    { "avc_level",        &reg.i_avc_level,          0,   0,   15                  },
-    { "sar_width",        &reg.i_sar_width,          1,   1,   9999                },
-    { "sar_height",       &reg.i_sar_height,         1,   1,   9999                },
-
-    /* Debug */
-    { "log_level",        &reg.i_log_level,          2,   0,   4                   },
-    { "psnr",             &reg.b_psnr,               1,   0,   1                   },
-    { "ssim",             &reg.b_ssim,               1,   0,   1                   },
-    { "no_asm",           &reg.b_no_asm,             0,   0,   1                   },
-
-    /* VFW */
-    { "fourcc_num",       &reg.i_fcc_num,            0,   0,   sizeof(fcc_str_table) / sizeof(fourcc_str) - 1},
+    /* Basic */
+    { "avc_level",       &reg.i_level,           0,   0,  COUNT_LEVEL - 1  },
+    { "fastdecode",      &reg.b_fastdecode,      0,   0,  1                },
+    { "zerolatency",     &reg.b_zerolatency,     0,   0,  1                },
+    /* Rate control */
+    { "encoding_type",   &reg.i_encoding_type,   4,   0,  4                }, /* Take into account GordianKnot workaround */
+    { "quantizer",       &reg.i_qp,              23,  1,  MAX_QUANT        },
+    { "ratefactor",      &reg.i_rf_constant,     230, 10, MAX_QUANT * 10   },
+    { "passbitrate",     &reg.i_passbitrate,     800, 1,  MAX_BITRATE      },
+    { "pass_number",     &reg.i_pass,            1,   1,  2                },
+    { "fast1pass",       &reg.b_fast1pass,       0,   0,  1                },
+    { "createstats",     &reg.b_createstats,     0,   0,  1                },
+    { "updatestats",     &reg.b_updatestats,     1,   0,  1                },
+    /* Output */
+    { "output_mode",     &reg.i_output_mode,     0,   0,  1                },
+    { "fourcc_num",      &reg.i_fourcc,          0,   0,  COUNT_FOURCC - 1 },
 #if X264VFW_USE_VIRTUALDUB_HACK
-    { "vd_hack",          &reg.b_vd_hack,            0,   0,   1                   },
+    { "vd_hack",         &reg.b_vd_hack,         0,   0,  1                },
 #endif
+    /* Sample Aspect Ratio */
+    { "sar_width",       &reg.i_sar_width,       1,   1,  9999             },
+    { "sar_height",      &reg.i_sar_height,      1,   1,  9999             },
+    /* Debug */
+    { "log_level",       &reg.i_log_level,       2,   0,  4                },
+    { "psnr",            &reg.b_psnr,            1,   0,  1                },
+    { "ssim",            &reg.b_ssim,            1,   0,  1                },
+    { "no_asm",          &reg.b_no_asm,          0,   0,  1                },
+    /* Decoder && AVI Muxer */
 #if defined(HAVE_FFMPEG) && X264VFW_USE_DECODER
-    { "disable_decoder",  &reg.b_disable_decoder,    0,   0,   1                   },
+    { "disable_decoder", &reg.b_disable_decoder, 0,   0,  1                }
 #endif
-
-    /* Analysis */
-    { "dct8x8",           &reg.b_dct8x8,             1,   0,   1                   },
-    { "intra_i8x8",       &reg.b_intra_i8x8,         1,   0,   1                   },
-    { "intra_i4x4",       &reg.b_intra_i4x4,         1,   0,   1                   },
-    { "i8x8",             &reg.b_i8x8,               1,   0,   1                   },
-    { "i4x4",             &reg.b_i4x4,               1,   0,   1                   },
-    { "psub16x16",        &reg.b_psub16x16,          1,   0,   1                   },
-    { "psub8x8",          &reg.b_psub8x8,            0,   0,   1                   },
-    { "bsub16x16",        &reg.b_bsub16x16,          1,   0,   1                   },
-    { "fast_pskip",       &reg.b_fast_pskip,         1,   0,   1                   },
-    { "refmax",           &reg.i_refmax,             3,   1,   16                  },
-    { "mixedref",         &reg.b_mixedref,           1,   0,   1                   },
-    { "me_method",        &reg.i_me_method,          2,   0,   4                   },
-    { "me_range",         &reg.i_me_range,           16,  4,   64                  },
-    { "subpel",           &reg.i_subpel_refine,      7,   0,   10                  },
-    { "chroma_me",        &reg.b_chroma_me,          1,   0,   1                   },
-    { "keyint_min",       &reg.i_keyint_min,         0,   0,   9999                },
-    { "keyint_max",       &reg.i_keyint_max,         250, 1,   9999                },
-    { "scenecut",         &reg.i_scenecut_threshold, 40,  0,   100                 },
-    { "p_wpred",          &reg.i_p_wpred,            2,   0,   2                   },
-    { "bmax",             &reg.i_bframe,             0,   0,   X264_BFRAME_MAX     },
-    { "b_adapt",          &reg.i_bframe_adaptive,    1,   0,   2                   },
-    { "b_bias",           &reg.i_bframe_bias,        0,   -90, 100                 },
-    { "direct_pred",      &reg.i_direct_mv_pred,     1,   0,   3                   },
-    { "b_refs",           &reg.i_b_refs,             2,   0,   2                   },
-    { "b_wpred",          &reg.b_b_wpred,            1,   0,   1                   },
-
-    /* Encoding */
-    { "loop_filter",      &reg.b_filter,             1,   0,   1                   },
-    { "inloop_a",         &reg.i_inloop_a,           0,   -6,  6                   },
-    { "inloop_b",         &reg.i_inloop_b,           0,   -6,  6                   },
-    { "interlaced",       &reg.i_interlaced,         0,   0,   2                   },
-    { "cabac",            &reg.b_cabac,              1,   0,   1                   },
-    { "dct_decimate",     &reg.b_dct_decimate,       1,   0,   1                   },
-    { "noise_reduction",  &reg.i_noise_reduction,    0,   0,   9999                },
-    { "trellis",          &reg.i_trellis,            1,   0,   2                   },
-    { "intra_deadzone",   &reg.i_intra_deadzone,     11,  0,   32                  },
-    { "inter_deadzone",   &reg.i_inter_deadzone,     21,  0,   32                  },
-    { "cqm",              &reg.i_cqm,                0,   0,   2                   },
-
-    /* Rate control */
-    { "vbv_maxrate",      &reg.i_vbv_maxrate,        0,   0,   X264_BITRATE_MAX    },
-    { "vbv_bufsize",      &reg.i_vbv_bufsize,        0,   0,   X264_BITRATE_MAX    },
-    { "vbv_occupancy",    &reg.i_vbv_occupancy,      90,  0,   100                 },
-    { "qp_min",           &reg.i_qp_min,             10,  0,   X264_QUANT_MAX      },
-    { "qp_max",           &reg.i_qp_max,             51,  0,   X264_QUANT_MAX      },
-    { "qp_step",          &reg.i_qp_step,            4,   1,   X264_QUANT_MAX      },
-    { "chroma_qp_offset", &reg.i_chroma_qp_offset,   0,   -12, 12                  },
-
-    /* AQ */
-    { "aq_mode",          &reg.i_aq_mode,            1,   0,   2                   },
-
-    /* Multithreading */
-#if X264VFW_USE_THREADS
-    { "threads",          &reg.i_threads,            0,   0,   X264_THREAD_MAX     },
-    { "mt_deterministic", &reg.b_mt_deterministic,   1,   0,   1                   },
-    { "mt_sliced",        &reg.b_mt_sliced,          1,   0,   1                   },
-#endif
-
-    /* VUI */
-    { "overscan",        &reg.i_overscan,            0,   0,   2                   },
-    { "vidformat",       &reg.i_vidformat,           5,   0,   5                   },
-    { "fullrange",       &reg.i_fullrange,           0,   0,   1                   },
-    { "colorprim",       &reg.i_colorprim,           2,   0,   8                   },
-    { "transfer",        &reg.i_transfer,            2,   0,   10                  },
-    { "colmatrix",       &reg.i_colmatrix,           2,   0,   8                   },
-    { "chromaloc",       &reg.i_chromaloc,           0,   0,   5                   },
-
-    /* Config */
-    { "use_cmdline",      &reg.b_use_cmdline,        0,   0,   1                   }
-};
-
-static const reg_float_t reg_float_table[] =
-{
-    /* Analysis */
-    { "psy_rdo",        &reg.f_psy_rdo,        1.0,   0.00, 1000.00 },
-
-    /* Encoding */
-    { "psy_trellis",    &reg.f_psy_trellis,    0.0,   0.00, 1000.00 },
-
-    /* Rate control */
-    { "ipratio",        &reg.f_ipratio,        1.40,  1.00, 1000.00 },
-    { "pbratio",        &reg.f_pbratio,        1.30,  1.00, 1000.00 },
-    { "qcomp",          &reg.f_qcomp,          0.60,  0.00, 1000.00 },
-    { "cplxblur",       &reg.f_cplxblur,       20.00, 0.00, 1000.00 },
-    { "qblur",          &reg.f_qblur,          0.50,  0.00, 1000.00 },
-    { "ratetol",        &reg.f_ratetol,        1.00,  0.01, 1000.00 },
-
-    /* AQ */
-    { "aq_strength",    &reg.f_aq_strength,    1.00,  0.00, 1000.00 }
 };
 
 static const reg_str_t reg_str_table[] =
 {
-    /* Main */
-    { "statsfile",     reg.stats,         ".\\x264.stats",           MAX_STATS_PATH     },
-    { "extra_cmdline", reg.extra_cmdline, "",                        MAX_CMDLINE        },
-
-    /* VFW */
-    { "fourcc",        reg.fcc,           (char *)&fcc_str_table[0], sizeof(fourcc_str) },
-
-    /* Encoding */
-    { "cqmfile",       reg.cqmfile,       "",                        MAX_PATH           },
-
-    /* Config */
-    { "cmdline",       reg.cmdline,       "",                        MAX_CMDLINE        }
+    /* Rate control */
+    { "statsfile",     reg.stats,         ".\\x264.stats", MAX_STATS_PATH  },
+    /* Output */
+    { "output_file",   reg.output_file,   "",              MAX_OUTPUT_PATH },
+    /* Extra command line */
+    { "extra_cmdline", reg.extra_cmdline, "",              MAX_CMDLINE     }
 };
 
 static double GetDlgItemDouble(HWND hDlg, int nIDDlgItem)
 {
     char temp[1024];
 
-    GetDlgItemText(hDlg, nIDDlgItem, temp, 1024);
+    if (GetDlgItemText(hDlg, nIDDlgItem, temp, 1024) == 0)
+        strcpy(temp, "");
     return atof(temp);
 }
 
@@ -295,12 +196,6 @@ static int scale2pos(int i_scale)
     return res;
 }
 
-#define VUI_abs2loc(val, name)\
-    ((val) >= 0 && (val) < sizeof(name##_abs2loc) / sizeof(const int)) ? name##_abs2loc[val] : 0
-
-#define VUI_loc2abs(val, name)\
-    ((val) >= 0 && (val) < sizeof(name##_loc2abs) / sizeof(const int)) ? name##_loc2abs[val] : name##_loc2abs[0]
-
 #define GordianKnotWorkaround(encoding_type)\
 {\
     switch (encoding_type)\
@@ -326,15 +221,67 @@ static int scale2pos(int i_scale)
     }\
 }
 
-/* Registry access */
+void config_defaults(CONFIG *config)
+{
+    int     i;
+
+    EnterCriticalSection(&g_CS);
+    memset(&reg, 0, sizeof(CONFIG));
+
+    /* Save all named params */
+    for (i = 0; i < sizeof(reg_named_str_table) / sizeof(reg_named_str_t); i++)
+    {
+        int j;
+        for (j = 0; j < reg_named_str_table[i].list_count; j++)
+            if (!strcasecmp(reg_named_str_table[i].default_str, reg_named_str_table[i].list[j].value))
+                *reg_named_str_table[i].config_int = j;
+    }
+
+    /* Set all integers */
+    for (i = 0; i < sizeof(reg_int_table) / sizeof(reg_int_t); i++)
+        *reg_int_table[i].config_int = reg_int_table[i].default_int;
+    for (i = 0; i < sizeof(reg_int_table) / sizeof(reg_int_t); i++)
+        *reg_int_table[i].config_int = X264_CLIP(*reg_int_table[i].config_int, reg_int_table[i].min_int, reg_int_table[i].max_int);
+
+    /* Set all strings */
+    for (i = 0; i < sizeof(reg_str_table) / sizeof(reg_str_t); i++)
+        strcpy(reg_str_table[i].config_str, reg_str_table[i].default_str);
+
+    GordianKnotWorkaround(reg.i_encoding_type);
+    memcpy(config, &reg, sizeof(CONFIG));
+    LeaveCriticalSection(&g_CS);
+}
+
 void config_reg_load(CONFIG *config)
 {
     HKEY    hKey;
     DWORD   i_size;
     int     i;
-    char    temp[1024];
 
-    RegOpenKeyEx(X264_REG_KEY, X264_REG_PARENT "\\" X264_REG_CHILD, 0, KEY_READ, &hKey);
+    if (RegOpenKeyEx(X264VFW_REG_KEY, X264VFW_REG_PARENT "\\" X264VFW_REG_CHILD, 0, KEY_READ, &hKey) != ERROR_SUCCESS)
+    {
+        config_defaults(config);
+        return;
+    }
+    EnterCriticalSection(&g_CS);
+    memset(&reg, 0, sizeof(CONFIG));
+
+    /* Read all named params */
+    for (i = 0; i < sizeof(reg_named_str_table) / sizeof(reg_named_str_t); i++)
+    {
+        char temp[1024];
+        int j;
+        for (j = 0; j < reg_named_str_table[i].list_count; j++)
+            if (!strcasecmp(reg_named_str_table[i].default_str, reg_named_str_table[i].list[j].value))
+                *reg_named_str_table[i].config_int = j;
+        i_size = 1024;
+        if (RegQueryValueEx(hKey, reg_named_str_table[i].reg_value, 0, 0, (LPBYTE)temp, &i_size) == ERROR_SUCCESS)
+        {
+            for (j = 0; j < reg_named_str_table[i].list_count; j++)
+                if (!strcasecmp(temp, reg_named_str_table[i].list[j].value))
+                    *reg_named_str_table[i].config_int = j;
+        }
+    }
 
     /* Read all integers */
     for (i = 0; i < sizeof(reg_int_table) / sizeof(reg_int_t); i++)
@@ -346,18 +293,6 @@ void config_reg_load(CONFIG *config)
     for (i = 0; i < sizeof(reg_int_table) / sizeof(reg_int_t); i++)
         *reg_int_table[i].config_int = X264_CLIP(*reg_int_table[i].config_int, reg_int_table[i].min_int, reg_int_table[i].max_int);
 
-    /* Read all floats */
-    for (i = 0; i < sizeof(reg_float_table) / sizeof(reg_float_t); i++)
-    {
-        i_size = 1024;
-        if (RegQueryValueEx(hKey, reg_float_table[i].reg_value, 0, 0, (LPBYTE)temp, &i_size) != ERROR_SUCCESS)
-            *reg_float_table[i].config_float = reg_float_table[i].default_float;
-        else
-            *reg_float_table[i].config_float = atof(temp);
-    }
-    for (i = 0; i < sizeof(reg_float_table) / sizeof(reg_float_t); i++)
-        *reg_float_table[i].config_float = X264_CLIP(*reg_float_table[i].config_float, reg_float_table[i].min_float, reg_float_table[i].max_float);
-
     /* Read all strings */
     for (i = 0; i < sizeof(reg_str_table) / sizeof(reg_str_t); i++)
     {
@@ -366,10 +301,10 @@ void config_reg_load(CONFIG *config)
             strcpy(reg_str_table[i].config_str, reg_str_table[i].default_str);
     }
 
-    RegCloseKey(hKey);
-
     GordianKnotWorkaround(reg.i_encoding_type);
     memcpy(config, &reg, sizeof(CONFIG));
+    LeaveCriticalSection(&g_CS);
+    RegCloseKey(hKey);
 }
 
 void config_reg_save(CONFIG *config)
@@ -377,692 +312,248 @@ void config_reg_save(CONFIG *config)
     HKEY    hKey;
     DWORD   dwDisposition;
     int     i;
-    char    temp[1024];
 
-    if (RegCreateKeyEx(X264_REG_KEY, X264_REG_PARENT "\\" X264_REG_CHILD, 0, X264_REG_CLASS, REG_OPTION_NON_VOLATILE, KEY_WRITE, 0, &hKey, &dwDisposition) != ERROR_SUCCESS)
+    if (RegCreateKeyEx(X264VFW_REG_KEY, X264VFW_REG_PARENT "\\" X264VFW_REG_CHILD, 0, X264VFW_REG_CLASS, REG_OPTION_NON_VOLATILE, KEY_WRITE, 0, &hKey, &dwDisposition) != ERROR_SUCCESS)
         return;
-
+    EnterCriticalSection(&g_CS);
     memcpy(&reg, config, sizeof(CONFIG));
     GordianKnotWorkaround(reg.i_encoding_type);
+
+    /* Save all named params */
+    for (i = 0; i < sizeof(reg_named_str_table) / sizeof(reg_named_str_t); i++)
+    {
+        const char *temp = *reg_named_str_table[i].config_int >= 0 && *reg_named_str_table[i].config_int < reg_named_str_table[i].list_count
+                           ? reg_named_str_table[i].list[*reg_named_str_table[i].config_int].value
+                           : "";
+        RegSetValueEx(hKey, reg_named_str_table[i].reg_value, 0, REG_SZ, (LPBYTE)temp, strlen(temp) + 1);
+    }
 
     /* Save all integers */
     for (i = 0; i < sizeof(reg_int_table) / sizeof(reg_int_t); i++)
         RegSetValueEx(hKey, reg_int_table[i].reg_value, 0, REG_DWORD, (LPBYTE)reg_int_table[i].config_int, sizeof(int));
 
-    /* Save all floats */
-    for (i = 0; i < sizeof(reg_float_table) / sizeof(reg_float_t); i++)
-    {
-        sprintf(temp, "%.2f", *reg_float_table[i].config_float);
-        RegSetValueEx(hKey, reg_float_table[i].reg_value, 0, REG_SZ, (LPBYTE)temp, strlen(temp) + 1);
-    }
-
     /* Save all strings */
     for (i = 0; i < sizeof(reg_str_table) / sizeof(reg_str_t); i++)
         RegSetValueEx(hKey, reg_str_table[i].reg_value, 0, REG_SZ, (LPBYTE)reg_str_table[i].config_str, strlen(reg_str_table[i].config_str) + 1);
 
+    LeaveCriticalSection(&g_CS);
     RegCloseKey(hKey);
 }
 
-void config_defaults(CONFIG *config)
+static void dlg_enable_items(CONFIG_DATA *cfg_data)
 {
-    int     i;
-
-    /* Set all integers */
-    for (i = 0; i < sizeof(reg_int_table) / sizeof(reg_int_t); i++)
-        *reg_int_table[i].config_int = reg_int_table[i].default_int;
-    for (i = 0; i < sizeof(reg_int_table) / sizeof(reg_int_t); i++)
-        *reg_int_table[i].config_int = X264_CLIP(*reg_int_table[i].config_int, reg_int_table[i].min_int, reg_int_table[i].max_int);
-
-    /* Set all floats */
-    for (i = 0; i < sizeof(reg_float_table) / sizeof(reg_float_t); i++)
-        *reg_float_table[i].config_float = reg_float_table[i].default_float;
-    for (i = 0; i < sizeof(reg_float_table) / sizeof(reg_float_t); i++)
-        *reg_float_table[i].config_float = X264_CLIP(*reg_float_table[i].config_float, reg_float_table[i].min_float, reg_float_table[i].max_float);
-
-    /* Set all strings */
-    for (i = 0; i < sizeof(reg_str_table) / sizeof(reg_str_t); i++)
-        strcpy(reg_str_table[i].config_str, reg_str_table[i].default_str);
-
-    GordianKnotWorkaround(reg.i_encoding_type);
-    memcpy(config, &reg, sizeof(CONFIG));
-}
-
-/* Tabs */
-static void tabs_enable_items(CONFIG *config)
-{
-    /* Main */
-    ShowWindow(GetDlgItem(hTabs[0], IDC_MAIN_RC_LABEL), config->i_encoding_type > 0);
-    ShowWindow(GetDlgItem(hTabs[0], IDC_MAIN_RC_VAL), config->i_encoding_type > 0);
-    ShowWindow(GetDlgItem(hTabs[0], IDC_MAIN_RC_VAL_SLIDER), config->i_encoding_type > 0);
-    ShowWindow(GetDlgItem(hTabs[0], IDC_MAIN_RC_LOW_LABEL), config->i_encoding_type > 0);
-    ShowWindow(GetDlgItem(hTabs[0], IDC_MAIN_RC_HIGH_LABEL), config->i_encoding_type > 0);
-    ShowWindow(GetDlgItem(hTabs[0], IDC_MAIN_STATS_CREATE), config->i_encoding_type != 4);
-    ShowWindow(GetDlgItem(hTabs[0], IDC_MAIN_STATS_UPDATE), config->i_encoding_type == 4 && config->i_pass > 1);
-    EnableWindow(GetDlgItem(hTabs[0], IDC_MAIN_STATS), config->i_encoding_type == 4 || config->b_createstats);
-    EnableWindow(GetDlgItem(hTabs[0], IDC_MAIN_STATS_BROWSE), config->i_encoding_type == 4 || config->b_createstats);
-
-    /* Debug */
-    EnableWindow(GetDlgItem(hTabs[0], IDC_DEBUG_PSNR), config->i_encoding_type > 0 && config->i_log_level >= 3);
-    EnableWindow(GetDlgItem(hTabs[0], IDC_DEBUG_SSIM), config->i_encoding_type > 0 && config->i_log_level >= 3);
-
-    /* Analysis */
-    EnableWindow(GetDlgItem(hTabs[1], IDC_ANALYSIS_8X8DCT), config->i_encoding_type > 0 || config->b_cabac);
-    EnableWindow(GetDlgItem(hTabs[1], IDC_ANALYSIS_I_I8X8), (config->i_encoding_type > 0 || config->b_cabac) && config->b_dct8x8);
-    EnableWindow(GetDlgItem(hTabs[1], IDC_ANALYSIS_PB_I8X8), (config->i_encoding_type > 0 || config->b_cabac) && config->b_dct8x8);
-    EnableWindow(GetDlgItem(hTabs[1], IDC_ANALYSIS_PB_P4X4), config->b_psub16x16);
-    EnableWindow(GetDlgItem(hTabs[1], IDC_ANALYSIS_PB_B8X8), config->i_encoding_type > 0 && config->i_bframe > 0);
-    EnableWindow(GetDlgItem(hTabs[1], IDC_ANALYSIS_FAST_PSKIP), config->i_encoding_type > 0);
-    EnableWindow(GetDlgItem(hTabs[1], IDC_ANALYSIS_MIXED_REFS), config->i_refmax > 1);
-    EnableWindow(GetDlgItem(hTabs[1], IDC_ANALYSIS_CHROMA_ME), config->i_subpel_refine >= 5);
-    EnableWindow(GetDlgItem(hTabs[1], IDC_ANALYSIS_PSY_RDO), config->i_encoding_type > 0 && config->i_subpel_refine >= 6);
-    EnableWindow(GetDlgItem(hTabs[1], IDC_ANALYSIS_BFRAMES), config->i_encoding_type > 0);
-    EnableWindow(GetDlgItem(hTabs[1], IDC_ANALYSIS_BFRAMES_SPIN), config->i_encoding_type > 0);
-    EnableWindow(GetDlgItem(hTabs[1], IDC_ANALYSIS_B_ADAPT), config->i_encoding_type > 0 && config->i_bframe > 0);
-    EnableWindow(GetDlgItem(hTabs[1], IDC_ANALYSIS_B_BIAS), config->i_encoding_type > 0 && config->i_bframe > 0 && config->i_bframe_adaptive > 0);
-    EnableWindow(GetDlgItem(hTabs[1], IDC_ANALYSIS_B_BIAS_SPIN), config->i_encoding_type > 0 && config->i_bframe > 0 && config->i_bframe_adaptive > 0);
-    EnableWindow(GetDlgItem(hTabs[1], IDC_ANALYSIS_DIRECT), config->i_encoding_type > 0 && config->i_bframe > 0);
-    EnableWindow(GetDlgItem(hTabs[1], IDC_ANALYSIS_B_PYRAMID), config->i_encoding_type > 0 && config->i_bframe > 1);
-    EnableWindow(GetDlgItem(hTabs[1], IDC_ANALYSIS_WEIGHTB), config->i_encoding_type > 0 && config->i_bframe > 0);
-
-    /* Encoding */
-    EnableWindow(GetDlgItem(hTabs[1], IDC_ENC_DEBLOCK), config->i_encoding_type > 0);
-    EnableWindow(GetDlgItem(hTabs[1], IDC_ENC_DEBLOCK_A), config->i_encoding_type > 0 && config->b_filter);
-    EnableWindow(GetDlgItem(hTabs[1], IDC_ENC_DEBLOCK_A_SPIN), config->i_encoding_type > 0 && config->b_filter);
-    EnableWindow(GetDlgItem(hTabs[1], IDC_ENC_DEBLOCK_B), config->i_encoding_type > 0 && config->b_filter);
-    EnableWindow(GetDlgItem(hTabs[1], IDC_ENC_DEBLOCK_B_SPIN), config->i_encoding_type > 0 && config->b_filter);
-    EnableWindow(GetDlgItem(hTabs[1], IDC_ENC_DCT_DECIMATE), config->i_encoding_type > 0);
-    EnableWindow(GetDlgItem(hTabs[1], IDC_ENC_NR), config->i_encoding_type > 0);
-    EnableWindow(GetDlgItem(hTabs[1], IDC_ENC_TRELLIS), config->i_encoding_type > 0 && config->b_cabac);
-    EnableWindow(GetDlgItem(hTabs[1], IDC_ENC_DEADZONE_INTRA), config->i_encoding_type > 0);
-    EnableWindow(GetDlgItem(hTabs[1], IDC_ENC_DEADZONE_INTRA_SPIN), config->i_encoding_type > 0);
-    EnableWindow(GetDlgItem(hTabs[1], IDC_ENC_DEADZONE_INTER), config->i_encoding_type > 0);
-    EnableWindow(GetDlgItem(hTabs[1], IDC_ENC_DEADZONE_INTER_SPIN), config->i_encoding_type > 0);
-    EnableWindow(GetDlgItem(hTabs[1], IDC_ENC_CQM), config->i_encoding_type > 0);
-    EnableWindow(GetDlgItem(hTabs[1], IDC_ENC_CQMFILE), config->i_encoding_type > 0 && config->i_cqm == 2);
-    EnableWindow(GetDlgItem(hTabs[1], IDC_ENC_CQMFILE_BROWSE), config->i_encoding_type > 0 && config->i_cqm == 2);
-    EnableWindow(GetDlgItem(hTabs[1], IDC_ENC_PSY_TRELLIS), config->i_encoding_type > 0 && config->b_cabac && config->i_trellis > 0);
-
+    CONFIG *config = &cfg_data->config;
+    HWND hMainDlg = cfg_data->hMainDlg;
     /* Rate control */
-    EnableWindow(GetDlgItem(hTabs[2], IDC_RC_VBV_MAXRATE), config->i_encoding_type > 1);
-    EnableWindow(GetDlgItem(hTabs[2], IDC_RC_VBV_BUFSIZE), config->i_encoding_type > 1);
-    EnableWindow(GetDlgItem(hTabs[2], IDC_RC_VBV_INIT), config->i_encoding_type > 1);
-    EnableWindow(GetDlgItem(hTabs[2], IDC_RC_VBV_INIT_SPIN), config->i_encoding_type > 1);
-    EnableWindow(GetDlgItem(hTabs[2], IDC_RC_QPMIN), config->i_encoding_type > 1);
-    EnableWindow(GetDlgItem(hTabs[2], IDC_RC_QPMIN_SPIN), config->i_encoding_type > 1);
-    EnableWindow(GetDlgItem(hTabs[2], IDC_RC_QPMAX), config->i_encoding_type > 1);
-    EnableWindow(GetDlgItem(hTabs[2], IDC_RC_QPMAX_SPIN), config->i_encoding_type > 1);
-    EnableWindow(GetDlgItem(hTabs[2], IDC_RC_QPSTEP), config->i_encoding_type > 1);
-    EnableWindow(GetDlgItem(hTabs[2], IDC_RC_QPSTEP_SPIN), config->i_encoding_type > 1);
-    EnableWindow(GetDlgItem(hTabs[2], IDC_RC_IPRATIO), config->i_encoding_type > 0);
-    EnableWindow(GetDlgItem(hTabs[2], IDC_RC_PBRATIO), config->i_encoding_type > 0 && config->i_bframe > 0);
-    EnableWindow(GetDlgItem(hTabs[2], IDC_RC_CHROMA_QP_OFFSET), config->i_encoding_type > 0);
-    EnableWindow(GetDlgItem(hTabs[2], IDC_RC_CHROMA_QP_OFFSET_SPIN), config->i_encoding_type > 0);
-    EnableWindow(GetDlgItem(hTabs[2], IDC_RC_QCOMP), config->i_encoding_type > 1);
-    EnableWindow(GetDlgItem(hTabs[2], IDC_RC_CPLXBLUR), config->i_encoding_type == 4 && config->i_pass > 1);
-    EnableWindow(GetDlgItem(hTabs[2], IDC_RC_QBLUR), config->i_encoding_type == 4 && config->i_pass > 1);
-    EnableWindow(GetDlgItem(hTabs[2], IDC_RC_RATETOL), config->i_encoding_type > 2);
-
-    /* AQ */
-    EnableWindow(GetDlgItem(hTabs[2], IDC_AQ_MODE), config->i_encoding_type > 1);
-    EnableWindow(GetDlgItem(hTabs[2], IDC_AQ_STRENGTH), config->i_encoding_type > 1 && config->i_aq_mode > 0);
-
-    /* Multithreading */
-#if X264VFW_USE_THREADS
-    EnableWindow(GetDlgItem(hTabs[2], IDC_MT_DETERMINISTIC), config->i_threads != 1);
-    EnableWindow(GetDlgItem(hTabs[2], IDC_MT_SLICED), config->i_threads != 1);
-#endif
-
-    /* Config */
-    EnableWindow(GetDlgItem(hMainDlg, IDC_CONFIG_CMDLINE), config->b_use_cmdline);
+    ShowWindow(GetDlgItem(hMainDlg, IDC_RC_LABEL), config->i_encoding_type > 0);
+    ShowWindow(GetDlgItem(hMainDlg, IDC_RC_VAL), config->i_encoding_type > 0);
+    ShowWindow(GetDlgItem(hMainDlg, IDC_RC_VAL_SLIDER), config->i_encoding_type > 0);
+    ShowWindow(GetDlgItem(hMainDlg, IDC_RC_LOW_LABEL), config->i_encoding_type > 0);
+    ShowWindow(GetDlgItem(hMainDlg, IDC_RC_HIGH_LABEL), config->i_encoding_type > 0);
+    ShowWindow(GetDlgItem(hMainDlg, IDC_STATS_CREATE), config->i_encoding_type != 4);
+    ShowWindow(GetDlgItem(hMainDlg, IDC_STATS_UPDATE), config->i_encoding_type == 4 && config->i_pass > 1);
+    EnableWindow(GetDlgItem(hMainDlg, IDC_STATS_FILE), config->i_encoding_type == 4 || config->b_createstats);
+    EnableWindow(GetDlgItem(hMainDlg, IDC_STATS_BROWSE), config->i_encoding_type == 4 || config->b_createstats);
+    /* Output */
+    EnableWindow(GetDlgItem(hMainDlg, IDC_OUTPUT_FILE), config->i_output_mode == 1);
+    EnableWindow(GetDlgItem(hMainDlg, IDC_OUTPUT_BROWSE), config->i_output_mode == 1);
+    /* Debug */
+    EnableWindow(GetDlgItem(hMainDlg, IDC_PSNR), config->i_encoding_type > 0 && config->i_log_level >= 3);
+    EnableWindow(GetDlgItem(hMainDlg, IDC_SSIM), config->i_encoding_type > 0 && config->i_log_level >= 3);
 }
 
-static void tabs_update_items(CONFIG *config)
+static void dlg_update_items(CONFIG_DATA *cfg_data)
 {
-    char szTmp[1024];
+    CONFIG *config = &cfg_data->config;
+    HWND hMainDlg = cfg_data->hMainDlg;
+    char temp[1024];
 
-    /* Main */
-    sprintf(szTmp, "Build date: %s %s\nlibx264 core %d%s", __DATE__, __TIME__, X264_BUILD, X264_VERSION);
-    SetDlgItemText(hTabs[0], IDC_MAIN_BUILD_LABEL, szTmp);
-    if (SendMessage(GetDlgItem(hTabs[0], IDC_MAIN_RC_MODE), CB_GETCOUNT, 0, 0) == 0)
+    /* Basic */
+    if (SendMessage(GetDlgItem(hMainDlg, IDC_PRESET), CB_GETCOUNT, 0, 0) == 0)
     {
-        SendDlgItemMessage(hTabs[0], IDC_MAIN_RC_MODE, CB_ADDSTRING, 0, (LPARAM)"Single pass - lossless");
-        SendDlgItemMessage(hTabs[0], IDC_MAIN_RC_MODE, CB_ADDSTRING, 0, (LPARAM)"Single pass - quantizer-based (CQP)");
-        SendDlgItemMessage(hTabs[0], IDC_MAIN_RC_MODE, CB_ADDSTRING, 0, (LPARAM)"Single pass - ratefactor-based (CRF)");
-        SendDlgItemMessage(hTabs[0], IDC_MAIN_RC_MODE, CB_ADDSTRING, 0, (LPARAM)"Single pass - bitrate-based (ABR)");
-        SendDlgItemMessage(hTabs[0], IDC_MAIN_RC_MODE, CB_ADDSTRING, 0, (LPARAM)"Multipass - 1st pass");
-        SendDlgItemMessage(hTabs[0], IDC_MAIN_RC_MODE, CB_ADDSTRING, 0, (LPARAM)"Multipass - 1st pass (fast)");
-        SendDlgItemMessage(hTabs[0], IDC_MAIN_RC_MODE, CB_ADDSTRING, 0, (LPARAM)"Multipass - Nth pass");
+        int i;
+        for (i = 0; i < COUNT_PRESET; i++)
+            SendDlgItemMessage(hMainDlg, IDC_PRESET, CB_ADDSTRING, 0, (LPARAM)preset_table[i].name);
     }
-    SendMessage(GetDlgItem(hTabs[0], IDC_MAIN_RC_VAL), EM_LIMITTEXT, 8, 0);
+    SendDlgItemMessage(hMainDlg, IDC_PRESET, CB_SETCURSEL, config->i_preset, 0);
+    if (SendMessage(GetDlgItem(hMainDlg, IDC_TUNING), CB_GETCOUNT, 0, 0) == 0)
+    {
+        int i;
+        for (i = 0; i < COUNT_TUNE; i++)
+            SendDlgItemMessage(hMainDlg, IDC_TUNING, CB_ADDSTRING, 0, (LPARAM)tune_table[i].name);
+    }
+    SendDlgItemMessage(hMainDlg, IDC_TUNING, CB_SETCURSEL, config->i_tuning, 0);
+    if (SendMessage(GetDlgItem(hMainDlg, IDC_PROFILE), CB_GETCOUNT, 0, 0) == 0)
+    {
+        int i;
+        for (i = 0; i < COUNT_PROFILE; i++)
+            SendDlgItemMessage(hMainDlg, IDC_PROFILE, CB_ADDSTRING, 0, (LPARAM)profile_table[i].name);
+    }
+    SendDlgItemMessage(hMainDlg, IDC_PROFILE, CB_SETCURSEL, config->i_profile, 0);
+    if (SendMessage(GetDlgItem(hMainDlg, IDC_LEVEL), CB_GETCOUNT, 0, 0) == 0)
+    {
+        int i;
+        for (i = 0; i < COUNT_LEVEL; i++)
+            SendDlgItemMessage(hMainDlg, IDC_LEVEL, CB_ADDSTRING, 0, (LPARAM)level_table[i].name);
+    }
+    SendDlgItemMessage(hMainDlg, IDC_LEVEL, CB_SETCURSEL, config->i_level, 0);
+    CheckDlgButton(hMainDlg, IDC_TUNE_FASTDECODE, config->b_fastdecode);
+    CheckDlgButton(hMainDlg, IDC_TUNE_ZEROLATENCY, config->b_zerolatency);
+    /* Rate control */
+    if (SendMessage(GetDlgItem(hMainDlg, IDC_RC_MODE), CB_GETCOUNT, 0, 0) == 0)
+    {
+        SendDlgItemMessage(hMainDlg, IDC_RC_MODE, CB_ADDSTRING, 0, (LPARAM)"Single pass - lossless");
+        SendDlgItemMessage(hMainDlg, IDC_RC_MODE, CB_ADDSTRING, 0, (LPARAM)"Single pass - quantizer-based (CQP)");
+        SendDlgItemMessage(hMainDlg, IDC_RC_MODE, CB_ADDSTRING, 0, (LPARAM)"Single pass - ratefactor-based (CRF)");
+        SendDlgItemMessage(hMainDlg, IDC_RC_MODE, CB_ADDSTRING, 0, (LPARAM)"Single pass - bitrate-based (ABR)");
+        SendDlgItemMessage(hMainDlg, IDC_RC_MODE, CB_ADDSTRING, 0, (LPARAM)"Multipass - 1st pass");
+        SendDlgItemMessage(hMainDlg, IDC_RC_MODE, CB_ADDSTRING, 0, (LPARAM)"Multipass - 1st pass (fast)");
+        SendDlgItemMessage(hMainDlg, IDC_RC_MODE, CB_ADDSTRING, 0, (LPARAM)"Multipass - Nth pass");
+    }
+    SendMessage(GetDlgItem(hMainDlg, IDC_RC_VAL), EM_LIMITTEXT, 8, 0);
     switch (config->i_encoding_type)
     {
         case 0: /* 1 pass, lossless */
-            SendDlgItemMessage(hTabs[0], IDC_MAIN_RC_MODE, CB_SETCURSEL, 0, 0);
-            SetDlgItemText(hTabs[0], IDC_MAIN_RC_LABEL, "");
-            SetDlgItemText(hTabs[0], IDC_MAIN_RC_LOW_LABEL, "");
-            SetDlgItemText(hTabs[0], IDC_MAIN_RC_HIGH_LABEL, "");
-            SetDlgItemInt(hTabs[0], IDC_MAIN_RC_VAL, 0, FALSE);
-            SendDlgItemMessage(hTabs[0], IDC_MAIN_RC_VAL_SLIDER, TBM_SETRANGEMIN, TRUE, 0);
-            SendDlgItemMessage(hTabs[0], IDC_MAIN_RC_VAL_SLIDER, TBM_SETRANGEMAX, TRUE, 0);
-            SendDlgItemMessage(hTabs[0], IDC_MAIN_RC_VAL_SLIDER, TBM_SETPOS, TRUE, 0);
+            SendDlgItemMessage(hMainDlg, IDC_RC_MODE, CB_SETCURSEL, 0, 0);
+            SetDlgItemText(hMainDlg, IDC_RC_LABEL, "");
+            SetDlgItemText(hMainDlg, IDC_RC_LOW_LABEL, "");
+            SetDlgItemText(hMainDlg, IDC_RC_HIGH_LABEL, "");
+            SetDlgItemInt(hMainDlg, IDC_RC_VAL, 0, FALSE);
+            SendDlgItemMessage(hMainDlg, IDC_RC_VAL_SLIDER, TBM_SETRANGEMIN, TRUE, 0);
+            SendDlgItemMessage(hMainDlg, IDC_RC_VAL_SLIDER, TBM_SETRANGEMAX, TRUE, 0);
+            SendDlgItemMessage(hMainDlg, IDC_RC_VAL_SLIDER, TBM_SETPOS, TRUE, 0);
             break;
 
         case 1: /* 1 pass, quantizer-based (CQP) */
-            SendDlgItemMessage(hTabs[0], IDC_MAIN_RC_MODE, CB_SETCURSEL, 1, 0);
-            SetDlgItemText(hTabs[0], IDC_MAIN_RC_LABEL, "Quantizer");
-            SetDlgItemText(hTabs[0], IDC_MAIN_RC_LOW_LABEL, "1 (High quality)");
-            sprintf(szTmp, "(Low quality) %d", X264_QUANT_MAX);
-            SetDlgItemText(hTabs[0], IDC_MAIN_RC_HIGH_LABEL, szTmp);
-            SetDlgItemInt(hTabs[0], IDC_MAIN_RC_VAL, config->i_qp, FALSE);
-            SendDlgItemMessage(hTabs[0], IDC_MAIN_RC_VAL_SLIDER, TBM_SETRANGEMIN, TRUE, 1);
-            SendDlgItemMessage(hTabs[0], IDC_MAIN_RC_VAL_SLIDER, TBM_SETRANGEMAX, TRUE, X264_QUANT_MAX);
-            SendDlgItemMessage(hTabs[0], IDC_MAIN_RC_VAL_SLIDER, TBM_SETPOS, TRUE, config->i_qp);
+            SendDlgItemMessage(hMainDlg, IDC_RC_MODE, CB_SETCURSEL, 1, 0);
+            SetDlgItemText(hMainDlg, IDC_RC_LABEL, "Quantizer");
+            SetDlgItemText(hMainDlg, IDC_RC_LOW_LABEL, "1 (High quality)");
+            sprintf(temp, "(Low quality) %d", MAX_QUANT);
+            SetDlgItemText(hMainDlg, IDC_RC_HIGH_LABEL, temp);
+            SetDlgItemInt(hMainDlg, IDC_RC_VAL, config->i_qp, FALSE);
+            SendDlgItemMessage(hMainDlg, IDC_RC_VAL_SLIDER, TBM_SETRANGEMIN, TRUE, 1);
+            SendDlgItemMessage(hMainDlg, IDC_RC_VAL_SLIDER, TBM_SETRANGEMAX, TRUE, MAX_QUANT);
+            SendDlgItemMessage(hMainDlg, IDC_RC_VAL_SLIDER, TBM_SETPOS, TRUE, config->i_qp);
             break;
 
         case 2: /* 1 pass, ratefactor-based (CRF) */
-            SendDlgItemMessage(hTabs[0], IDC_MAIN_RC_MODE, CB_SETCURSEL, 2, 0);
-            SetDlgItemText(hTabs[0], IDC_MAIN_RC_LABEL, "Ratefactor");
-            SetDlgItemText(hTabs[0], IDC_MAIN_RC_LOW_LABEL, "1.0 (High quality)");
-            sprintf(szTmp, "(Low quality) %d.0", X264_QUANT_MAX);
-            SetDlgItemText(hTabs[0], IDC_MAIN_RC_HIGH_LABEL, szTmp);
-            SetDlgItemDouble(hTabs[0], IDC_MAIN_RC_VAL, config->i_rf_constant * 0.1, "%.1f");
-            SendDlgItemMessage(hTabs[0], IDC_MAIN_RC_VAL_SLIDER, TBM_SETRANGEMIN, TRUE, 10);
-            SendDlgItemMessage(hTabs[0], IDC_MAIN_RC_VAL_SLIDER, TBM_SETRANGEMAX, TRUE, X264_QUANT_MAX * 10);
-            SendDlgItemMessage(hTabs[0], IDC_MAIN_RC_VAL_SLIDER, TBM_SETPOS, TRUE, config->i_rf_constant);
+            SendDlgItemMessage(hMainDlg, IDC_RC_MODE, CB_SETCURSEL, 2, 0);
+            SetDlgItemText(hMainDlg, IDC_RC_LABEL, "Ratefactor");
+            SetDlgItemText(hMainDlg, IDC_RC_LOW_LABEL, "1.0 (High quality)");
+            sprintf(temp, "(Low quality) %d.0", MAX_QUANT);
+            SetDlgItemText(hMainDlg, IDC_RC_HIGH_LABEL, temp);
+            SetDlgItemDouble(hMainDlg, IDC_RC_VAL, config->i_rf_constant * 0.1, "%.1f");
+            SendDlgItemMessage(hMainDlg, IDC_RC_VAL_SLIDER, TBM_SETRANGEMIN, TRUE, 10);
+            SendDlgItemMessage(hMainDlg, IDC_RC_VAL_SLIDER, TBM_SETRANGEMAX, TRUE, MAX_QUANT * 10);
+            SendDlgItemMessage(hMainDlg, IDC_RC_VAL_SLIDER, TBM_SETPOS, TRUE, config->i_rf_constant);
             break;
 
         case 3: /* 1 pass, bitrate-based (ABR) */
-            SendDlgItemMessage(hTabs[0], IDC_MAIN_RC_MODE, CB_SETCURSEL, 3, 0);
-            SetDlgItemText(hTabs[0], IDC_MAIN_RC_LABEL, "Average bitrate (kbit/s)");
-            SetDlgItemText(hTabs[0], IDC_MAIN_RC_LOW_LABEL, "1");
-            sprintf(szTmp, "%d", X264_BITRATE_MAX);
-            SetDlgItemText(hTabs[0], IDC_MAIN_RC_HIGH_LABEL, szTmp);
-            SetDlgItemInt(hTabs[0], IDC_MAIN_RC_VAL, config->i_passbitrate, FALSE);
-            SendDlgItemMessage(hTabs[0], IDC_MAIN_RC_VAL_SLIDER, TBM_SETRANGEMIN, TRUE, 1);
-            SendDlgItemMessage(hTabs[0], IDC_MAIN_RC_VAL_SLIDER, TBM_SETRANGEMAX, TRUE, scale2pos(X264_BITRATE_MAX));
-            SendDlgItemMessage(hTabs[0], IDC_MAIN_RC_VAL_SLIDER, TBM_SETPOS, TRUE, scale2pos(config->i_passbitrate));
+            SendDlgItemMessage(hMainDlg, IDC_RC_MODE, CB_SETCURSEL, 3, 0);
+            SetDlgItemText(hMainDlg, IDC_RC_LABEL, "Average bitrate (kbit/s)");
+            SetDlgItemText(hMainDlg, IDC_RC_LOW_LABEL, "1");
+            sprintf(temp, "%d", MAX_BITRATE);
+            SetDlgItemText(hMainDlg, IDC_RC_HIGH_LABEL, temp);
+            SetDlgItemInt(hMainDlg, IDC_RC_VAL, config->i_passbitrate, FALSE);
+            SendDlgItemMessage(hMainDlg, IDC_RC_VAL_SLIDER, TBM_SETRANGEMIN, TRUE, 1);
+            SendDlgItemMessage(hMainDlg, IDC_RC_VAL_SLIDER, TBM_SETRANGEMAX, TRUE, scale2pos(MAX_BITRATE));
+            SendDlgItemMessage(hMainDlg, IDC_RC_VAL_SLIDER, TBM_SETPOS, TRUE, scale2pos(config->i_passbitrate));
             break;
 
         case 4: /* 2 pass */
             if (config->i_pass > 1)
-                SendDlgItemMessage(hTabs[0], IDC_MAIN_RC_MODE, CB_SETCURSEL, 6, 0);
+                SendDlgItemMessage(hMainDlg, IDC_RC_MODE, CB_SETCURSEL, 6, 0);
             else if (config->b_fast1pass)
-                SendDlgItemMessage(hTabs[0], IDC_MAIN_RC_MODE, CB_SETCURSEL, 5, 0);
+                SendDlgItemMessage(hMainDlg, IDC_RC_MODE, CB_SETCURSEL, 5, 0);
             else
-                SendDlgItemMessage(hTabs[0], IDC_MAIN_RC_MODE, CB_SETCURSEL, 4, 0);
-            SetDlgItemText(hTabs[0], IDC_MAIN_RC_LABEL, "Target bitrate (kbit/s)");
-            SetDlgItemText(hTabs[0], IDC_MAIN_RC_LOW_LABEL, "1");
-            sprintf(szTmp, "%d", X264_BITRATE_MAX);
-            SetDlgItemText(hTabs[0], IDC_MAIN_RC_HIGH_LABEL, szTmp);
-            SetDlgItemInt(hTabs[0], IDC_MAIN_RC_VAL, config->i_passbitrate, FALSE);
-            SendDlgItemMessage(hTabs[0], IDC_MAIN_RC_VAL_SLIDER, TBM_SETRANGEMIN, TRUE, 1);
-            SendDlgItemMessage(hTabs[0], IDC_MAIN_RC_VAL_SLIDER, TBM_SETRANGEMAX, TRUE, scale2pos(X264_BITRATE_MAX));
-            SendDlgItemMessage(hTabs[0], IDC_MAIN_RC_VAL_SLIDER, TBM_SETPOS, TRUE, scale2pos(config->i_passbitrate));
+                SendDlgItemMessage(hMainDlg, IDC_RC_MODE, CB_SETCURSEL, 4, 0);
+            SetDlgItemText(hMainDlg, IDC_RC_LABEL, "Target bitrate (kbit/s)");
+            SetDlgItemText(hMainDlg, IDC_RC_LOW_LABEL, "1");
+            sprintf(temp, "%d", MAX_BITRATE);
+            SetDlgItemText(hMainDlg, IDC_RC_HIGH_LABEL, temp);
+            SetDlgItemInt(hMainDlg, IDC_RC_VAL, config->i_passbitrate, FALSE);
+            SendDlgItemMessage(hMainDlg, IDC_RC_VAL_SLIDER, TBM_SETRANGEMIN, TRUE, 1);
+            SendDlgItemMessage(hMainDlg, IDC_RC_VAL_SLIDER, TBM_SETRANGEMAX, TRUE, scale2pos(MAX_BITRATE));
+            SendDlgItemMessage(hMainDlg, IDC_RC_VAL_SLIDER, TBM_SETPOS, TRUE, scale2pos(config->i_passbitrate));
             break;
 
         default:
             assert(0);
             break;
     }
-    CheckDlgButton(hTabs[0], IDC_MAIN_STATS_CREATE, config->b_createstats);
-    CheckDlgButton(hTabs[0], IDC_MAIN_STATS_UPDATE, config->b_updatestats);
-    SendMessage(GetDlgItem(hTabs[0], IDC_MAIN_STATS), EM_LIMITTEXT, MAX_STATS_PATH - 1, 0);
-    SetDlgItemText(hTabs[0], IDC_MAIN_STATS, config->stats);
-    SendMessage(GetDlgItem(hTabs[0], IDC_MAIN_EXTRA_CMDLINE), EM_LIMITTEXT, MAX_CMDLINE - 1, 0);
-    SetDlgItemText(hTabs[0], IDC_MAIN_EXTRA_CMDLINE, config->extra_cmdline);
-
-    /* Misc */
-    if (SendMessage(GetDlgItem(hTabs[0], IDC_MISC_LEVEL), CB_GETCOUNT, 0, 0) == 0)
+    CheckDlgButton(hMainDlg, IDC_STATS_CREATE, config->b_createstats);
+    CheckDlgButton(hMainDlg, IDC_STATS_UPDATE, config->b_updatestats);
+    SendMessage(GetDlgItem(hMainDlg, IDC_STATS_FILE), EM_LIMITTEXT, MAX_STATS_PATH - 1, 0);
+    SetDlgItemText(hMainDlg, IDC_STATS_FILE, config->stats);
+    /* Output */
+    if (SendMessage(GetDlgItem(hMainDlg, IDC_OUTPUT_MODE), CB_GETCOUNT, 0, 0) == 0)
     {
-        SendDlgItemMessage(hTabs[0], IDC_MISC_LEVEL, CB_ADDSTRING, 0, (LPARAM)"Auto");
-        SendDlgItemMessage(hTabs[0], IDC_MISC_LEVEL, CB_ADDSTRING, 0, (LPARAM)"1.0");
-        SendDlgItemMessage(hTabs[0], IDC_MISC_LEVEL, CB_ADDSTRING, 0, (LPARAM)"1.1");
-        SendDlgItemMessage(hTabs[0], IDC_MISC_LEVEL, CB_ADDSTRING, 0, (LPARAM)"1.2");
-        SendDlgItemMessage(hTabs[0], IDC_MISC_LEVEL, CB_ADDSTRING, 0, (LPARAM)"1.3");
-        SendDlgItemMessage(hTabs[0], IDC_MISC_LEVEL, CB_ADDSTRING, 0, (LPARAM)"2.0");
-        SendDlgItemMessage(hTabs[0], IDC_MISC_LEVEL, CB_ADDSTRING, 0, (LPARAM)"2.1");
-        SendDlgItemMessage(hTabs[0], IDC_MISC_LEVEL, CB_ADDSTRING, 0, (LPARAM)"2.2");
-        SendDlgItemMessage(hTabs[0], IDC_MISC_LEVEL, CB_ADDSTRING, 0, (LPARAM)"3.0");
-        SendDlgItemMessage(hTabs[0], IDC_MISC_LEVEL, CB_ADDSTRING, 0, (LPARAM)"3.1");
-        SendDlgItemMessage(hTabs[0], IDC_MISC_LEVEL, CB_ADDSTRING, 0, (LPARAM)"3.2");
-        SendDlgItemMessage(hTabs[0], IDC_MISC_LEVEL, CB_ADDSTRING, 0, (LPARAM)"4.0");
-        SendDlgItemMessage(hTabs[0], IDC_MISC_LEVEL, CB_ADDSTRING, 0, (LPARAM)"4.1");
-        SendDlgItemMessage(hTabs[0], IDC_MISC_LEVEL, CB_ADDSTRING, 0, (LPARAM)"4.2");
-        SendDlgItemMessage(hTabs[0], IDC_MISC_LEVEL, CB_ADDSTRING, 0, (LPARAM)"5.0");
-        SendDlgItemMessage(hTabs[0], IDC_MISC_LEVEL, CB_ADDSTRING, 0, (LPARAM)"5.1");
+        SendDlgItemMessage(hMainDlg, IDC_OUTPUT_MODE, CB_ADDSTRING, 0, (LPARAM)"VFW");
+        SendDlgItemMessage(hMainDlg, IDC_OUTPUT_MODE, CB_ADDSTRING, 0, (LPARAM)"File");
     }
-    SendDlgItemMessage(hTabs[0], IDC_MISC_LEVEL, CB_SETCURSEL, config->i_avc_level, 0);
-    SendMessage(GetDlgItem(hTabs[0], IDC_MISC_SAR_W), EM_LIMITTEXT, 8, 0);
-    SetDlgItemInt(hTabs[0], IDC_MISC_SAR_W, config->i_sar_width, FALSE);
-    SendMessage(GetDlgItem(hTabs[0], IDC_MISC_SAR_H), EM_LIMITTEXT, 8, 0);
-    SetDlgItemInt(hTabs[0], IDC_MISC_SAR_H, config->i_sar_height, FALSE);
-
-    /* Debug */
-    if (SendMessage(GetDlgItem(hTabs[0], IDC_DEBUG_LOG_LEVEL), CB_GETCOUNT, 0, 0) == 0)
-    {
-        SendDlgItemMessage(hTabs[0], IDC_DEBUG_LOG_LEVEL, CB_ADDSTRING, 0, (LPARAM)"None");
-        SendDlgItemMessage(hTabs[0], IDC_DEBUG_LOG_LEVEL, CB_ADDSTRING, 0, (LPARAM)"Error");
-        SendDlgItemMessage(hTabs[0], IDC_DEBUG_LOG_LEVEL, CB_ADDSTRING, 0, (LPARAM)"Warning");
-        SendDlgItemMessage(hTabs[0], IDC_DEBUG_LOG_LEVEL, CB_ADDSTRING, 0, (LPARAM)"Info");
-        SendDlgItemMessage(hTabs[0], IDC_DEBUG_LOG_LEVEL, CB_ADDSTRING, 0, (LPARAM)"Debug");
-    }
-    SendDlgItemMessage(hTabs[0], IDC_DEBUG_LOG_LEVEL, CB_SETCURSEL, config->i_log_level, 0);
-    CheckDlgButton(hTabs[0], IDC_DEBUG_PSNR, config->b_psnr);
-    CheckDlgButton(hTabs[0], IDC_DEBUG_SSIM, config->b_ssim);
-    CheckDlgButton(hTabs[0], IDC_DEBUG_NO_ASM, config->b_no_asm);
-
-    /* VFW */
-    if (SendMessage(GetDlgItem(hTabs[0], IDC_VFW_FOURCC), CB_GETCOUNT, 0, 0) == 0)
+    SendDlgItemMessage(hMainDlg, IDC_OUTPUT_MODE, CB_SETCURSEL, config->i_output_mode, 0);
+    if (SendMessage(GetDlgItem(hMainDlg, IDC_VFW_FOURCC), CB_GETCOUNT, 0, 0) == 0)
     {
         int i;
-        for (i = 0; i < sizeof(fcc_str_table) / sizeof(fourcc_str); i++)
-            SendDlgItemMessage(hTabs[0], IDC_VFW_FOURCC, CB_ADDSTRING, 0, (LPARAM)&fcc_str_table[i]);
+        for (i = 0; i < COUNT_FOURCC; i++)
+            SendDlgItemMessage(hMainDlg, IDC_VFW_FOURCC, CB_ADDSTRING, 0, (LPARAM)fourcc_table[i].name);
     }
-    SendDlgItemMessage(hTabs[0], IDC_VFW_FOURCC, CB_SETCURSEL, config->i_fcc_num, 0);
+    SendDlgItemMessage(hMainDlg, IDC_VFW_FOURCC, CB_SETCURSEL, config->i_fourcc, 0);
 #if X264VFW_USE_VIRTUALDUB_HACK
-    CheckDlgButton(hTabs[0], IDC_VFW_VD_HACK, config->b_vd_hack);
+    CheckDlgButton(hMainDlg, IDC_VFW_VD_HACK, config->b_vd_hack);
 #endif
+    SendMessage(GetDlgItem(hMainDlg, IDC_OUTPUT_FILE), EM_LIMITTEXT, MAX_OUTPUT_PATH - 1, 0);
+    SetDlgItemText(hMainDlg, IDC_OUTPUT_FILE, config->output_file);
+    /* Encoder */
+    sprintf(temp, "libx264 core %d%s", X264_BUILD, X264_VERSION);
+    SetDlgItemText(hMainDlg, IDC_ENCODER_LABEL, temp);
+    /* Sample Aspect Ratio */
+    SendMessage(GetDlgItem(hMainDlg, IDC_SAR_W), EM_LIMITTEXT, 8, 0);
+    SetDlgItemInt(hMainDlg, IDC_SAR_W, config->i_sar_width, FALSE);
+    SendMessage(GetDlgItem(hMainDlg, IDC_SAR_H), EM_LIMITTEXT, 8, 0);
+    SetDlgItemInt(hMainDlg, IDC_SAR_H, config->i_sar_height, FALSE);
+    /* Debug */
+    if (SendMessage(GetDlgItem(hMainDlg, IDC_LOG_LEVEL), CB_GETCOUNT, 0, 0) == 0)
+    {
+        SendDlgItemMessage(hMainDlg, IDC_LOG_LEVEL, CB_ADDSTRING, 0, (LPARAM)"None");
+        SendDlgItemMessage(hMainDlg, IDC_LOG_LEVEL, CB_ADDSTRING, 0, (LPARAM)"Error");
+        SendDlgItemMessage(hMainDlg, IDC_LOG_LEVEL, CB_ADDSTRING, 0, (LPARAM)"Warning");
+        SendDlgItemMessage(hMainDlg, IDC_LOG_LEVEL, CB_ADDSTRING, 0, (LPARAM)"Info");
+        SendDlgItemMessage(hMainDlg, IDC_LOG_LEVEL, CB_ADDSTRING, 0, (LPARAM)"Debug");
+    }
+    SendDlgItemMessage(hMainDlg, IDC_LOG_LEVEL, CB_SETCURSEL, config->i_log_level, 0);
+    CheckDlgButton(hMainDlg, IDC_PSNR, config->b_psnr);
+    CheckDlgButton(hMainDlg, IDC_SSIM, config->b_ssim);
+    CheckDlgButton(hMainDlg, IDC_NO_ASM, config->b_no_asm);
+    /* Decoder && AVI Muxer */
 #if defined(HAVE_FFMPEG) && X264VFW_USE_DECODER
-    CheckDlgButton(hTabs[0], IDC_VFW_DISABLE_DECODER, config->b_disable_decoder);
+    CheckDlgButton(hMainDlg, IDC_VFW_DISABLE_DECODER, config->b_disable_decoder);
 #endif
-
-    /* Analysis */
-    CheckDlgButton(hTabs[1], IDC_ANALYSIS_8X8DCT, config->b_dct8x8);
-    CheckDlgButton(hTabs[1], IDC_ANALYSIS_I_I8X8, config->b_intra_i8x8);
-    CheckDlgButton(hTabs[1], IDC_ANALYSIS_I_I4X4, config->b_intra_i4x4);
-    CheckDlgButton(hTabs[1], IDC_ANALYSIS_PB_I8X8, config->b_i8x8);
-    CheckDlgButton(hTabs[1], IDC_ANALYSIS_PB_I4X4, config->b_i4x4);
-    CheckDlgButton(hTabs[1], IDC_ANALYSIS_PB_P8X8, config->b_psub16x16);
-    CheckDlgButton(hTabs[1], IDC_ANALYSIS_PB_P4X4, config->b_psub8x8);
-    CheckDlgButton(hTabs[1], IDC_ANALYSIS_PB_B8X8, config->b_bsub16x16);
-    CheckDlgButton(hTabs[1], IDC_ANALYSIS_FAST_PSKIP, config->b_fast_pskip);
-    SendMessage(GetDlgItem(hTabs[1], IDC_ANALYSIS_REF), EM_LIMITTEXT, 8, 0);
-    SetDlgItemInt(hTabs[1], IDC_ANALYSIS_REF, config->i_refmax, FALSE);
-    CheckDlgButton(hTabs[1], IDC_ANALYSIS_MIXED_REFS, config->b_mixedref);
-    if (SendMessage(GetDlgItem(hTabs[1], IDC_ANALYSIS_ME), CB_GETCOUNT, 0, 0) == 0)
-    {
-        SendDlgItemMessage(hTabs[1], IDC_ANALYSIS_ME, CB_ADDSTRING, 0, (LPARAM)"dia");
-        SendDlgItemMessage(hTabs[1], IDC_ANALYSIS_ME, CB_ADDSTRING, 0, (LPARAM)"hex");
-        SendDlgItemMessage(hTabs[1], IDC_ANALYSIS_ME, CB_ADDSTRING, 0, (LPARAM)"umh");
-        SendDlgItemMessage(hTabs[1], IDC_ANALYSIS_ME, CB_ADDSTRING, 0, (LPARAM)"esa");
-        SendDlgItemMessage(hTabs[1], IDC_ANALYSIS_ME, CB_ADDSTRING, 0, (LPARAM)"tesa");
-    }
-    SendDlgItemMessage(hTabs[1], IDC_ANALYSIS_ME, CB_SETCURSEL, config->i_me_method, 0);
-    SendMessage(GetDlgItem(hTabs[1], IDC_ANALYSIS_MERANGE), EM_LIMITTEXT, 8, 0);
-    SetDlgItemInt(hTabs[1], IDC_ANALYSIS_MERANGE, config->i_me_range, FALSE);
-    if (SendMessage(GetDlgItem(hTabs[1], IDC_ANALYSIS_SUBME), CB_GETCOUNT, 0, 0) == 0)
-    {
-        SendDlgItemMessage(hTabs[1], IDC_ANALYSIS_SUBME, CB_ADDSTRING, 0, (LPARAM)"0 FullPel");
-        SendDlgItemMessage(hTabs[1], IDC_ANALYSIS_SUBME, CB_ADDSTRING, 0, (LPARAM)"1 QPel SAD");
-        SendDlgItemMessage(hTabs[1], IDC_ANALYSIS_SUBME, CB_ADDSTRING, 0, (LPARAM)"2 QPel SATD");
-        SendDlgItemMessage(hTabs[1], IDC_ANALYSIS_SUBME, CB_ADDSTRING, 0, (LPARAM)"3 HPel+QPel");
-        SendDlgItemMessage(hTabs[1], IDC_ANALYSIS_SUBME, CB_ADDSTRING, 0, (LPARAM)"4 QPel+QPel");
-        SendDlgItemMessage(hTabs[1], IDC_ANALYSIS_SUBME, CB_ADDSTRING, 0, (LPARAM)"5 QPel+BiME");
-        SendDlgItemMessage(hTabs[1], IDC_ANALYSIS_SUBME, CB_ADDSTRING, 0, (LPARAM)"6 RD on I/P");
-        SendDlgItemMessage(hTabs[1], IDC_ANALYSIS_SUBME, CB_ADDSTRING, 0, (LPARAM)"7 RD on all");
-        SendDlgItemMessage(hTabs[1], IDC_ANALYSIS_SUBME, CB_ADDSTRING, 0, (LPARAM)"8 RDr on I/P");
-        SendDlgItemMessage(hTabs[1], IDC_ANALYSIS_SUBME, CB_ADDSTRING, 0, (LPARAM)"9 RDr on all");
-        SendDlgItemMessage(hTabs[1], IDC_ANALYSIS_SUBME, CB_ADDSTRING, 0, (LPARAM)"10 QPRD");
-    }
-    SendDlgItemMessage(hTabs[1], IDC_ANALYSIS_SUBME, CB_SETCURSEL, config->i_subpel_refine, 0);
-    CheckDlgButton(hTabs[1], IDC_ANALYSIS_CHROMA_ME, config->b_chroma_me);
-    SendMessage(GetDlgItem(hTabs[1], IDC_ANALYSIS_PSY_RDO), EM_LIMITTEXT, 8, 0);
-    SetDlgItemDouble(hTabs[1], IDC_ANALYSIS_PSY_RDO, config->f_psy_rdo, "%.2f");
-    SendMessage(GetDlgItem(hTabs[1], IDC_ANALYSIS_MIN_KEYINT), EM_LIMITTEXT, 8, 0);
-    SetDlgItemInt(hTabs[1], IDC_ANALYSIS_MIN_KEYINT, config->i_keyint_min, FALSE);
-    SendMessage(GetDlgItem(hTabs[1], IDC_ANALYSIS_KEYINT), EM_LIMITTEXT, 8, 0);
-    SetDlgItemInt(hTabs[1], IDC_ANALYSIS_KEYINT, config->i_keyint_max, FALSE);
-    SendMessage(GetDlgItem(hTabs[1], IDC_ANALYSIS_SCENECUT), EM_LIMITTEXT, 8, 0);
-    SetDlgItemInt(hTabs[1], IDC_ANALYSIS_SCENECUT, config->i_scenecut_threshold, FALSE);
-    if (SendMessage(GetDlgItem(hTabs[1], IDC_ANALYSIS_WEIGHTP), CB_GETCOUNT, 0, 0) == 0)
-    {
-        SendDlgItemMessage(hTabs[1], IDC_ANALYSIS_WEIGHTP, CB_ADDSTRING, 0, (LPARAM)"None");
-        SendDlgItemMessage(hTabs[1], IDC_ANALYSIS_WEIGHTP, CB_ADDSTRING, 0, (LPARAM)"Blind");
-        SendDlgItemMessage(hTabs[1], IDC_ANALYSIS_WEIGHTP, CB_ADDSTRING, 0, (LPARAM)"Smart");
-    }
-    SendDlgItemMessage(hTabs[1], IDC_ANALYSIS_WEIGHTP, CB_SETCURSEL, config->i_p_wpred, 0);
-    SendMessage(GetDlgItem(hTabs[1], IDC_ANALYSIS_BFRAMES), EM_LIMITTEXT, 8, 0);
-    SetDlgItemInt(hTabs[1], IDC_ANALYSIS_BFRAMES, config->i_bframe, FALSE);
-    if (SendMessage(GetDlgItem(hTabs[1], IDC_ANALYSIS_B_ADAPT), CB_GETCOUNT, 0, 0) == 0)
-    {
-        SendDlgItemMessage(hTabs[1], IDC_ANALYSIS_B_ADAPT, CB_ADDSTRING, 0, (LPARAM)"Off");
-        SendDlgItemMessage(hTabs[1], IDC_ANALYSIS_B_ADAPT, CB_ADDSTRING, 0, (LPARAM)"Fast");
-        SendDlgItemMessage(hTabs[1], IDC_ANALYSIS_B_ADAPT, CB_ADDSTRING, 0, (LPARAM)"Optimal");
-    }
-    SendDlgItemMessage(hTabs[1], IDC_ANALYSIS_B_ADAPT, CB_SETCURSEL, config->i_bframe_adaptive, 0);
-    SendMessage(GetDlgItem(hTabs[1], IDC_ANALYSIS_B_BIAS), EM_LIMITTEXT, 8, 0);
-    SetDlgItemInt(hTabs[1], IDC_ANALYSIS_B_BIAS, config->i_bframe_bias, TRUE);
-    if (SendMessage(GetDlgItem(hTabs[1], IDC_ANALYSIS_DIRECT), CB_GETCOUNT, 0, 0) == 0)
-    {
-        SendDlgItemMessage(hTabs[1], IDC_ANALYSIS_DIRECT, CB_ADDSTRING, 0, (LPARAM)"None");
-        SendDlgItemMessage(hTabs[1], IDC_ANALYSIS_DIRECT, CB_ADDSTRING, 0, (LPARAM)"Spatial");
-        SendDlgItemMessage(hTabs[1], IDC_ANALYSIS_DIRECT, CB_ADDSTRING, 0, (LPARAM)"Temporal");
-        SendDlgItemMessage(hTabs[1], IDC_ANALYSIS_DIRECT, CB_ADDSTRING, 0, (LPARAM)"Auto");
-    }
-    SendDlgItemMessage(hTabs[1], IDC_ANALYSIS_DIRECT, CB_SETCURSEL, config->i_direct_mv_pred, 0);
-    if (SendMessage(GetDlgItem(hTabs[1], IDC_ANALYSIS_B_PYRAMID), CB_GETCOUNT, 0, 0) == 0)
-    {
-        SendDlgItemMessage(hTabs[1], IDC_ANALYSIS_B_PYRAMID, CB_ADDSTRING, 0, (LPARAM)"None");
-        SendDlgItemMessage(hTabs[1], IDC_ANALYSIS_B_PYRAMID, CB_ADDSTRING, 0, (LPARAM)"Strict");
-        SendDlgItemMessage(hTabs[1], IDC_ANALYSIS_B_PYRAMID, CB_ADDSTRING, 0, (LPARAM)"Normal");
-    }
-    SendDlgItemMessage(hTabs[1], IDC_ANALYSIS_B_PYRAMID, CB_SETCURSEL, config->i_b_refs, 0);
-    CheckDlgButton(hTabs[1], IDC_ANALYSIS_WEIGHTB, config->b_b_wpred);
-
-    /* Encoding */
-    CheckDlgButton(hTabs[1], IDC_ENC_DEBLOCK, config->b_filter);
-    SendMessage(GetDlgItem(hTabs[1], IDC_ENC_DEBLOCK_A), EM_LIMITTEXT, 8, 0);
-    SetDlgItemInt(hTabs[1], IDC_ENC_DEBLOCK_A, config->i_inloop_a, TRUE);
-    SendMessage(GetDlgItem(hTabs[1], IDC_ENC_DEBLOCK_B), EM_LIMITTEXT, 8, 0);
-    SetDlgItemInt(hTabs[1], IDC_ENC_DEBLOCK_B, config->i_inloop_b, TRUE);
-    if (SendMessage(GetDlgItem(hTabs[1], IDC_ENC_INTERLACED), CB_GETCOUNT, 0, 0) == 0)
-    {
-        SendDlgItemMessage(hTabs[1], IDC_ENC_INTERLACED, CB_ADDSTRING, 0, (LPARAM)"Off");
-        SendDlgItemMessage(hTabs[1], IDC_ENC_INTERLACED, CB_ADDSTRING, 0, (LPARAM)"TFF");
-        SendDlgItemMessage(hTabs[1], IDC_ENC_INTERLACED, CB_ADDSTRING, 0, (LPARAM)"BFF");
-    }
-    SendDlgItemMessage(hTabs[1], IDC_ENC_INTERLACED, CB_SETCURSEL, config->i_interlaced, 0);
-    CheckDlgButton(hTabs[1], IDC_ENC_CABAC, config->b_cabac);
-    CheckDlgButton(hTabs[1], IDC_ENC_DCT_DECIMATE, config->b_dct_decimate);
-    SendMessage(GetDlgItem(hTabs[1], IDC_ENC_NR), EM_LIMITTEXT, 8, 0);
-    SetDlgItemInt(hTabs[1], IDC_ENC_NR, config->i_noise_reduction, FALSE);
-    if (SendMessage(GetDlgItem(hTabs[1], IDC_ENC_TRELLIS), CB_GETCOUNT, 0, 0) == 0)
-    {
-        SendDlgItemMessage(hTabs[1], IDC_ENC_TRELLIS, CB_ADDSTRING, 0, (LPARAM)"Off");
-        SendDlgItemMessage(hTabs[1], IDC_ENC_TRELLIS, CB_ADDSTRING, 0, (LPARAM)"MB encode");
-        SendDlgItemMessage(hTabs[1], IDC_ENC_TRELLIS, CB_ADDSTRING, 0, (LPARAM)"Always");
-    }
-    SendDlgItemMessage(hTabs[1], IDC_ENC_TRELLIS, CB_SETCURSEL, config->i_trellis, 0);
-    SendMessage(GetDlgItem(hTabs[1], IDC_ENC_DEADZONE_INTRA), EM_LIMITTEXT, 8, 0);
-    SetDlgItemInt(hTabs[1], IDC_ENC_DEADZONE_INTRA, config->i_intra_deadzone, FALSE);
-    SendMessage(GetDlgItem(hTabs[1], IDC_ENC_DEADZONE_INTER), EM_LIMITTEXT, 8, 0);
-    SetDlgItemInt(hTabs[1], IDC_ENC_DEADZONE_INTER, config->i_inter_deadzone, FALSE);
-
-    if (SendMessage(GetDlgItem(hTabs[1], IDC_ENC_CQM), CB_GETCOUNT, 0, 0) == 0)
-    {
-        SendDlgItemMessage(hTabs[1], IDC_ENC_CQM, CB_ADDSTRING, 0, (LPARAM)"Flat");
-        SendDlgItemMessage(hTabs[1], IDC_ENC_CQM, CB_ADDSTRING, 0, (LPARAM)"JVT");
-        SendDlgItemMessage(hTabs[1], IDC_ENC_CQM, CB_ADDSTRING, 0, (LPARAM)"Custom");
-    }
-    SendDlgItemMessage(hTabs[1], IDC_ENC_CQM, CB_SETCURSEL, config->i_cqm, 0);
-    SendMessage(GetDlgItem(hTabs[1], IDC_ENC_CQMFILE), EM_LIMITTEXT, MAX_PATH - 1, 0);
-    SetDlgItemText(hTabs[1], IDC_ENC_CQMFILE, config->cqmfile);
-    SendMessage(GetDlgItem(hTabs[1], IDC_ENC_PSY_TRELLIS), EM_LIMITTEXT, 8, 0);
-    SetDlgItemDouble(hTabs[1], IDC_ENC_PSY_TRELLIS, config->f_psy_trellis, "%.2f");
-
-    /* Rate control */
-    SendMessage(GetDlgItem(hTabs[2], IDC_RC_VBV_MAXRATE), EM_LIMITTEXT, 8, 0);
-    SetDlgItemInt(hTabs[2], IDC_RC_VBV_MAXRATE, config->i_vbv_maxrate, FALSE);
-    SendMessage(GetDlgItem(hTabs[2], IDC_RC_VBV_BUFSIZE), EM_LIMITTEXT, 8, 0);
-    SetDlgItemInt(hTabs[2], IDC_RC_VBV_BUFSIZE, config->i_vbv_bufsize, FALSE);
-    SendMessage(GetDlgItem(hTabs[2], IDC_RC_VBV_INIT), EM_LIMITTEXT, 8, 0);
-    SetDlgItemInt(hTabs[2], IDC_RC_VBV_INIT, config->i_vbv_occupancy, FALSE);
-    SendMessage(GetDlgItem(hTabs[2], IDC_RC_QPMIN), EM_LIMITTEXT, 8, 0);
-    SetDlgItemInt(hTabs[2], IDC_RC_QPMIN, config->i_qp_min, FALSE);
-    SendMessage(GetDlgItem(hTabs[2], IDC_RC_QPMAX), EM_LIMITTEXT, 8, 0);
-    SetDlgItemInt(hTabs[2], IDC_RC_QPMAX, config->i_qp_max, FALSE);
-    SendMessage(GetDlgItem(hTabs[2], IDC_RC_QPSTEP), EM_LIMITTEXT, 8, 0);
-    SetDlgItemInt(hTabs[2], IDC_RC_QPSTEP, config->i_qp_step, FALSE);
-    SendMessage(GetDlgItem(hTabs[2], IDC_RC_IPRATIO), EM_LIMITTEXT, 8, 0);
-    SetDlgItemDouble(hTabs[2], IDC_RC_IPRATIO, config->f_ipratio, "%.2f");
-    SendMessage(GetDlgItem(hTabs[2], IDC_RC_PBRATIO), EM_LIMITTEXT, 8, 0);
-    SetDlgItemDouble(hTabs[2], IDC_RC_PBRATIO, config->f_pbratio, "%.2f");
-    SendMessage(GetDlgItem(hTabs[2], IDC_RC_CHROMA_QP_OFFSET), EM_LIMITTEXT, 8, 0);
-    SetDlgItemInt(hTabs[2], IDC_RC_CHROMA_QP_OFFSET, config->i_chroma_qp_offset, TRUE);
-    SendMessage(GetDlgItem(hTabs[2], IDC_RC_QCOMP), EM_LIMITTEXT, 8, 0);
-    SetDlgItemDouble(hTabs[2], IDC_RC_QCOMP, config->f_qcomp, "%.2f");
-    SendMessage(GetDlgItem(hTabs[2], IDC_RC_CPLXBLUR), EM_LIMITTEXT, 8, 0);
-    SetDlgItemDouble(hTabs[2], IDC_RC_CPLXBLUR, config->f_cplxblur, "%.2f");
-    SendMessage(GetDlgItem(hTabs[2], IDC_RC_QBLUR), EM_LIMITTEXT, 8, 0);
-    SetDlgItemDouble(hTabs[2], IDC_RC_QBLUR, config->f_qblur, "%.2f");
-    SendMessage(GetDlgItem(hTabs[2], IDC_RC_RATETOL), EM_LIMITTEXT, 8, 0);
-    SetDlgItemDouble(hTabs[2], IDC_RC_RATETOL, config->f_ratetol, "%.2f");
-
-    /* AQ */
-    if (SendMessage(GetDlgItem(hTabs[2], IDC_AQ_MODE), CB_GETCOUNT, 0, 0) == 0)
-    {
-        SendDlgItemMessage(hTabs[2], IDC_AQ_MODE, CB_ADDSTRING, 0, (LPARAM)"None");
-        SendDlgItemMessage(hTabs[2], IDC_AQ_MODE, CB_ADDSTRING, 0, (LPARAM)"VAQ");
-        SendDlgItemMessage(hTabs[2], IDC_AQ_MODE, CB_ADDSTRING, 0, (LPARAM)"AutoVAQ");
-    }
-    SendDlgItemMessage(hTabs[2], IDC_AQ_MODE, CB_SETCURSEL, config->i_aq_mode, 0);
-    SendMessage(GetDlgItem(hTabs[2], IDC_AQ_STRENGTH), EM_LIMITTEXT, 8, 0);
-    SetDlgItemDouble(hTabs[2], IDC_AQ_STRENGTH, config->f_aq_strength, "%.2f");
-
-    /* Multithreading */
-#if X264VFW_USE_THREADS
-    SendMessage(GetDlgItem(hTabs[2], IDC_MT_THREADS), EM_LIMITTEXT, 8, 0);
-    SetDlgItemInt(hTabs[2], IDC_MT_THREADS, config->i_threads, FALSE);
-    CheckDlgButton(hTabs[2], IDC_MT_DETERMINISTIC, config->b_mt_deterministic);
-    CheckDlgButton(hTabs[2], IDC_MT_SLICED, config->b_mt_sliced);
-#endif
-
-    /* VUI */
-    if (SendMessage(GetDlgItem(hTabs[2], IDC_VUI_OVERSCAN), CB_GETCOUNT, 0, 0) == 0)
-    {
-        int i;
-        for (i = 0; i < sizeof(overscan_names) / sizeof(const char *); i++)
-            SendDlgItemMessage(hTabs[2], IDC_VUI_OVERSCAN, CB_ADDSTRING, 0, (LPARAM)overscan_names[i]);
-    }
-    SendDlgItemMessage(hTabs[2], IDC_VUI_OVERSCAN, CB_SETCURSEL, VUI_abs2loc(config->i_overscan, overscan), 0);
-    if (SendMessage(GetDlgItem(hTabs[2], IDC_VUI_VIDEOFORMAT), CB_GETCOUNT, 0, 0) == 0)
-    {
-        int i;
-        for (i = 0; i < sizeof(vidformat_names) / sizeof(const char *); i++)
-            SendDlgItemMessage(hTabs[2], IDC_VUI_VIDEOFORMAT, CB_ADDSTRING, 0, (LPARAM)vidformat_names[i]);
-    }
-    SendDlgItemMessage(hTabs[2], IDC_VUI_VIDEOFORMAT, CB_SETCURSEL, VUI_abs2loc(config->i_vidformat, vidformat), 0);
-    if (SendMessage(GetDlgItem(hTabs[2], IDC_VUI_FULLRANGE), CB_GETCOUNT, 0, 0) == 0)
-    {
-        int i;
-        for (i = 0; i < sizeof(fullrange_names) / sizeof(const char *); i++)
-            SendDlgItemMessage(hTabs[2], IDC_VUI_FULLRANGE, CB_ADDSTRING, 0, (LPARAM)fullrange_names[i]);
-    }
-    SendDlgItemMessage(hTabs[2], IDC_VUI_FULLRANGE, CB_SETCURSEL, VUI_abs2loc(config->i_fullrange, fullrange), 0);
-    if (SendMessage(GetDlgItem(hTabs[2], IDC_VUI_COLORPRIM), CB_GETCOUNT, 0, 0) == 0)
-    {
-        int i;
-        for (i = 0; i < sizeof(colorprim_names) / sizeof(const char *); i++)
-            SendDlgItemMessage(hTabs[2], IDC_VUI_COLORPRIM, CB_ADDSTRING, 0, (LPARAM)colorprim_names[i]);
-    }
-    SendDlgItemMessage(hTabs[2], IDC_VUI_COLORPRIM, CB_SETCURSEL, VUI_abs2loc(config->i_colorprim, colorprim), 0);
-    if (SendMessage(GetDlgItem(hTabs[2], IDC_VUI_TRANSFER), CB_GETCOUNT, 0, 0) == 0)
-    {
-        int i;
-        for (i = 0; i < sizeof(transfer_names) / sizeof(const char *); i++)
-            SendDlgItemMessage(hTabs[2], IDC_VUI_TRANSFER, CB_ADDSTRING, 0, (LPARAM)transfer_names[i]);
-    }
-    SendDlgItemMessage(hTabs[2], IDC_VUI_TRANSFER, CB_SETCURSEL, VUI_abs2loc(config->i_transfer, transfer), 0);
-    if (SendMessage(GetDlgItem(hTabs[2], IDC_VUI_COLORMATRIX), CB_GETCOUNT, 0, 0) == 0)
-    {
-        int i;
-        for (i = 0; i < sizeof(colmatrix_names) / sizeof(const char *); i++)
-            SendDlgItemMessage(hTabs[2], IDC_VUI_COLORMATRIX, CB_ADDSTRING, 0, (LPARAM)colmatrix_names[i]);
-    }
-    SendDlgItemMessage(hTabs[2], IDC_VUI_COLORMATRIX, CB_SETCURSEL, VUI_abs2loc(config->i_colmatrix, colmatrix), 0);
-    SendMessage(GetDlgItem(hTabs[2], IDC_VUI_CHROMALOC), EM_LIMITTEXT, 8, 0);
-    SetDlgItemInt(hTabs[2], IDC_VUI_CHROMALOC, config->i_chromaloc, FALSE);
-
-    /* Config */
-    CheckDlgButton(hMainDlg, IDC_CONFIG_USE_CMDLINE, config->b_use_cmdline);
-    SendMessage(GetDlgItem(hMainDlg, IDC_CONFIG_CMDLINE), EM_LIMITTEXT, MAX_CMDLINE - 1, 0);
-    SetDlgItemText(hMainDlg, IDC_CONFIG_CMDLINE, config->cmdline);
+    /* Extra command line*/
+    SendMessage(GetDlgItem(hMainDlg, IDC_EXTRA_CMDLINE), EM_LIMITTEXT, MAX_CMDLINE - 1, 0);
+    SetDlgItemText(hMainDlg, IDC_EXTRA_CMDLINE, config->extra_cmdline);
+    /* Build date */
+    sprintf(temp, "Build date: %s %s", __DATE__, __TIME__);
+    SetDlgItemText(hMainDlg, IDC_BUILD_DATE, temp);
 }
 
 /* Assigns tooltips */
-static BOOL CALLBACK enum_tooltips(HWND hWnd, LPARAM lParam)
+static BOOL CALLBACK enum_tooltips(HWND hDlg, LPARAM lParam)
 {
     char help[1024];
 
     /* The tooltip for a control is named the same as the control itself */
-    if (LoadString(g_hInst, GetDlgCtrlID(hWnd), help, 1024))
+    if (LoadString(g_hInst, GetDlgCtrlID(hDlg), help, 1024))
     {
         TOOLINFO ti;
 
         ti.cbSize = sizeof(TOOLINFO);
         ti.uFlags = TTF_SUBCLASS | TTF_IDISHWND;
-        ti.hwnd = GetParent(hWnd);
-        ti.uId = (LPARAM)hWnd;
+        ti.hwnd = GetParent(hDlg);
+        ti.uId = (LPARAM)hDlg;
         ti.lpszText = help;
 
-        SendMessage(hTooltip, TTM_ADDTOOL, 0, (LPARAM)&ti);
-    }
-
-    return TRUE;
-}
-
-/* Main window */
-INT_PTR CALLBACK callback_main(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lParam)
-{
-    CONFIG *config = (CONFIG *)GetWindowLongPtr(hDlg, GWLP_USERDATA);
-
-    switch (uMsg)
-    {
-        case WM_INITDIALOG:
-        {
-            TCITEM tie;
-            RECT rect;
-            HWND hTabCtrl = GetDlgItem(hDlg, IDC_CONFIG_TABCONTROL);
-
-            SetWindowLongPtr(hDlg, GWLP_USERDATA, lParam);
-            config = (CONFIG *)lParam;
-
-            hMainDlg = hDlg;
-
-            b_tabs_updated = FALSE;
-
-            /* Insert tabs in tab control */
-            tie.mask = TCIF_TEXT;
-            tie.iImage = -1;
-            tie.pszText = "Main";
-            TabCtrl_InsertItem(hTabCtrl, 0, &tie);
-            tie.pszText = "Analysis && Encoding";
-            TabCtrl_InsertItem(hTabCtrl, 1, &tie);
-            tie.pszText = "Rate control && Other";
-            TabCtrl_InsertItem(hTabCtrl, 2, &tie);
-            hTabs[0] = CreateDialogParam(g_hInst, MAKEINTRESOURCE(IDD_TAB_MAIN),         hMainDlg, (DLGPROC)callback_tabs, lParam);
-            hTabs[1] = CreateDialogParam(g_hInst, MAKEINTRESOURCE(IDD_TAB_ANALYSIS_ENC), hMainDlg, (DLGPROC)callback_tabs, lParam);
-            hTabs[2] = CreateDialogParam(g_hInst, MAKEINTRESOURCE(IDD_TAB_RC_OTHER),     hMainDlg, (DLGPROC)callback_tabs, lParam);
-            GetClientRect(hTabCtrl, &rect);
-            TabCtrl_AdjustRect(hTabCtrl, FALSE, &rect);
-            MoveWindow(hTabs[0], rect.left, rect.top, rect.right - rect.left + 1, rect.bottom - rect.top + 1, TRUE);
-            MoveWindow(hTabs[1], rect.left, rect.top, rect.right - rect.left + 1, rect.bottom - rect.top + 1, TRUE);
-            MoveWindow(hTabs[2], rect.left, rect.top, rect.right - rect.left + 1, rect.bottom - rect.top + 1, TRUE);
-
-            if ((hTooltip = CreateWindow(TOOLTIPS_CLASS, NULL, TTS_ALWAYSTIP, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, NULL, NULL, g_hInst, NULL)))
-            {
-                SetWindowPos(hTooltip, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
-                SendMessage(hTooltip, TTM_SETMAXTIPWIDTH, 0, 400);
-                EnumChildWindows(hMainDlg, enum_tooltips, 0);
-            }
-
-            tabs_enable_items(config);
-            tabs_update_items(config);
-            b_tabs_updated = TRUE;
-            SetWindowPos(hTabs[0], hTabCtrl, 0, 0, 0, 0, SWP_NOACTIVATE | SWP_NOMOVE | SWP_NOSIZE);
-            ShowWindow(hTabs[0], SW_SHOWNORMAL);
-            return TRUE;
-        }
-
-        case WM_NOTIFY:
-        {
-            NMHDR FAR *tem = (NMHDR FAR *)lParam;
-
-            if (tem->code == TCN_SELCHANGING)
-            {
-                int num;
-                HWND hTabCtrl = GetDlgItem(hMainDlg, IDC_CONFIG_TABCONTROL);
-
-                SetFocus(hTabCtrl);
-                num = TabCtrl_GetCurSel(hTabCtrl);
-                ShowWindow(hTabs[num], SW_HIDE);
-            }
-            else if (tem->code == TCN_SELCHANGE)
-            {
-                int num;
-                HWND hTabCtrl = GetDlgItem(hMainDlg, IDC_CONFIG_TABCONTROL);
-
-                SetFocus(hTabCtrl);
-                num = TabCtrl_GetCurSel(hTabCtrl);
-                SetWindowPos(hTabs[num], hTabCtrl, 0, 0, 0, 0, SWP_NOACTIVATE | SWP_NOMOVE | SWP_NOSIZE);
-                ShowWindow(hTabs[num], SW_SHOWNORMAL);
-            }
-            else
-                return FALSE;
-            break;
-        }
-
-        case WM_COMMAND:
-            switch (HIWORD(wParam))
-            {
-                case BN_CLICKED:
-                    switch (LOWORD(wParam))
-                    {
-                        case IDOK:
-                            config->b_save = TRUE;
-                            EndDialog(hMainDlg, LOWORD(wParam));
-                            break;
-
-                        case IDCANCEL:
-                            config->b_save = FALSE;
-                            EndDialog(hMainDlg, LOWORD(wParam));
-                            break;
-
-                        case IDC_CONFIG_DEFAULTS:
-                            if (MessageBox(hMainDlg, X264_DEF_TEXT, X264_NAME, MB_YESNO) == IDYES)
-                            {
-                                config_defaults(config);
-                                b_tabs_updated = FALSE;
-                                tabs_enable_items(config);
-                                tabs_update_items(config);
-                                b_tabs_updated = TRUE;
-                            }
-                            break;
-
-                        case IDC_CONFIG_USE_CMDLINE:
-                            config->b_use_cmdline = IsDlgButtonChecked(hMainDlg, IDC_CONFIG_USE_CMDLINE);
-                            EnableWindow(GetDlgItem(hMainDlg, IDC_CONFIG_CMDLINE), config->b_use_cmdline);
-                            break;
-
-                        default:
-                            return FALSE;
-                    }
-                    break;
-
-                case EN_CHANGE:
-                    switch (LOWORD(wParam))
-                    {
-                        case IDC_CONFIG_CMDLINE:
-                            if (GetDlgItemText(hMainDlg, IDC_CONFIG_CMDLINE, config->cmdline, MAX_CMDLINE) == 0)
-                                strcpy(config->cmdline, "");
-                            break;
-
-                        default:
-                            return FALSE;
-                    }
-                    break;
-
-                case EN_KILLFOCUS:
-                    switch (LOWORD(wParam))
-                    {
-                        case IDC_CONFIG_CMDLINE:
-                            if (GetDlgItemText(hMainDlg, IDC_CONFIG_CMDLINE, config->cmdline, MAX_CMDLINE) == 0)
-                                strcpy(config->cmdline, "");
-                            SetDlgItemText(hMainDlg, IDC_CONFIG_CMDLINE, config->cmdline);
-                            break;
-
-                        default:
-                            return FALSE;
-                    }
-                    break;
-
-                default:
-                    return FALSE;
-            }
-            break;
-
-        default:
-            return FALSE;
+        SendMessage((HWND)lParam, TTM_ADDTOOL, 0, (LPARAM)&ti);
     }
 
     return TRUE;
@@ -1079,9 +570,9 @@ static void CheckControlTextIsNumber(HWND hDlgItem, int bSigned, int iDecimalPla
     int q = !bSigned;
 
     SendMessage(hDlgItem, EM_GETSEL, (WPARAM)&start, (LPARAM)&end);
-    num = SendMessage(hDlgItem, WM_GETTEXT, MAX_PATH, (LPARAM)&text_old);
-    src = &text_old[0];
-    dest = &text_new[0];
+    num = SendMessage(hDlgItem, WM_GETTEXT, MAX_PATH, (LPARAM)text_old);
+    src = text_old;
+    dest = text_new;
     pos = 0;
     while (num > 0)
     {
@@ -1127,7 +618,7 @@ static void CheckControlTextIsNumber(HWND hDlgItem, int bSigned, int iDecimalPla
     *dest = 0;
     if (bChanged)
     {
-        SendMessage(hDlgItem, WM_SETTEXT, 0, (LPARAM)&text_new);
+        SendMessage(hDlgItem, WM_SETTEXT, 0, (LPARAM)text_new);
         SendMessage(hDlgItem, EM_SETSEL, start, end);
     }
 }
@@ -1189,75 +680,61 @@ static void CheckControlTextIsNumber(HWND hDlgItem, int bSigned, int iDecimalPla
     SetDlgItemInt(hDlg, nIDDlgItem, var, bSigned);\
 }
 
-#define CHECKED_SET_FLOAT(var, hDlg, nIDDlgItem, bSigned, min, max, iDecimalPlacesNum, format)\
-{\
-    CheckControlTextIsNumber(GetDlgItem(hDlg, nIDDlgItem), bSigned, iDecimalPlacesNum);\
-    var = GetDlgItemDouble(hDlg, nIDDlgItem);\
-    if (var < min)\
-    {\
-        var = min;\
-        SetDlgItemDouble(hDlg, nIDDlgItem, var, format);\
-        SendMessage(GetDlgItem(hDlg, nIDDlgItem), EM_SETSEL, -2, -2);\
-    }\
-    else if (var > max)\
-    {\
-        var = max;\
-        SetDlgItemDouble(hDlg, nIDDlgItem, var, format);\
-        SendMessage(GetDlgItem(hDlg, nIDDlgItem), EM_SETSEL, -2, -2);\
-    }\
-}
-
-#define CHECKED_SET_MIN_FLOAT(var, hDlg, nIDDlgItem, bSigned, min, max, iDecimalPlacesNum, format)\
-{\
-    CheckControlTextIsNumber(GetDlgItem(hDlg, nIDDlgItem), bSigned, iDecimalPlacesNum);\
-    var = GetDlgItemDouble(hDlg, nIDDlgItem);\
-    if (var < min)\
-    {\
-        var = min;\
-        SetDlgItemDouble(hDlg, nIDDlgItem, var, format);\
-        SendMessage(GetDlgItem(hDlg, nIDDlgItem), EM_SETSEL, -2, -2);\
-    }\
-    else if (var > max)\
-        var = max;\
-}
-
-#define CHECKED_SET_MAX_FLOAT(var, hDlg, nIDDlgItem, bSigned, min, max, iDecimalPlacesNum, format)\
-{\
-    CheckControlTextIsNumber(GetDlgItem(hDlg, nIDDlgItem), bSigned, iDecimalPlacesNum);\
-    var = GetDlgItemDouble(hDlg, nIDDlgItem);\
-    if (var < min)\
-        var = min;\
-    else if (var > max)\
-    {\
-        var = max;\
-        SetDlgItemDouble(hDlg, nIDDlgItem, var, format);\
-        SendMessage(GetDlgItem(hDlg, nIDDlgItem), EM_SETSEL, -2, -2);\
-    }\
-}
-
-#define CHECKED_SET_SHOW_FLOAT(var, hDlg, nIDDlgItem, bSigned, min, max, iDecimalPlacesNum, format)\
-{\
-    CheckControlTextIsNumber(GetDlgItem(hDlg, nIDDlgItem), bSigned, iDecimalPlacesNum);\
-    var = GetDlgItemDouble(hDlg, nIDDlgItem);\
-    if (var < min)\
-        var = min;\
-    else if (var > max)\
-        var = max;\
-    SetDlgItemDouble(hDlg, nIDDlgItem, var, format);\
-}
-
-INT_PTR CALLBACK callback_tabs(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lParam)
+static int get_extension_index(const char *filename, const char *list)
 {
-    CONFIG *config = (CONFIG *)GetWindowLongPtr(hDlg, GWLP_USERDATA);
+    int index = 0;
+    const char *ext = filename + strlen(filename);
+    while (*ext != '.' && ext > filename)
+        ext--;
+    ext += *ext == '.';
+    while (*list)
+    {
+        index++;
+        if (!strcasecmp(ext, list))
+            return index;
+        list += strlen(list) + 1;
+    }
+    return 0;
+}
+
+/* Main window (configuration) */
+INT_PTR CALLBACK callback_main(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lParam)
+{
+    CONFIG_DATA *cfg_data = (CONFIG_DATA *)GetWindowLongPtr(hDlg, GWLP_USERDATA);
+    CONFIG *config;
+    HWND hMainDlg;
 
     if (uMsg == WM_INITDIALOG)
     {
+        HWND hTooltip;
+
         SetWindowLongPtr(hDlg, GWLP_USERDATA, lParam);
-        config = (CONFIG *)lParam;
+        cfg_data = (CONFIG_DATA *)lParam;
+        cfg_data->hMainDlg = hDlg;
+        cfg_data->b_dlg_updated = FALSE;
+
+        if ((hTooltip = CreateWindow(TOOLTIPS_CLASS, NULL, TTS_ALWAYSTIP, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, hDlg, NULL, g_hInst, NULL)))
+        {
+            SetWindowPos(hTooltip, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+            SendMessage(hTooltip, TTM_SETMAXTIPWIDTH, 0, 400);
+            EnumChildWindows(hDlg, enum_tooltips, (LPARAM)hTooltip);
+        }
+
+        dlg_enable_items(cfg_data);
+        dlg_update_items(cfg_data);
+        cfg_data->b_dlg_updated = TRUE;
+        ShowWindow(hDlg, SW_SHOWNORMAL);
         return TRUE;
     }
-    if (!b_tabs_updated)
+    else if (uMsg == WM_DESTROY)
+    {
+        if (cfg_data && cfg_data->hHelpDlg)
+            DestroyWindow(cfg_data->hHelpDlg);
+    }
+    if (!(cfg_data && cfg_data->b_dlg_updated))
         return FALSE;
+    config = &cfg_data->config;
+    hMainDlg = cfg_data->hMainDlg;
     switch (uMsg)
     {
         case WM_COMMAND:
@@ -1266,10 +743,26 @@ INT_PTR CALLBACK callback_tabs(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lPara
                 case LBN_SELCHANGE:
                     switch (LOWORD(wParam))
                     {
-                        case IDC_MAIN_RC_MODE:
+                        case IDC_PRESET:
+                            config->i_preset = SendDlgItemMessage(hMainDlg, IDC_PRESET, CB_GETCURSEL, 0, 0);
+                            break;
+
+                        case IDC_TUNING:
+                            config->i_tuning = SendDlgItemMessage(hMainDlg, IDC_TUNING, CB_GETCURSEL, 0, 0);
+                            break;
+
+                        case IDC_PROFILE:
+                            config->i_profile = SendDlgItemMessage(hMainDlg, IDC_PROFILE, CB_GETCURSEL, 0, 0);
+                            break;
+
+                        case IDC_LEVEL:
+                            config->i_level = SendDlgItemMessage(hMainDlg, IDC_LEVEL, CB_GETCURSEL, 0, 0);
+                            break;
+
+                        case IDC_RC_MODE:
                             config->i_pass = 1;
                             config->b_fast1pass = FALSE;
-                            switch (SendDlgItemMessage(hTabs[0], IDC_MAIN_RC_MODE, CB_GETCURSEL, 0, 0))
+                            switch (SendDlgItemMessage(hMainDlg, IDC_RC_MODE, CB_GETCURSEL, 0, 0))
                             {
                                 case 0:
                                     config->i_encoding_type = 0;
@@ -1305,98 +798,26 @@ INT_PTR CALLBACK callback_tabs(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lPara
                                     assert(0);
                                     break;
                             }
-                            b_tabs_updated = FALSE;
-                            tabs_update_items(config);
+                            cfg_data->b_dlg_updated = FALSE;
+                            dlg_update_items(cfg_data);
 
-                            /* Ugly hack for fixing visualization bug of IDC_MAIN_RC_VAL_SLIDER */
-                            ShowWindow(GetDlgItem(hTabs[0], IDC_MAIN_RC_VAL_SLIDER), FALSE);
-                            ShowWindow(GetDlgItem(hTabs[0], IDC_MAIN_RC_VAL_SLIDER), config->i_encoding_type > 0);
+                            /* Ugly hack for fixing visualization bug of IDC_RC_VAL_SLIDER */
+                            ShowWindow(GetDlgItem(hMainDlg, IDC_RC_VAL_SLIDER), FALSE);
+                            ShowWindow(GetDlgItem(hMainDlg, IDC_RC_VAL_SLIDER), config->i_encoding_type > 0);
 
-                            b_tabs_updated = TRUE;
+                            cfg_data->b_dlg_updated = TRUE;
                             break;
 
-                        case IDC_MISC_LEVEL:
-                            config->i_avc_level = SendDlgItemMessage(hTabs[0], IDC_MISC_LEVEL, CB_GETCURSEL, 0, 0);
-                            break;
-
-                        case IDC_DEBUG_LOG_LEVEL:
-                            config->i_log_level = SendDlgItemMessage(hTabs[0], IDC_DEBUG_LOG_LEVEL, CB_GETCURSEL, 0, 0);
+                        case IDC_OUTPUT_MODE:
+                            config->i_output_mode = SendDlgItemMessage(hMainDlg, IDC_OUTPUT_MODE, CB_GETCURSEL, 0, 0);
                             break;
 
                         case IDC_VFW_FOURCC:
-                            config->i_fcc_num = SendDlgItemMessage(hTabs[0], IDC_VFW_FOURCC, CB_GETCURSEL, 0, 0);
-                            config->i_fcc_num = X264_CLIP(config->i_fcc_num, 0, sizeof(fcc_str_table) / sizeof(fourcc_str) - 1);
-                            strcpy(config->fcc, fcc_str_table[config->i_fcc_num]);
+                            config->i_fourcc = SendDlgItemMessage(hMainDlg, IDC_VFW_FOURCC, CB_GETCURSEL, 0, 0);
                             break;
 
-                        case IDC_ANALYSIS_ME:
-                            config->i_me_method = SendDlgItemMessage(hTabs[1], IDC_ANALYSIS_ME, CB_GETCURSEL, 0, 0);
-                            break;
-
-                        case IDC_ANALYSIS_SUBME:
-                            config->i_subpel_refine = SendDlgItemMessage(hTabs[1], IDC_ANALYSIS_SUBME, CB_GETCURSEL, 0, 0);
-                            break;
-
-                        case IDC_ANALYSIS_WEIGHTP:
-                            config->i_p_wpred = SendDlgItemMessage(hTabs[1], IDC_ANALYSIS_WEIGHTP, CB_GETCURSEL, 0, 0);
-                            break;
-
-                        case IDC_ANALYSIS_B_ADAPT:
-                            config->i_bframe_adaptive = SendDlgItemMessage(hTabs[1], IDC_ANALYSIS_B_ADAPT, CB_GETCURSEL, 0, 0);
-                            break;
-
-                        case IDC_ANALYSIS_DIRECT:
-                            config->i_direct_mv_pred = SendDlgItemMessage(hTabs[1], IDC_ANALYSIS_DIRECT, CB_GETCURSEL, 0, 0);
-                            break;
-
-                        case IDC_ANALYSIS_B_PYRAMID:
-                            config->i_b_refs = SendDlgItemMessage(hTabs[1], IDC_ANALYSIS_B_PYRAMID, CB_GETCURSEL, 0, 0);
-                            break;
-
-                        case IDC_ENC_INTERLACED:
-                            config->i_interlaced = SendDlgItemMessage(hTabs[1], IDC_ENC_INTERLACED, CB_GETCURSEL, 0, 0);
-                            break;
-
-                        case IDC_ENC_TRELLIS:
-                            config->i_trellis = SendDlgItemMessage(hTabs[1], IDC_ENC_TRELLIS, CB_GETCURSEL, 0, 0);
-                            break;
-
-                        case IDC_ENC_CQM:
-                            config->i_cqm = SendDlgItemMessage(hTabs[1], IDC_ENC_CQM, CB_GETCURSEL, 0, 0);
-                            break;
-
-                        case IDC_AQ_MODE:
-                            config->i_aq_mode = SendDlgItemMessage(hTabs[2], IDC_AQ_MODE, CB_GETCURSEL, 0, 0);
-                            break;
-
-                        case IDC_VUI_OVERSCAN:
-                            config->i_overscan = SendDlgItemMessage(hTabs[2], IDC_VUI_OVERSCAN, CB_GETCURSEL, 0, 0);
-                            config->i_overscan = VUI_loc2abs(config->i_overscan, overscan);
-                            break;
-
-                        case IDC_VUI_VIDEOFORMAT:
-                            config->i_vidformat = SendDlgItemMessage(hTabs[2], IDC_VUI_VIDEOFORMAT, CB_GETCURSEL, 0, 0);
-                            config->i_vidformat = VUI_loc2abs(config->i_vidformat, vidformat);
-                            break;
-
-                        case IDC_VUI_FULLRANGE:
-                            config->i_fullrange = SendDlgItemMessage(hTabs[2], IDC_VUI_FULLRANGE, CB_GETCURSEL, 0, 0);
-                            config->i_fullrange = VUI_loc2abs(config->i_fullrange, fullrange);
-                            break;
-
-                        case IDC_VUI_COLORPRIM:
-                            config->i_colorprim = SendDlgItemMessage(hTabs[2], IDC_VUI_COLORPRIM, CB_GETCURSEL, 0, 0);
-                            config->i_colorprim = VUI_loc2abs(config->i_colorprim, colorprim);
-                            break;
-
-                        case IDC_VUI_TRANSFER:
-                            config->i_transfer = SendDlgItemMessage(hTabs[2], IDC_VUI_TRANSFER, CB_GETCURSEL, 0, 0);
-                            config->i_transfer = VUI_loc2abs(config->i_transfer, transfer);
-                            break;
-
-                        case IDC_VUI_COLORMATRIX:
-                            config->i_colmatrix = SendDlgItemMessage(hTabs[2], IDC_VUI_COLORMATRIX, CB_GETCURSEL, 0, 0);
-                            config->i_colmatrix = VUI_loc2abs(config->i_colmatrix, colmatrix);
+                        case IDC_LOG_LEVEL:
+                            config->i_log_level = SendDlgItemMessage(hMainDlg, IDC_LOG_LEVEL, CB_GETCURSEL, 0, 0);
                             break;
 
                         default:
@@ -1407,29 +828,51 @@ INT_PTR CALLBACK callback_tabs(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lPara
                 case BN_CLICKED:
                     switch (LOWORD(wParam))
                     {
-                        case IDC_MAIN_STATS_CREATE:
-                            config->b_createstats = IsDlgButtonChecked(hTabs[0], IDC_MAIN_STATS_CREATE);
+                        case IDOK:
+                            cfg_data->b_save = TRUE;
+                            EndDialog(hMainDlg, LOWORD(wParam));
                             break;
 
-                        case IDC_MAIN_STATS_UPDATE:
-                            config->b_updatestats = IsDlgButtonChecked(hTabs[0], IDC_MAIN_STATS_UPDATE);
+                        case IDCANCEL:
+                            cfg_data->b_save = FALSE;
+                            EndDialog(hMainDlg, LOWORD(wParam));
                             break;
 
-                        case IDC_MAIN_STATS_BROWSE:
+                        case IDC_TUNE_FASTDECODE:
+                            config->b_fastdecode = IsDlgButtonChecked(hMainDlg, IDC_TUNE_FASTDECODE);
+                            break;
+
+                        case IDC_TUNE_ZEROLATENCY:
+                            config->b_zerolatency = IsDlgButtonChecked(hMainDlg, IDC_TUNE_ZEROLATENCY);
+                            break;
+
+                        case IDC_STATS_CREATE:
+                            config->b_createstats = IsDlgButtonChecked(hMainDlg, IDC_STATS_CREATE);
+                            break;
+
+                        case IDC_STATS_UPDATE:
+                            config->b_updatestats = IsDlgButtonChecked(hMainDlg, IDC_STATS_UPDATE);
+                            break;
+
+                        case IDC_STATS_BROWSE:
                         {
                             OPENFILENAME ofn;
                             char tmp[MAX_STATS_SIZE];
 
-                            GetDlgItemText(hTabs[0], IDC_MAIN_STATS, tmp, MAX_STATS_SIZE);
+                            if (GetDlgItemText(hMainDlg, IDC_STATS_FILE, tmp, MAX_STATS_SIZE) == 0)
+                                strcpy(tmp, "");
 
                             memset(&ofn, 0, sizeof(OPENFILENAME));
                             ofn.lStructSize = sizeof(OPENFILENAME);
 
                             ofn.hwndOwner = hMainDlg;
                             ofn.lpstrFilter = "Stats files (*.stats)\0*.stats\0All files (*.*)\0*.*\0\0";
+                            ofn.nFilterIndex = tmp[0] ? get_extension_index(tmp, "stats\0\0") : 1;
+                            ofn.nFilterIndex = ofn.nFilterIndex ? ofn.nFilterIndex : 2;
                             ofn.lpstrFile = tmp;
                             ofn.nMaxFile = MAX_STATS_SIZE;
                             ofn.Flags = OFN_PATHMUSTEXIST;
+                            ofn.lpstrDefExt = "";
 
                             if (config->i_pass <= 1)
                                 ofn.Flags |= OFN_OVERWRITEPROMPT;
@@ -1438,124 +881,79 @@ INT_PTR CALLBACK callback_tabs(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lPara
 
                             if ((config->i_pass <= 1 && GetSaveFileName(&ofn)) ||
                                 (config->i_pass > 1 && GetOpenFileName(&ofn)))
-                                SetDlgItemText(hTabs[0], IDC_MAIN_STATS, tmp);
+                                SetDlgItemText(hMainDlg, IDC_STATS_FILE, tmp);
                             break;
                         }
 
-                        case IDC_DEBUG_PSNR:
-                            config->b_psnr = IsDlgButtonChecked(hTabs[0], IDC_DEBUG_PSNR);
-                            break;
-
-                        case IDC_DEBUG_SSIM:
-                            config->b_ssim = IsDlgButtonChecked(hTabs[0], IDC_DEBUG_SSIM);
-                            break;
-
-                        case IDC_DEBUG_NO_ASM:
-                            config->b_no_asm = IsDlgButtonChecked(hTabs[0], IDC_DEBUG_NO_ASM);
-                            break;
-
 #if X264VFW_USE_VIRTUALDUB_HACK
                         case IDC_VFW_VD_HACK:
-                            config->b_vd_hack = IsDlgButtonChecked(hTabs[0], IDC_VFW_VD_HACK);
+                            config->b_vd_hack = IsDlgButtonChecked(hMainDlg, IDC_VFW_VD_HACK);
                             break;
 #endif
 
-#if defined(HAVE_FFMPEG) && X264VFW_USE_DECODER
-                        case IDC_VFW_DISABLE_DECODER:
-                            config->b_disable_decoder = IsDlgButtonChecked(hTabs[0], IDC_VFW_DISABLE_DECODER);
-                            break;
-#endif
-
-                        case IDC_ANALYSIS_8X8DCT:
-                            config->b_dct8x8 = IsDlgButtonChecked(hTabs[1], IDC_ANALYSIS_8X8DCT);
-                            break;
-
-                        case IDC_ANALYSIS_I_I8X8:
-                            config->b_intra_i8x8 = IsDlgButtonChecked(hTabs[1], IDC_ANALYSIS_I_I8X8);
-                            break;
-
-                        case IDC_ANALYSIS_I_I4X4:
-                            config->b_intra_i4x4 = IsDlgButtonChecked(hTabs[1], IDC_ANALYSIS_I_I4X4);
-                            break;
-
-                        case IDC_ANALYSIS_PB_I8X8:
-                            config->b_i8x8 = IsDlgButtonChecked(hTabs[1], IDC_ANALYSIS_PB_I8X8);
-                            break;
-
-                        case IDC_ANALYSIS_PB_I4X4:
-                            config->b_i4x4 = IsDlgButtonChecked(hTabs[1], IDC_ANALYSIS_PB_I4X4);
-                            break;
-
-                        case IDC_ANALYSIS_PB_P8X8:
-                            config->b_psub16x16 = IsDlgButtonChecked(hTabs[1], IDC_ANALYSIS_PB_P8X8);
-                            break;
-
-                        case IDC_ANALYSIS_PB_P4X4:
-                            config->b_psub8x8 = IsDlgButtonChecked(hTabs[1], IDC_ANALYSIS_PB_P4X4);
-                            break;
-
-                        case IDC_ANALYSIS_PB_B8X8:
-                            config->b_bsub16x16 = IsDlgButtonChecked(hTabs[1], IDC_ANALYSIS_PB_B8X8);
-                            break;
-
-                        case IDC_ANALYSIS_FAST_PSKIP:
-                            config->b_fast_pskip = IsDlgButtonChecked(hTabs[1], IDC_ANALYSIS_FAST_PSKIP);
-                            break;
-
-                        case IDC_ANALYSIS_MIXED_REFS:
-                            config->b_mixedref = IsDlgButtonChecked(hTabs[1], IDC_ANALYSIS_MIXED_REFS);
-                            break;
-
-                        case IDC_ANALYSIS_CHROMA_ME:
-                            config->b_chroma_me = IsDlgButtonChecked(hTabs[1], IDC_ANALYSIS_CHROMA_ME);
-                            break;
-
-                        case IDC_ANALYSIS_WEIGHTB:
-                            config->b_b_wpred = IsDlgButtonChecked(hTabs[1], IDC_ANALYSIS_WEIGHTB);
-                            break;
-
-                        case IDC_ENC_DEBLOCK:
-                            config->b_filter = IsDlgButtonChecked(hTabs[1], IDC_ENC_DEBLOCK);
-                            break;
-
-                        case IDC_ENC_CABAC:
-                            config->b_cabac = IsDlgButtonChecked(hTabs[1], IDC_ENC_CABAC);
-                            break;
-
-                        case IDC_ENC_DCT_DECIMATE:
-                            config->b_dct_decimate = IsDlgButtonChecked(hTabs[1], IDC_ENC_DCT_DECIMATE);
-                            break;
-
-                        case IDC_ENC_CQMFILE_BROWSE:
+                        case IDC_OUTPUT_BROWSE:
                         {
                             OPENFILENAME ofn;
-                            char tmp[MAX_PATH];
+                            char tmp[MAX_OUTPUT_SIZE];
 
-                            GetDlgItemText(hTabs[1], IDC_ENC_CQMFILE, tmp, MAX_PATH);
+                            if (GetDlgItemText(hMainDlg, IDC_OUTPUT_FILE, tmp, MAX_OUTPUT_SIZE) == 0)
+                                strcpy(tmp, "");
 
                             memset(&ofn, 0, sizeof(OPENFILENAME));
                             ofn.lStructSize = sizeof(OPENFILENAME);
 
                             ofn.hwndOwner = hMainDlg;
-                            ofn.lpstrFilter = "Custom quant matrices files (*.cfg)\0*.cfg\0All files (*.*)\0*.*\0\0";
+                            ofn.lpstrFilter = "*.avi\0*.avi\0*.flv\0*.flv\0*.mkv\0*.mkv\0*.mp4\0*.mp4\0*.h264\0*.h264\0All files (*.*)\0*.*\0\0";
+                            ofn.nFilterIndex = tmp[0] ? get_extension_index(tmp, "avi\0flv\0mkv\0mp4\0h264\0\0") : 1;
+                            ofn.nFilterIndex = ofn.nFilterIndex ? ofn.nFilterIndex : 6;
                             ofn.lpstrFile = tmp;
-                            ofn.nMaxFile = MAX_PATH;
-                            ofn.Flags = OFN_PATHMUSTEXIST | OFN_FILEMUSTEXIST;
+                            ofn.nMaxFile = MAX_OUTPUT_SIZE;
+                            ofn.Flags = OFN_PATHMUSTEXIST | OFN_OVERWRITEPROMPT;
+                            ofn.lpstrDefExt = "";
 
-                            if (GetOpenFileName(&ofn))
-                                SetDlgItemText(hTabs[1], IDC_ENC_CQMFILE, tmp);
+                            if (GetSaveFileName(&ofn))
+                                SetDlgItemText(hMainDlg, IDC_OUTPUT_FILE, tmp);
                             break;
                         }
 
-#if X264VFW_USE_THREADS
-                        case IDC_MT_DETERMINISTIC:
-                            config->b_mt_deterministic = IsDlgButtonChecked(hTabs[2], IDC_MT_DETERMINISTIC);
+                        case IDC_PSNR:
+                            config->b_psnr = IsDlgButtonChecked(hMainDlg, IDC_PSNR);
                             break;
 
-                        case IDC_MT_SLICED:
-                            config->b_mt_sliced = IsDlgButtonChecked(hTabs[2], IDC_MT_SLICED);
+                        case IDC_SSIM:
+                            config->b_ssim = IsDlgButtonChecked(hMainDlg, IDC_SSIM);
+                            break;
+
+                        case IDC_NO_ASM:
+                            config->b_no_asm = IsDlgButtonChecked(hMainDlg, IDC_NO_ASM);
+                            break;
+
+#if defined(HAVE_FFMPEG) && X264VFW_USE_DECODER
+                        case IDC_VFW_DISABLE_DECODER:
+                            config->b_disable_decoder = IsDlgButtonChecked(hMainDlg, IDC_VFW_DISABLE_DECODER);
                             break;
 #endif
+
+                        case IDC_EXTRA_HELP:
+                            if (!cfg_data->hHelpDlg)
+                                cfg_data->hHelpDlg = CreateDialog(g_hInst, MAKEINTRESOURCE(IDD_HELP), GetDesktopWindow(), callback_help);
+                            if (cfg_data->hHelpDlg)
+                            {
+                                ShowWindow(cfg_data->hHelpDlg, SW_SHOWNORMAL);
+                                BringWindowToTop(cfg_data->hHelpDlg);
+                            }
+                            break;
+
+                        case IDC_DEFAULTS:
+                            if (MessageBox(hMainDlg, X264VFW_DEF_TEXT, X264VFW_NAME, MB_YESNO) == IDYES)
+                            {
+                                config_defaults(config);
+                                cfg_data->b_dlg_updated = FALSE;
+                                dlg_enable_items(cfg_data);
+                                dlg_update_items(cfg_data);
+                                cfg_data->b_dlg_updated = TRUE;
+                            }
+                            break;
 
                         default:
                             return FALSE;
@@ -1565,35 +963,35 @@ INT_PTR CALLBACK callback_tabs(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lPara
                 case EN_CHANGE:
                     switch (LOWORD(wParam))
                     {
-                        case IDC_MAIN_RC_VAL:
+                        case IDC_RC_VAL:
                             switch (config->i_encoding_type)
                             {
                                 case 0:
                                     break;
 
                                 case 1:
-                                    CHECKED_SET_MAX_INT(config->i_qp, hTabs[0], IDC_MAIN_RC_VAL, FALSE, 1, X264_QUANT_MAX);
-                                    SendDlgItemMessage(hTabs[0], IDC_MAIN_RC_VAL_SLIDER, TBM_SETPOS, TRUE, config->i_qp);
+                                    CHECKED_SET_MAX_INT(config->i_qp, hMainDlg, IDC_RC_VAL, FALSE, 1, MAX_QUANT);
+                                    SendDlgItemMessage(hMainDlg, IDC_RC_VAL_SLIDER, TBM_SETPOS, TRUE, config->i_qp);
                                     break;
 
                                 case 2:
-                                    CheckControlTextIsNumber(GetDlgItem(hTabs[0], IDC_MAIN_RC_VAL), FALSE, 1);
-                                    config->i_rf_constant = (int)(GetDlgItemDouble(hTabs[0], IDC_MAIN_RC_VAL) * 10);
+                                    CheckControlTextIsNumber(GetDlgItem(hMainDlg, IDC_RC_VAL), FALSE, 1);
+                                    config->i_rf_constant = (int)(GetDlgItemDouble(hMainDlg, IDC_RC_VAL) * 10);
                                     if (config->i_rf_constant < 10)
                                         config->i_rf_constant = 10;
-                                    else if (config->i_rf_constant > X264_QUANT_MAX * 10)
+                                    else if (config->i_rf_constant > MAX_QUANT * 10)
                                     {
-                                        config->i_rf_constant = X264_QUANT_MAX * 10;
-                                        SetDlgItemDouble(hTabs[0], IDC_MAIN_RC_VAL, config->i_rf_constant * 0.1, "%.1f");
-                                        SendMessage(GetDlgItem(hTabs[0], IDC_MAIN_RC_VAL), EM_SETSEL, -2, -2);
+                                        config->i_rf_constant = MAX_QUANT * 10;
+                                        SetDlgItemDouble(hMainDlg, IDC_RC_VAL, config->i_rf_constant * 0.1, "%.1f");
+                                        SendMessage(GetDlgItem(hMainDlg, IDC_RC_VAL), EM_SETSEL, -2, -2);
                                     }
-                                    SendDlgItemMessage(hTabs[0], IDC_MAIN_RC_VAL_SLIDER, TBM_SETPOS, TRUE, config->i_rf_constant);
+                                    SendDlgItemMessage(hMainDlg, IDC_RC_VAL_SLIDER, TBM_SETPOS, TRUE, config->i_rf_constant);
                                     break;
 
                                 case 3:
                                 case 4:
-                                    CHECKED_SET_MAX_INT(config->i_passbitrate, hTabs[0], IDC_MAIN_RC_VAL, FALSE, 1, X264_BITRATE_MAX);
-                                    SendDlgItemMessage(hTabs[0], IDC_MAIN_RC_VAL_SLIDER, TBM_SETPOS, TRUE, scale2pos(config->i_passbitrate));
+                                    CHECKED_SET_MAX_INT(config->i_passbitrate, hMainDlg, IDC_RC_VAL, FALSE, 1, MAX_BITRATE);
+                                    SendDlgItemMessage(hMainDlg, IDC_RC_VAL_SLIDER, TBM_SETPOS, TRUE, scale2pos(config->i_passbitrate));
                                     break;
 
                                 default:
@@ -1602,149 +1000,27 @@ INT_PTR CALLBACK callback_tabs(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lPara
                             }
                             break;
 
-                        case IDC_MAIN_STATS:
-                            if (GetDlgItemText(hTabs[0], IDC_MAIN_STATS, config->stats, MAX_STATS_PATH) == 0)
+                        case IDC_STATS_FILE:
+                            if (GetDlgItemText(hMainDlg, IDC_STATS_FILE, config->stats, MAX_STATS_PATH) == 0)
                                 strcpy(config->stats, ".\\x264.stats");
                             break;
 
-                        case IDC_MAIN_EXTRA_CMDLINE:
-                            if (GetDlgItemText(hTabs[0], IDC_MAIN_EXTRA_CMDLINE, config->extra_cmdline, MAX_CMDLINE) == 0)
+                        case IDC_OUTPUT_FILE:
+                            if (GetDlgItemText(hMainDlg, IDC_OUTPUT_FILE, config->output_file, MAX_OUTPUT_PATH) == 0)
+                                strcpy(config->output_file, "");
+                            break;
+
+                        case IDC_SAR_W:
+                            CHECKED_SET_MAX_INT(config->i_sar_width, hMainDlg, IDC_SAR_W, FALSE, 1, 9999);
+                            break;
+
+                        case IDC_SAR_H:
+                            CHECKED_SET_MAX_INT(config->i_sar_height, hMainDlg, IDC_SAR_H, FALSE, 1, 9999);
+                            break;
+
+                        case IDC_EXTRA_CMDLINE:
+                            if (GetDlgItemText(hMainDlg, IDC_EXTRA_CMDLINE, config->extra_cmdline, MAX_CMDLINE) == 0)
                                 strcpy(config->extra_cmdline, "");
-                            break;
-
-                        case IDC_MISC_SAR_W:
-                            CHECKED_SET_MAX_INT(config->i_sar_width, hTabs[0], IDC_MISC_SAR_W, FALSE, 1, 9999);
-                            break;
-
-                        case IDC_MISC_SAR_H:
-                            CHECKED_SET_MAX_INT(config->i_sar_height, hTabs[0], IDC_MISC_SAR_H, FALSE, 1, 9999);
-                            break;
-
-                        case IDC_ANALYSIS_REF:
-                            CHECKED_SET_MAX_INT(config->i_refmax, hTabs[1], IDC_ANALYSIS_REF, FALSE, 1, 16);
-                            break;
-
-                        case IDC_ANALYSIS_MERANGE:
-                            CHECKED_SET_MAX_INT(config->i_me_range, hTabs[1], IDC_ANALYSIS_MERANGE, FALSE, 4, 64);
-                            break;
-
-                        case IDC_ANALYSIS_PSY_RDO:
-                            CHECKED_SET_MAX_FLOAT(config->f_psy_rdo, hTabs[1], IDC_ANALYSIS_PSY_RDO, FALSE, 0.00, 1000.00, 2, "%.2f");
-                            break;
-
-                        case IDC_ANALYSIS_MIN_KEYINT:
-                            CHECKED_SET_MAX_INT(config->i_keyint_min, hTabs[1], IDC_ANALYSIS_MIN_KEYINT, FALSE, 0, config->i_keyint_max);
-                            break;
-
-                        case IDC_ANALYSIS_KEYINT:
-                            CHECKED_SET_MAX_INT(config->i_keyint_max, hTabs[1], IDC_ANALYSIS_KEYINT, FALSE, X264_MAX(config->i_keyint_min, 1), 9999);
-                            break;
-
-                        case IDC_ANALYSIS_SCENECUT:
-                            CHECKED_SET_MAX_INT(config->i_scenecut_threshold, hTabs[1], IDC_ANALYSIS_SCENECUT, FALSE, 0, 100);
-                            break;
-
-                        case IDC_ANALYSIS_BFRAMES:
-                            CHECKED_SET_MAX_INT(config->i_bframe, hTabs[1], IDC_ANALYSIS_BFRAMES, FALSE, 0, X264_BFRAME_MAX);
-                            break;
-
-                        case IDC_ANALYSIS_B_BIAS:
-                            CHECKED_SET_INT(config->i_bframe_bias, hTabs[1], IDC_ANALYSIS_B_BIAS, TRUE, -90, 100);
-                            break;
-
-                        case IDC_ENC_DEBLOCK_A:
-                            CHECKED_SET_INT(config->i_inloop_a, hTabs[1], IDC_ENC_DEBLOCK_A, TRUE, -6, 6);
-                            break;
-
-                        case IDC_ENC_DEBLOCK_B:
-                            CHECKED_SET_INT(config->i_inloop_b, hTabs[1], IDC_ENC_DEBLOCK_B, TRUE, -6, 6);
-                            break;
-
-                        case IDC_ENC_NR:
-                            CHECKED_SET_MAX_INT(config->i_noise_reduction, hTabs[1], IDC_ENC_NR, FALSE, 0, 9999);
-                            break;
-
-                        case IDC_ENC_DEADZONE_INTRA:
-                            CHECKED_SET_MAX_INT(config->i_intra_deadzone, hTabs[1], IDC_ENC_DEADZONE_INTRA, FALSE, 0, 32);
-                            break;
-
-                        case IDC_ENC_DEADZONE_INTER:
-                            CHECKED_SET_MAX_INT(config->i_inter_deadzone, hTabs[1], IDC_ENC_DEADZONE_INTER, FALSE, 0, 32);
-                            break;
-
-                        case IDC_ENC_CQMFILE:
-                            if (GetDlgItemText(hTabs[1], IDC_ENC_CQMFILE, config->cqmfile, MAX_PATH) == 0)
-                                strcpy(config->cqmfile, "");
-                            break;
-
-                        case IDC_ENC_PSY_TRELLIS:
-                            CHECKED_SET_MAX_FLOAT(config->f_psy_trellis, hTabs[1], IDC_ENC_PSY_TRELLIS, FALSE, 0.00, 1000.00, 2, "%.2f");
-                            break;
-
-                        case IDC_RC_VBV_MAXRATE:
-                            CHECKED_SET_MAX_INT(config->i_vbv_maxrate, hTabs[2], IDC_RC_VBV_MAXRATE, FALSE, 0, X264_BITRATE_MAX);
-                            break;
-
-                        case IDC_RC_VBV_BUFSIZE:
-                            CHECKED_SET_MAX_INT(config->i_vbv_bufsize, hTabs[2], IDC_RC_VBV_BUFSIZE, FALSE, 0, X264_BITRATE_MAX);
-                            break;
-
-                        case IDC_RC_VBV_INIT:
-                            CHECKED_SET_MAX_INT(config->i_vbv_occupancy, hTabs[2], IDC_RC_VBV_INIT, FALSE, 0, 100);
-                            break;
-
-                        case IDC_RC_QPMIN:
-                            CHECKED_SET_MAX_INT(config->i_qp_min, hTabs[2], IDC_RC_QPMIN, FALSE, 0, config->i_qp_max);
-                            break;
-
-                        case IDC_RC_QPMAX:
-                            CHECKED_SET_MAX_INT(config->i_qp_max, hTabs[2], IDC_RC_QPMAX, FALSE, config->i_qp_min, X264_QUANT_MAX);
-                            break;
-
-                        case IDC_RC_QPSTEP:
-                            CHECKED_SET_MAX_INT(config->i_qp_step, hTabs[2], IDC_RC_QPSTEP, FALSE, 1, X264_QUANT_MAX);
-                            break;
-
-                        case IDC_RC_IPRATIO:
-                            CHECKED_SET_MAX_FLOAT(config->f_ipratio, hTabs[2], IDC_RC_IPRATIO, FALSE, 1.00, 1000.00, 2, "%.2f");
-                            break;
-
-                        case IDC_RC_PBRATIO:
-                            CHECKED_SET_MAX_FLOAT(config->f_pbratio, hTabs[2], IDC_RC_PBRATIO, FALSE, 1.00, 1000.00, 2, "%.2f");
-                            break;
-
-                        case IDC_RC_CHROMA_QP_OFFSET:
-                            CHECKED_SET_INT(config->i_chroma_qp_offset, hTabs[2], IDC_RC_CHROMA_QP_OFFSET, TRUE, -12, 12);
-                            break;
-
-                        case IDC_RC_QCOMP:
-                            CHECKED_SET_MAX_FLOAT(config->f_qcomp, hTabs[2], IDC_RC_QCOMP, FALSE, 0.00, 1000.00, 2, "%.2f");
-                            break;
-
-                        case IDC_RC_CPLXBLUR:
-                            CHECKED_SET_MAX_FLOAT(config->f_cplxblur, hTabs[2], IDC_RC_CPLXBLUR, FALSE, 0.00, 1000.00, 2, "%.2f");
-                            break;
-
-                        case IDC_RC_QBLUR:
-                            CHECKED_SET_MAX_FLOAT(config->f_qblur, hTabs[2], IDC_RC_QBLUR, FALSE, 0.00, 1000.00, 2, "%.2f");
-                            break;
-
-                        case IDC_RC_RATETOL:
-                            CHECKED_SET_MAX_FLOAT(config->f_ratetol, hTabs[2], IDC_RC_RATETOL, FALSE, 0.01, 1000.00, 2, "%.2f");
-                            break;
-
-                        case IDC_AQ_STRENGTH:
-                            CHECKED_SET_MAX_FLOAT(config->f_aq_strength, hTabs[2], IDC_AQ_STRENGTH, FALSE, 0.00, 1000.00, 2, "%.2f");
-                            break;
-
-#if X264VFW_USE_THREADS
-                        case IDC_MT_THREADS:
-                            CHECKED_SET_MAX_INT(config->i_threads, hTabs[2], IDC_MT_THREADS, FALSE, 0, X264_THREAD_MAX);
-                            break;
-#endif
-
-                        case IDC_VUI_CHROMALOC:
-                            CHECKED_SET_MAX_INT(config->i_chromaloc, hTabs[2], IDC_VUI_CHROMALOC, FALSE, 0, 5);
                             break;
 
                         default:
@@ -1755,32 +1031,32 @@ INT_PTR CALLBACK callback_tabs(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lPara
                 case EN_KILLFOCUS:
                     switch (LOWORD(wParam))
                     {
-                        case IDC_MAIN_RC_VAL:
+                        case IDC_RC_VAL:
                             switch (config->i_encoding_type)
                             {
                                 case 0:
                                     break;
 
                                 case 1:
-                                    CHECKED_SET_SHOW_INT(config->i_qp, hTabs[0], IDC_MAIN_RC_VAL, FALSE, 1, X264_QUANT_MAX);
-                                    SendDlgItemMessage(hTabs[0], IDC_MAIN_RC_VAL_SLIDER, TBM_SETPOS, TRUE, config->i_qp);
+                                    CHECKED_SET_SHOW_INT(config->i_qp, hMainDlg, IDC_RC_VAL, FALSE, 1, MAX_QUANT);
+                                    SendDlgItemMessage(hMainDlg, IDC_RC_VAL_SLIDER, TBM_SETPOS, TRUE, config->i_qp);
                                     break;
 
                                 case 2:
-                                    CheckControlTextIsNumber(GetDlgItem(hTabs[0], IDC_MAIN_RC_VAL), FALSE, 1);
-                                    config->i_rf_constant = (int)(GetDlgItemDouble(hTabs[0], IDC_MAIN_RC_VAL) * 10);
+                                    CheckControlTextIsNumber(GetDlgItem(hMainDlg, IDC_RC_VAL), FALSE, 1);
+                                    config->i_rf_constant = (int)(GetDlgItemDouble(hMainDlg, IDC_RC_VAL) * 10);
                                     if (config->i_rf_constant < 10)
                                         config->i_rf_constant = 10;
-                                    else if (config->i_rf_constant > X264_QUANT_MAX * 10)
-                                        config->i_rf_constant = X264_QUANT_MAX * 10;
-                                    SetDlgItemDouble(hTabs[0], IDC_MAIN_RC_VAL, config->i_rf_constant * 0.1, "%.1f");
-                                    SendDlgItemMessage(hTabs[0], IDC_MAIN_RC_VAL_SLIDER, TBM_SETPOS, TRUE, config->i_rf_constant);
+                                    else if (config->i_rf_constant > MAX_QUANT * 10)
+                                        config->i_rf_constant = MAX_QUANT * 10;
+                                    SetDlgItemDouble(hMainDlg, IDC_RC_VAL, config->i_rf_constant * 0.1, "%.1f");
+                                    SendDlgItemMessage(hMainDlg, IDC_RC_VAL_SLIDER, TBM_SETPOS, TRUE, config->i_rf_constant);
                                     break;
 
                                 case 3:
                                 case 4:
-                                    CHECKED_SET_SHOW_INT(config->i_passbitrate, hTabs[0], IDC_MAIN_RC_VAL, FALSE, 1, X264_BITRATE_MAX);
-                                    SendDlgItemMessage(hTabs[0], IDC_MAIN_RC_VAL_SLIDER, TBM_SETPOS, TRUE, scale2pos(config->i_passbitrate));
+                                    CHECKED_SET_SHOW_INT(config->i_passbitrate, hMainDlg, IDC_RC_VAL, FALSE, 1, MAX_BITRATE);
+                                    SendDlgItemMessage(hMainDlg, IDC_RC_VAL_SLIDER, TBM_SETPOS, TRUE, scale2pos(config->i_passbitrate));
                                     break;
 
                                 default:
@@ -1789,152 +1065,30 @@ INT_PTR CALLBACK callback_tabs(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lPara
                             }
                             break;
 
-                        case IDC_MAIN_STATS:
-                            if (GetDlgItemText(hTabs[0], IDC_MAIN_STATS, config->stats, MAX_STATS_PATH) == 0)
+                        case IDC_STATS_FILE:
+                            if (GetDlgItemText(hMainDlg, IDC_STATS_FILE, config->stats, MAX_STATS_PATH) == 0)
                                 strcpy(config->stats, ".\\x264.stats");
-                            SetDlgItemText(hTabs[0], IDC_MAIN_STATS, config->stats);
+                            SetDlgItemText(hMainDlg, IDC_STATS_FILE, config->stats);
                             break;
 
-                        case IDC_MAIN_EXTRA_CMDLINE:
-                            if (GetDlgItemText(hTabs[0], IDC_MAIN_EXTRA_CMDLINE, config->extra_cmdline, MAX_CMDLINE) == 0)
+                        case IDC_OUTPUT_FILE:
+                            if (GetDlgItemText(hMainDlg, IDC_OUTPUT_FILE, config->output_file, MAX_OUTPUT_PATH) == 0)
+                                strcpy(config->output_file, "");
+                            SetDlgItemText(hMainDlg, IDC_OUTPUT_FILE, config->output_file);
+                            break;
+
+                        case IDC_SAR_W:
+                            CHECKED_SET_SHOW_INT(config->i_sar_width, hMainDlg, IDC_SAR_W, FALSE, 1, 9999);
+                            break;
+
+                        case IDC_SAR_H:
+                            CHECKED_SET_SHOW_INT(config->i_sar_height, hMainDlg, IDC_SAR_H, FALSE, 1, 9999);
+                            break;
+
+                        case IDC_EXTRA_CMDLINE:
+                            if (GetDlgItemText(hMainDlg, IDC_EXTRA_CMDLINE, config->extra_cmdline, MAX_CMDLINE) == 0)
                                 strcpy(config->extra_cmdline, "");
-                            SetDlgItemText(hTabs[0], IDC_MAIN_EXTRA_CMDLINE, config->extra_cmdline);
-                            break;
-
-                        case IDC_MISC_SAR_W:
-                            CHECKED_SET_SHOW_INT(config->i_sar_width, hTabs[0], IDC_MISC_SAR_W, FALSE, 1, 9999);
-                            break;
-
-                        case IDC_MISC_SAR_H:
-                            CHECKED_SET_SHOW_INT(config->i_sar_height, hTabs[0], IDC_MISC_SAR_H, FALSE, 1, 9999);
-                            break;
-
-                        case IDC_ANALYSIS_REF:
-                            CHECKED_SET_SHOW_INT(config->i_refmax, hTabs[1], IDC_ANALYSIS_REF, FALSE, 1, 16);
-                            break;
-
-                        case IDC_ANALYSIS_MERANGE:
-                            CHECKED_SET_SHOW_INT(config->i_me_range, hTabs[1], IDC_ANALYSIS_MERANGE, FALSE, 4, 64);
-                            break;
-
-                        case IDC_ANALYSIS_PSY_RDO:
-                            CHECKED_SET_SHOW_FLOAT(config->f_psy_rdo, hTabs[1], IDC_ANALYSIS_PSY_RDO, FALSE, 0.00, 1000.00, 2, "%.2f");
-                            break;
-
-                        case IDC_ANALYSIS_MIN_KEYINT:
-                            CHECKED_SET_SHOW_INT(config->i_keyint_min, hTabs[1], IDC_ANALYSIS_MIN_KEYINT, FALSE, 0, config->i_keyint_max);
-                            break;
-
-                        case IDC_ANALYSIS_KEYINT:
-                            CHECKED_SET_SHOW_INT(config->i_keyint_max, hTabs[1], IDC_ANALYSIS_KEYINT, FALSE, X264_MAX(config->i_keyint_min, 1), 9999);
-                            break;
-
-                        case IDC_ANALYSIS_SCENECUT:
-                            CHECKED_SET_SHOW_INT(config->i_scenecut_threshold, hTabs[1], IDC_ANALYSIS_SCENECUT, FALSE, 0, 100);
-                            break;
-
-                        case IDC_ANALYSIS_BFRAMES:
-                            CHECKED_SET_SHOW_INT(config->i_bframe, hTabs[1], IDC_ANALYSIS_BFRAMES, FALSE, 0, X264_BFRAME_MAX);
-                            break;
-
-                        case IDC_ANALYSIS_B_BIAS:
-                            CHECKED_SET_SHOW_INT(config->i_bframe_bias, hTabs[1], IDC_ANALYSIS_B_BIAS, TRUE, -90, 100);
-                            break;
-
-                        case IDC_ENC_DEBLOCK_A:
-                            CHECKED_SET_SHOW_INT(config->i_inloop_a, hTabs[1], IDC_ENC_DEBLOCK_A, TRUE, -6, 6);
-                            break;
-
-                        case IDC_ENC_DEBLOCK_B:
-                            CHECKED_SET_SHOW_INT(config->i_inloop_b, hTabs[1], IDC_ENC_DEBLOCK_B, TRUE, -6, 6);
-                            break;
-
-                        case IDC_ENC_NR:
-                            CHECKED_SET_SHOW_INT(config->i_noise_reduction, hTabs[1], IDC_ENC_NR, FALSE, 0, 9999);
-                            break;
-
-                        case IDC_ENC_DEADZONE_INTRA:
-                            CHECKED_SET_SHOW_INT(config->i_intra_deadzone, hTabs[1], IDC_ENC_DEADZONE_INTRA, FALSE, 0, 32);
-                            break;
-
-                        case IDC_ENC_DEADZONE_INTER:
-                            CHECKED_SET_SHOW_INT(config->i_inter_deadzone, hTabs[1], IDC_ENC_DEADZONE_INTER, FALSE, 0, 32);
-                            break;
-
-                        case IDC_ENC_CQMFILE:
-                            if (GetDlgItemText(hTabs[1], IDC_ENC_CQMFILE, config->cqmfile, MAX_PATH) == 0)
-                                strcpy(config->cqmfile, "");
-                            SetDlgItemText(hTabs[1], IDC_ENC_CQMFILE, config->cqmfile);
-                            break;
-
-                        case IDC_ENC_PSY_TRELLIS:
-                            CHECKED_SET_SHOW_FLOAT(config->f_psy_trellis, hTabs[1], IDC_ENC_PSY_TRELLIS, FALSE, 0.00, 1000.00, 2, "%.2f");
-                            break;
-
-                        case IDC_RC_VBV_MAXRATE:
-                            CHECKED_SET_SHOW_INT(config->i_vbv_maxrate, hTabs[2], IDC_RC_VBV_MAXRATE, FALSE, 0, X264_BITRATE_MAX);
-                            break;
-
-                        case IDC_RC_VBV_BUFSIZE:
-                            CHECKED_SET_SHOW_INT(config->i_vbv_bufsize, hTabs[2], IDC_RC_VBV_BUFSIZE, FALSE, 0, X264_BITRATE_MAX);
-                            break;
-
-                        case IDC_RC_VBV_INIT:
-                            CHECKED_SET_SHOW_INT(config->i_vbv_occupancy, hTabs[2], IDC_RC_VBV_INIT, FALSE, 0, 100);
-                            break;
-
-                        case IDC_RC_QPMIN:
-                            CHECKED_SET_SHOW_INT(config->i_qp_min, hTabs[2], IDC_RC_QPMIN, FALSE, 0, config->i_qp_max);
-                            break;
-
-                        case IDC_RC_QPMAX:
-                            CHECKED_SET_SHOW_INT(config->i_qp_max, hTabs[2], IDC_RC_QPMAX, FALSE, config->i_qp_min, X264_QUANT_MAX);
-                            break;
-
-                        case IDC_RC_QPSTEP:
-                            CHECKED_SET_SHOW_INT(config->i_qp_step, hTabs[2], IDC_RC_QPSTEP, FALSE, 1, X264_QUANT_MAX);
-                            break;
-
-                        case IDC_RC_IPRATIO:
-                            CHECKED_SET_SHOW_FLOAT(config->f_ipratio, hTabs[2], IDC_RC_IPRATIO, FALSE, 1.00, 1000.00, 2, "%.2f");
-                            break;
-
-                        case IDC_RC_PBRATIO:
-                            CHECKED_SET_SHOW_FLOAT(config->f_pbratio, hTabs[2], IDC_RC_PBRATIO, FALSE, 1.00, 1000.00, 2, "%.2f");
-                            break;
-
-                        case IDC_RC_CHROMA_QP_OFFSET:
-                            CHECKED_SET_SHOW_INT(config->i_chroma_qp_offset, hTabs[2], IDC_RC_CHROMA_QP_OFFSET, TRUE, -12, 12);
-                            break;
-
-                        case IDC_RC_QCOMP:
-                            CHECKED_SET_SHOW_FLOAT(config->f_qcomp, hTabs[2], IDC_RC_QCOMP, FALSE, 0.00, 1000.00, 2, "%.2f");
-                            break;
-
-                        case IDC_RC_CPLXBLUR:
-                            CHECKED_SET_SHOW_FLOAT(config->f_cplxblur, hTabs[2], IDC_RC_CPLXBLUR, FALSE, 0.00, 1000.00, 2, "%.2f");
-                            break;
-
-                        case IDC_RC_QBLUR:
-                            CHECKED_SET_SHOW_FLOAT(config->f_qblur, hTabs[2], IDC_RC_QBLUR, FALSE, 0.00, 1000.00, 2, "%.2f");
-                            break;
-
-                        case IDC_RC_RATETOL:
-                            CHECKED_SET_SHOW_FLOAT(config->f_ratetol, hTabs[2], IDC_RC_RATETOL, FALSE, 0.01, 1000.00, 2, "%.2f");
-                            break;
-
-                        case IDC_AQ_STRENGTH:
-                            CHECKED_SET_SHOW_FLOAT(config->f_aq_strength, hTabs[2], IDC_AQ_STRENGTH, FALSE, 0.00, 1000.00, 2, "%.2f");
-                            break;
-
-#if X264VFW_USE_THREADS
-                        case IDC_MT_THREADS:
-                            CHECKED_SET_SHOW_INT(config->i_threads, hTabs[2], IDC_MT_THREADS, FALSE, 0, X264_THREAD_MAX);
-                            break;
-#endif
-
-                        case IDC_VUI_CHROMALOC:
-                            CHECKED_SET_SHOW_INT(config->i_chromaloc, hTabs[2], IDC_VUI_CHROMALOC, FALSE, 0, 5);
+                            SetDlgItemText(hMainDlg, IDC_EXTRA_CMDLINE, config->extra_cmdline);
                             break;
 
                         default:
@@ -1947,107 +1101,8 @@ INT_PTR CALLBACK callback_tabs(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lPara
             }
             break;
 
-        case WM_NOTIFY:
-        {
-            LPNMUPDOWN lpnmud = (LPNMUPDOWN)lParam;
-
-            if (!lpnmud)
-                return FALSE;
-            if (lpnmud->hdr.code != UDN_DELTAPOS)
-                return FALSE;
-
-            switch (lpnmud->hdr.idFrom)
-            {
-                case IDC_ANALYSIS_REF_SPIN:
-                    config->i_refmax = X264_CLIP(config->i_refmax - lpnmud->iDelta, 1, 16);
-                    SetDlgItemInt(hTabs[1], IDC_ANALYSIS_REF, config->i_refmax, FALSE);
-                    break;
-
-                case IDC_ANALYSIS_MERANGE_SPIN:
-                    config->i_me_range = X264_CLIP(config->i_me_range - lpnmud->iDelta, 4, 64);
-                    SetDlgItemInt(hTabs[1], IDC_ANALYSIS_MERANGE, config->i_me_range, FALSE);
-                    break;
-
-                case IDC_ANALYSIS_SCENECUT_SPIN:
-                    config->i_scenecut_threshold = X264_CLIP(config->i_scenecut_threshold - lpnmud->iDelta, 0, 100);
-                    SetDlgItemInt(hTabs[1], IDC_ANALYSIS_SCENECUT, config->i_scenecut_threshold, FALSE);
-                    break;
-
-                case IDC_ANALYSIS_BFRAMES_SPIN:
-                    config->i_bframe = X264_CLIP(config->i_bframe - lpnmud->iDelta, 0, X264_BFRAME_MAX);
-                    SetDlgItemInt(hTabs[1], IDC_ANALYSIS_BFRAMES, config->i_bframe, FALSE);
-                    break;
-
-                case IDC_ANALYSIS_B_BIAS_SPIN:
-                    config->i_bframe_bias = X264_CLIP(config->i_bframe_bias - lpnmud->iDelta, -90, 100);
-                    SetDlgItemInt(hTabs[1], IDC_ANALYSIS_B_BIAS, config->i_bframe_bias, TRUE);
-                    break;
-
-                case IDC_ENC_DEBLOCK_A_SPIN:
-                    config->i_inloop_a = X264_CLIP(config->i_inloop_a - lpnmud->iDelta, -6, 6);
-                    SetDlgItemInt(hTabs[1], IDC_ENC_DEBLOCK_A, config->i_inloop_a, TRUE);
-                    break;
-
-                case IDC_ENC_DEBLOCK_B_SPIN:
-                    config->i_inloop_b = X264_CLIP(config->i_inloop_b - lpnmud->iDelta, -6, 6);
-                    SetDlgItemInt(hTabs[1], IDC_ENC_DEBLOCK_B, config->i_inloop_b, TRUE);
-                    break;
-
-                case IDC_ENC_DEADZONE_INTRA_SPIN:
-                    config->i_intra_deadzone = X264_CLIP(config->i_intra_deadzone - lpnmud->iDelta, 0, 32);
-                    SetDlgItemInt(hTabs[1], IDC_ENC_DEADZONE_INTRA, config->i_intra_deadzone, FALSE);
-                    break;
-
-                case IDC_ENC_DEADZONE_INTER_SPIN:
-                    config->i_inter_deadzone = X264_CLIP(config->i_inter_deadzone - lpnmud->iDelta, 0, 32);
-                    SetDlgItemInt(hTabs[1], IDC_ENC_DEADZONE_INTER, config->i_inter_deadzone, FALSE);
-                    break;
-
-                case IDC_RC_VBV_INIT_SPIN:
-                    config->i_vbv_occupancy = X264_CLIP(config->i_vbv_occupancy - lpnmud->iDelta, 0, 100);
-                    SetDlgItemInt(hTabs[2], IDC_RC_VBV_INIT, config->i_vbv_occupancy, FALSE);
-                    break;
-
-                case IDC_RC_QPMIN_SPIN:
-                    config->i_qp_min = X264_CLIP(config->i_qp_min - lpnmud->iDelta, 0, config->i_qp_max);
-                    SetDlgItemInt(hTabs[2], IDC_RC_QPMIN, config->i_qp_min, FALSE);
-                    break;
-
-                case IDC_RC_QPMAX_SPIN:
-                    config->i_qp_max = X264_CLIP(config->i_qp_max - lpnmud->iDelta, config->i_qp_min, X264_QUANT_MAX);
-                    SetDlgItemInt(hTabs[2], IDC_RC_QPMAX, config->i_qp_max, FALSE);
-                    break;
-
-                case IDC_RC_QPSTEP_SPIN:
-                    config->i_qp_step = X264_CLIP(config->i_qp_step - lpnmud->iDelta, 1, X264_QUANT_MAX);
-                    SetDlgItemInt(hTabs[2], IDC_RC_QPSTEP, config->i_qp_step, FALSE);
-                    break;
-
-                case IDC_RC_CHROMA_QP_OFFSET_SPIN:
-                    config->i_chroma_qp_offset = X264_CLIP(config->i_chroma_qp_offset - lpnmud->iDelta, -12, 12);
-                    SetDlgItemInt(hTabs[2], IDC_RC_CHROMA_QP_OFFSET, config->i_chroma_qp_offset, TRUE);
-                    break;
-
-#if X264VFW_USE_THREADS
-                case IDC_MT_THREADS_SPIN:
-                    config->i_threads = X264_CLIP(config->i_threads - lpnmud->iDelta, 0, X264_THREAD_MAX);
-                    SetDlgItemInt(hTabs[2], IDC_MT_THREADS, config->i_threads, FALSE);
-                    break;
-#endif
-
-                case IDC_VUI_CHROMALOC_SPIN:
-                    config->i_chromaloc = X264_CLIP(config->i_chromaloc - lpnmud->iDelta, 0, 5);
-                    SetDlgItemInt(hTabs[2], IDC_VUI_CHROMALOC, config->i_chromaloc, FALSE);
-                    break;
-
-                default:
-                    return FALSE;
-            }
-            break;
-        }
-
         case WM_HSCROLL:
-            if ((HWND)lParam == GetDlgItem(hTabs[0], IDC_MAIN_RC_VAL_SLIDER))
+            if ((HWND)lParam == GetDlgItem(hMainDlg, IDC_RC_VAL_SLIDER))
             {
                 switch (config->i_encoding_type)
                 {
@@ -2055,20 +1110,20 @@ INT_PTR CALLBACK callback_tabs(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lPara
                         break;
 
                     case 1:
-                        config->i_qp = SendDlgItemMessage(hTabs[0], IDC_MAIN_RC_VAL_SLIDER, TBM_GETPOS, 0, 0);
-                        SetDlgItemInt(hTabs[0], IDC_MAIN_RC_VAL, config->i_qp, FALSE);
+                        config->i_qp = SendDlgItemMessage(hMainDlg, IDC_RC_VAL_SLIDER, TBM_GETPOS, 0, 0);
+                        SetDlgItemInt(hMainDlg, IDC_RC_VAL, config->i_qp, FALSE);
                         break;
 
                     case 2:
-                        config->i_rf_constant = SendDlgItemMessage(hTabs[0], IDC_MAIN_RC_VAL_SLIDER, TBM_GETPOS, 0, 0);
-                        SetDlgItemDouble(hTabs[0], IDC_MAIN_RC_VAL, config->i_rf_constant * 0.1, "%.1f");
+                        config->i_rf_constant = SendDlgItemMessage(hMainDlg, IDC_RC_VAL_SLIDER, TBM_GETPOS, 0, 0);
+                        SetDlgItemDouble(hMainDlg, IDC_RC_VAL, config->i_rf_constant * 0.1, "%.1f");
                         break;
 
                     case 3:
                     case 4:
-                        config->i_passbitrate = pos2scale(SendDlgItemMessage(hTabs[0], IDC_MAIN_RC_VAL_SLIDER, TBM_GETPOS, 0, 0));
-                        config->i_passbitrate = X264_CLIP(config->i_passbitrate, 1, X264_BITRATE_MAX);
-                        SetDlgItemInt(hTabs[0], IDC_MAIN_RC_VAL, config->i_passbitrate, FALSE);
+                        config->i_passbitrate = pos2scale(SendDlgItemMessage(hMainDlg, IDC_RC_VAL_SLIDER, TBM_GETPOS, 0, 0));
+                        config->i_passbitrate = X264_CLIP(config->i_passbitrate, 1, MAX_BITRATE);
+                        SetDlgItemInt(hMainDlg, IDC_RC_VAL, config->i_passbitrate, FALSE);
                         break;
 
                     default:
@@ -2084,11 +1139,11 @@ INT_PTR CALLBACK callback_tabs(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lPara
             return FALSE;
     }
 
-    tabs_enable_items(config);
+    dlg_enable_items(cfg_data);
     return TRUE;
 }
 
-/* About box */
+/* About window */
 INT_PTR CALLBACK callback_about(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
     switch (uMsg)
@@ -2098,7 +1153,7 @@ INT_PTR CALLBACK callback_about(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lPar
             char temp[1024];
 
             sprintf(temp, "Build date: %s %s\nlibx264 core %d%s", __DATE__, __TIME__, X264_BUILD, X264_VERSION);
-            SetDlgItemText(hDlg, IDC_ABOUT_BUILD_LABEL, temp);
+            SetDlgItemText(hDlg, ABOUT_IDC_BUILD_LABEL, temp);
             return TRUE;
         }
 
@@ -2106,7 +1161,7 @@ INT_PTR CALLBACK callback_about(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lPar
             switch (HIWORD(wParam))
             {
                 case BN_CLICKED:
-                    if (LOWORD(wParam) == IDC_ABOUT_HOMEPAGE)
+                    if (LOWORD(wParam) == ABOUT_IDC_HOMEPAGE)
                         ShellExecute(hDlg, "open", X264VFW_WEBSITE, NULL, NULL, SW_SHOWNORMAL);
                     else if (LOWORD(wParam) == IDOK || LOWORD(wParam) == IDCANCEL)
                         EndDialog(hDlg, LOWORD(wParam));
@@ -2126,8 +1181,52 @@ INT_PTR CALLBACK callback_about(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lPar
     return TRUE;
 }
 
-/* Error console */
-INT_PTR CALLBACK callback_err_console(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
+/* Log window */
+static void update_log_layout(HWND hDlg)
+{
+    RECT rcDlg, rcNewDlg, rcItem, rcNewItem;
+    rcDlg.left   = 0;
+    rcDlg.top    = 0;
+    rcDlg.right  = LOG_DLG_WIDTH;
+    rcDlg.bottom = LOG_DLG_HEIGHT;
+    MapDialogRect(hDlg, &rcDlg);
+    GetClientRect(hDlg, &rcNewDlg);
+    //LOG_IDC_CONSOLE
+    rcItem.left   = LOG_CONS_X;
+    rcItem.top    = LOG_CONS_Y;
+    rcItem.right  = LOG_CONS_X + LOG_CONS_WIDTH;
+    rcItem.bottom = LOG_CONS_Y + LOG_CONS_HEIGHT;
+    MapDialogRect(hDlg, &rcItem);
+    rcNewItem.left   = rcItem.left   + rcNewDlg.left   - rcDlg.left;
+    rcNewItem.top    = rcItem.top    + rcNewDlg.top    - rcDlg.top;
+    rcNewItem.right  = rcItem.right  + rcNewDlg.right  - rcDlg.right;
+    rcNewItem.bottom = rcItem.bottom + rcNewDlg.bottom - rcDlg.bottom;
+    MoveWindow(GetDlgItem(hDlg, LOG_IDC_CONSOLE), rcNewItem.left, rcNewItem.top, rcNewItem.right - rcNewItem.left, rcNewItem.bottom - rcNewItem.top, TRUE);
+    //LOG_IDC_OK
+    rcItem.left   = LOG_OK_X;
+    rcItem.top    = LOG_OK_Y;
+    rcItem.right  = LOG_OK_X + LOG_OK_WIDTH;
+    rcItem.bottom = LOG_OK_Y + LOG_OK_HEIGHT;
+    MapDialogRect(hDlg, &rcItem);
+    rcNewItem.left   = rcItem.left   + (rcNewDlg.left - rcDlg.left + rcNewDlg.right - rcDlg.right + 1) / 2;
+    rcNewItem.top    = rcItem.top    + rcNewDlg.bottom - rcDlg.bottom;
+    rcNewItem.right  = rcItem.right  + (rcNewDlg.left - rcDlg.left + rcNewDlg.right - rcDlg.right + 1) / 2;
+    rcNewItem.bottom = rcItem.bottom + rcNewDlg.bottom - rcDlg.bottom;
+    MoveWindow(GetDlgItem(hDlg, LOG_IDC_OK), rcNewItem.left, rcNewItem.top, rcNewItem.right - rcNewItem.left, rcNewItem.bottom - rcNewItem.top, TRUE);
+    //LOG_IDC_COPY
+    rcItem.left   = LOG_COPY_X;
+    rcItem.top    = LOG_COPY_Y;
+    rcItem.right  = LOG_COPY_X + LOG_COPY_WIDTH;
+    rcItem.bottom = LOG_COPY_Y + LOG_COPY_HEIGHT;
+    MapDialogRect(hDlg, &rcItem);
+    rcNewItem.left   = rcItem.left   + (rcNewDlg.left - rcDlg.left + rcNewDlg.right - rcDlg.right + 1) / 2;
+    rcNewItem.top    = rcItem.top    + rcNewDlg.bottom - rcDlg.bottom;
+    rcNewItem.right  = rcItem.right  + (rcNewDlg.left - rcDlg.left + rcNewDlg.right - rcDlg.right + 1) / 2;
+    rcNewItem.bottom = rcItem.bottom + rcNewDlg.bottom - rcDlg.bottom;
+    MoveWindow(GetDlgItem(hDlg, LOG_IDC_COPY), rcNewItem.left, rcNewItem.top, rcNewItem.right - rcNewItem.left, rcNewItem.bottom - rcNewItem.top, TRUE);
+}
+
+INT_PTR CALLBACK callback_log(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
     switch (uMsg)
     {
@@ -2141,46 +1240,59 @@ INT_PTR CALLBACK callback_err_console(HWND hWnd, UINT uMsg, WPARAM wParam, LPARA
                 {
                     case IDOK:
                     case IDCANCEL:
-                        ShowWindow(hWnd, SW_HIDE);
+                    case LOG_IDC_OK:
+                        ShowWindow(hDlg, SW_HIDE);
                         break;
 
-                    case IDC_ERRCONSOLE_COPYCLIP:
-                        if (OpenClipboard(hWnd))
+                    case LOG_IDC_COPY:
+                        if (OpenClipboard(hDlg))
                         {
-                            int i;
-                            int num_lines = SendDlgItemMessage(hWnd, IDC_ERRCONSOLE_CONSOLE, LB_GETCOUNT, 0, 0);
-                            int text_size;
-                            char *buffer;
-                            HGLOBAL clipbuffer;
-
-                            if (num_lines <= 0)
-                                break;
-
-                            /* Calculate text size */
-                            for (i = 0, text_size = 0; i < num_lines; i++)
-                                text_size += SendDlgItemMessage(hWnd, IDC_ERRCONSOLE_CONSOLE, LB_GETTEXTLEN, (WPARAM)i, 0);
-
-                            /* CR - LF for each line + terminating NULL */
-                            text_size += 2 * num_lines + 1;
+                            int num_lines = SendDlgItemMessage(hDlg, LOG_IDC_CONSOLE, LB_GETCOUNT, 0, 0);
 
                             EmptyClipboard();
-                            clipbuffer = GlobalAlloc(GMEM_MOVEABLE | GMEM_DDESHARE, text_size);
-                            buffer = (char *)GlobalLock(clipbuffer);
-
-                            /* Concatenate lines of text in the global buffer */
-                            for (i = 0; i < num_lines; i++)
+                            if (num_lines > 0)
                             {
-                                char msg_buf[1024];
+                                int i;
+                                int text_size = 0;
+                                HGLOBAL clipbuffer;
 
-                                SendDlgItemMessage(hWnd, IDC_ERRCONSOLE_CONSOLE, LB_GETTEXT, (WPARAM)i, (LPARAM)&msg_buf);
-                                strcat(msg_buf, "\r\n");
-                                memcpy(buffer, &msg_buf, strlen(msg_buf));
-                                buffer += strlen(msg_buf);
+                                /* Calculate text size */
+                                for (i = 0; i < num_lines; i++)
+                                {
+                                    int len = SendDlgItemMessage(hDlg, LOG_IDC_CONSOLE, LB_GETTEXTLEN, (WPARAM)i, 0);
+                                    text_size += len >= 0 ? len : 0;
+                                }
+
+                                /* CR - LF for each line + terminating NULL */
+                                text_size += 2 * num_lines + 1;
+
+                                clipbuffer = GlobalAlloc(GMEM_MOVEABLE | GMEM_DDESHARE, text_size * sizeof(char));
+                                if (clipbuffer)
+                                {
+                                    char *buffer = (char *)GlobalLock(clipbuffer);
+
+                                    if (buffer)
+                                    {
+                                        /* Concatenate lines of text in the global buffer */
+                                        for (i = 0; i < num_lines; i++)
+                                        {
+                                            char *msg_buf = buffer;
+
+                                            if (SendDlgItemMessage(hDlg, LOG_IDC_CONSOLE, LB_GETTEXT, (WPARAM)i, (LPARAM)msg_buf) <= 0)
+                                                strcpy(msg_buf, "");
+                                            strcat(msg_buf, "\r\n");
+                                            buffer += strlen(msg_buf);
+                                        }
+                                        *buffer = 0; /* NULL-terminate the buffer */
+
+                                        GlobalUnlock(clipbuffer);
+                                        if (!SetClipboardData(CF_TEXT, clipbuffer))
+                                            GlobalFree(clipbuffer);
+                                    }
+                                    else
+                                        GlobalFree(clipbuffer);
+                                }
                             }
-                            *buffer = 0; /* NULL-terminate the buffer */
-
-                            GlobalUnlock(clipbuffer);
-                            SetClipboardData(CF_TEXT, clipbuffer);
                             CloseClipboard();
                         }
                         break;
@@ -2192,6 +1304,550 @@ INT_PTR CALLBACK callback_err_console(HWND hWnd, UINT uMsg, WPARAM wParam, LPARA
             else
                 return FALSE;
             break;
+
+        case WM_SIZE:
+            if (wParam != SIZE_MINIMIZED)
+                update_log_layout(hDlg);
+            break;
+
+        case WM_SIZING:
+        {
+            RECT *rc = (RECT *)lParam;
+            int width = rc->right - rc->left;
+            int height = rc->bottom - rc->top;
+            if (width < LOG_DLG_MIN_WIDTH)
+                switch (wParam)
+                {
+                    case WMSZ_LEFT:
+                    case WMSZ_TOPLEFT:
+                    case WMSZ_BOTTOMLEFT:
+                        rc->left = rc->right - LOG_DLG_MIN_WIDTH;
+                        break;
+
+                    default:
+                        rc->right = rc->left + LOG_DLG_MIN_WIDTH;
+                        break;
+                }
+            if (height < LOG_DLG_MIN_HEIGHT)
+                switch (wParam)
+                {
+                    case WMSZ_TOP:
+                    case WMSZ_TOPLEFT:
+                    case WMSZ_TOPRIGHT:
+                        rc->top = rc->bottom - LOG_DLG_MIN_HEIGHT;
+                        break;
+
+                    default:
+                        rc->bottom = rc->top + LOG_DLG_MIN_HEIGHT;
+                        break;
+                }
+            break;
+        }
+
+        default:
+            return FALSE;
+    }
+
+    return TRUE;
+}
+
+/* Help window */
+static char const *strtable_lookup(const char * const table[], int index)
+{
+    int i = 0;
+    while (table[i])
+        i++;
+    return ((index >= 0 && index < i) ? table[index] : "???");
+}
+
+static char *stringify_names(char *buf, const char * const names[])
+{
+    int i = 0;
+    char *p = buf;
+    for (p[0] = 0; names[i]; i++)
+    {
+        p += sprintf(p, "%s", names[i]);
+        if (names[i+1])
+            p += sprintf(p, ", ");
+    }
+    return buf;
+}
+
+static void Help(char *buffer, int longhelp)
+{
+#define H0(...) do { sprintf(buffer, __VA_ARGS__); buffer += strlen(buffer); } while (0)
+#define H1(...) if (longhelp>=1) do { sprintf(buffer, __VA_ARGS__); buffer += strlen(buffer); } while (0)
+#define H2(...) if (longhelp==2) do { sprintf(buffer, __VA_ARGS__); buffer += strlen(buffer); } while (0)
+    char buf[50];
+    x264_param_t defaults_value;
+    x264_param_t *defaults = &defaults_value;
+
+    x264_param_default(&defaults_value);
+    H0( "Presets:\r\n" );
+    H0( "\r\n" );
+    H0( "      --profile               Force the limits of an H.264 profile\r\n"
+        "                                  Overrides all settings.\r\n" );
+    H2( "                                  - baseline:\r\n"
+        "                                    --no-8x8dct --bframes 0 --no-cabac\r\n"
+        "                                    --cqm flat --weightp 0\r\n"
+        "                                    No interlaced.\r\n"
+        "                                    No lossless.\r\n"
+        "                                  - main:\r\n"
+        "                                    --no-8x8dct --cqm flat\r\n"
+        "                                    No lossless.\r\n"
+        "                                  - high:\r\n"
+        "                                    No lossless.\r\n" );
+        else H0( "                                  - baseline,main,high\r\n" );
+    H0( "      --preset                Use a preset to select encoding settings [medium]\r\n"
+        "                                  Overridden by user settings.\r\n" );
+    H2( "                                  - ultrafast:\r\n"
+        "                                    --no-8x8dct --aq-mode 0 --b-adapt 0\r\n"
+        "                                    --bframes 0 --no-cabac --no-deblock\r\n"
+        "                                    --no-mbtree --me dia --no-mixed-refs\r\n"
+        "                                    --partitions none --rc-lookahead 0 --ref 1\r\n"
+        "                                    --scenecut 0 --subme 0 --trellis 0\r\n"
+        "                                    --no-weightb --weightp 0\r\n"
+        "                                  - superfast:\r\n"
+        "                                    --no-mbtree --me dia --no-mixed-refs\r\n"
+        "                                    --partitions i8x8,i4x4 --rc-lookahead 0\r\n"
+        "                                    --ref 1 --subme 1 --trellis 0 --weightp 0\r\n"
+        "                                  - veryfast:\r\n"
+        "                                    --no-mixed-refs --rc-lookahead 10\r\n"
+        "                                    --ref 1 --subme 2 --trellis 0 --weightp 0\r\n"
+        "                                  - faster:\r\n"
+        "                                    --no-mixed-refs --rc-lookahead 20\r\n"
+        "                                    --ref 2 --subme 4 --weightp 1\r\n"
+        "                                  - fast:\r\n"
+        "                                    --rc-lookahead 30 --ref 2 --subme 6\r\n"
+        "                                  - medium:\r\n"
+        "                                    Default settings apply.\r\n"
+        "                                  - slow:\r\n"
+        "                                    --b-adapt 2 --direct auto --me umh\r\n"
+        "                                    --rc-lookahead 50 --ref 5 --subme 8\r\n"
+        "                                  - slower:\r\n"
+        "                                    --b-adapt 2 --direct auto --me umh\r\n"
+        "                                    --partitions all --rc-lookahead 60\r\n"
+        "                                    --ref 8 --subme 9 --trellis 2\r\n"
+        "                                  - veryslow:\r\n"
+        "                                    --b-adapt 2 --bframes 8 --direct auto\r\n"
+        "                                    --me umh --merange 24 --partitions all\r\n"
+        "                                    --ref 16 --subme 10 --trellis 2\r\n"
+        "                                    --rc-lookahead 60\r\n"
+        "                                  - placebo:\r\n"
+        "                                    --bframes 16 --b-adapt 2 --direct auto\r\n"
+        "                                    --no-fast-pskip --me tesa --merange 24\r\n"
+        "                                    --partitions all --rc-lookahead 60\r\n"
+        "                                    --ref 16 --subme 10 --trellis 2\r\n" );
+    else H0( "                                  - ultrafast,superfast,veryfast,faster,fast\r\n"
+             "                                  - medium,slow,slower,veryslow,placebo\r\n" );
+    H0( "      --tune                  Tune the settings for a particular type of source\r\n"
+        "                              or situation\r\n"
+        "                                  Overridden by user settings.\r\n"
+        "                                  Multiple tunings are separated by commas.\r\n"
+        "                                  Only one psy tuning can be used at a time.\r\n" );
+    H2( "                                  - film (psy tuning):\r\n"
+        "                                    --deblock -1:-1 --psy-rd <unset>:0.15\r\n"
+        "                                  - animation (psy tuning):\r\n"
+        "                                    --bframes {+2} --deblock 1:1\r\n"
+        "                                    --psy-rd 0.4:<unset> --aq-strength 0.6\r\n"
+        "                                    --ref {Double if >1 else 1}\r\n"
+        "                                  - grain (psy tuning):\r\n"
+        "                                    --aq-strength 0.5 --no-dct-decimate\r\n"
+        "                                    --deadzone-inter 6 --deadzone-intra 6\r\n"
+        "                                    --deblock -2:-2 --ipratio 1.1 \r\n"
+        "                                    --pbratio 1.1 --psy-rd <unset>:0.25\r\n"
+        "                                    --qcomp 0.8\r\n"
+        "                                  - stillimage (psy tuning):\r\n"
+        "                                    --aq-strength 1.2 --deblock -3:-3\r\n"
+        "                                    --psy-rd 2.0:0.7\r\n"
+        "                                  - psnr (psy tuning):\r\n"
+        "                                    --aq-mode 0 --no-psy\r\n"
+        "                                  - ssim (psy tuning):\r\n"
+        "                                    --aq-mode 2 --no-psy\r\n"
+        "                                  - fastdecode:\r\n"
+        "                                    --no-cabac --no-deblock --no-weightb\r\n"
+        "                                    --weightp 0\r\n"
+        "                                  - zerolatency:\r\n"
+        "                                    --bframes 0 --force-cfr --no-mbtree\r\n"
+        "                                    --sync-lookahead 0 --sliced-threads\r\n"
+        "                                    --rc-lookahead 0\r\n" );
+    else H0( "                                  - psy tunings: film,animation,grain,\r\n"
+             "                                                 stillimage,psnr,ssim\r\n"
+             "                                  - other tunings: fastdecode,zerolatency\r\n" );
+    H2( "      --slow-firstpass        Don't force these faster settings with --pass 1:\r\n"
+        "                                  --no-8x8dct --me dia --partitions none\r\n"
+        "                                  --ref 1 --subme {2 if >2 else unchanged}\r\n"
+        "                                  --trellis 0 --fast-pskip\r\n" );
+    else H1( "      --slow-firstpass        Don't force faster settings with --pass 1\r\n" );
+    H0( "\r\n" );
+    H0( "Frame-type options:\r\n" );
+    H0( "\r\n" );
+    H0( "  -I, --keyint <integer>      Maximum GOP size [%d]\r\n", defaults->i_keyint_max );
+    H2( "  -i, --min-keyint <integer>  Minimum GOP size [auto]\r\n" );
+    H2( "      --no-scenecut           Disable adaptive I-frame decision\r\n" );
+    H2( "      --scenecut <integer>    How aggressively to insert extra I-frames [%d]\r\n", defaults->i_scenecut_threshold );
+    H2( "      --intra-refresh         Use Periodic Intra Refresh instead of IDR frames\r\n" );
+    H1( "  -b, --bframes <integer>     Number of B-frames between I and P [%d]\r\n", defaults->i_bframe );
+    H1( "      --b-adapt <integer>     Adaptive B-frame decision method [%d]\r\n"
+        "                                  Higher values may lower threading efficiency.\r\n"
+        "                                  - 0: Disabled\r\n"
+        "                                  - 1: Fast\r\n"
+        "                                  - 2: Optimal (slow with high --bframes)\r\n", defaults->i_bframe_adaptive );
+    H2( "      --b-bias <integer>      Influences how often B-frames are used [%d]\r\n", defaults->i_bframe_bias );
+    H1( "      --b-pyramid <string>    Keep some B-frames as references [%s]\r\n"
+        "                                  - none: Disabled\r\n"
+        "                                  - strict: Strictly hierarchical pyramid\r\n"
+        "                                  - normal: Non-strict (not Blu-ray compatible)\r\n",
+        strtable_lookup( x264_b_pyramid_names, defaults->i_bframe_pyramid ) );
+    H1( "      --open-gop <string>     Use recovery points to close GOPs [none]\r\n"
+        "                                  - none: Use standard closed GOPs\r\n"
+        "                                  - display: Base GOP length on display order\r\n"
+        "                                             (not Blu-ray compatible)\r\n"
+        "                                  - coded: Base GOP length on coded order\r\n"
+        "                              Only available with b-frames\r\n" );
+    H1( "      --no-cabac              Disable CABAC\r\n" );
+    H1( "  -r, --ref <integer>         Number of reference frames [%d]\r\n", defaults->i_frame_reference );
+    H1( "      --no-deblock            Disable loop filter\r\n" );
+    H1( "  -f, --deblock <alpha:beta>  Loop filter parameters [%d:%d]\r\n",
+                                       defaults->i_deblocking_filter_alphac0, defaults->i_deblocking_filter_beta );
+    H2( "      --slices <integer>      Number of slices per frame; forces rectangular\r\n"
+        "                              slices and is overridden by other slicing options\r\n" );
+    else H1( "      --slices <integer>      Number of slices per frame\r\n" );
+    H2( "      --slice-max-size <integer> Limit the size of each slice in bytes\r\n");
+    H2( "      --slice-max-mbs <integer> Limit the size of each slice in macroblocks\r\n");
+    H0( "      --tff                   Enable interlaced mode (top field first)\r\n" );
+    H0( "      --bff                   Enable interlaced mode (bottom field first)\r\n" );
+    H2( "      --constrained-intra     Enable constrained intra prediction.\r\n" );
+    H2( "      --fake-interlaced       Flag stream as interlaced but encode progressive.\r\n"
+        "                              Makes it possible to encode 25p and 30p Blu-Ray\r\n"
+        "                              streams. Ignored in interlaced mode.\r\n" );
+    H0( "\r\n" );
+    H0( "Ratecontrol:\r\n" );
+    H0( "\r\n" );
+    H1( "  -q, --qp <integer>          Force constant QP (0-51, 0=lossless)\r\n" );
+    H0( "  -B, --bitrate <integer>     Set bitrate (kbit/s)\r\n" );
+    H0( "      --crf <float>           Quality-based VBR (0-51, 0=lossless) [%.1f]\r\n", defaults->rc.f_rf_constant );
+    H1( "      --rc-lookahead <integer> Number of frames for frametype lookahead [%d]\r\n", defaults->rc.i_lookahead );
+    H0( "      --vbv-maxrate <integer> Max local bitrate (kbit/s) [%d]\r\n", defaults->rc.i_vbv_max_bitrate );
+    H0( "      --vbv-bufsize <integer> Set size of the VBV buffer (kbit) [%d]\r\n", defaults->rc.i_vbv_buffer_size );
+    H2( "      --vbv-init <float>      Initial VBV buffer occupancy [%.1f]\r\n", defaults->rc.f_vbv_buffer_init );
+    H2( "      --crf-max <float>       With CRF+VBV, limit RF to this value\r\n"
+        "                                  May cause VBV underflows!\r\n" );
+    H2( "      --qpmin <integer>       Set min QP [%d]\r\n", defaults->rc.i_qp_min );
+    H2( "      --qpmax <integer>       Set max QP [%d]\r\n", defaults->rc.i_qp_max );
+    H2( "      --qpstep <integer>      Set max QP step [%d]\r\n", defaults->rc.i_qp_step );
+    H2( "      --ratetol <float>       Tolerance of ABR ratecontrol and VBV [%.1f]\r\n", defaults->rc.f_rate_tolerance );
+    H2( "      --ipratio <float>       QP factor between I and P [%.2f]\r\n", defaults->rc.f_ip_factor );
+    H2( "      --pbratio <float>       QP factor between P and B [%.2f]\r\n", defaults->rc.f_pb_factor );
+    H2( "      --chroma-qp-offset <integer>  QP difference between chroma and luma [%d]\r\n", defaults->analyse.i_chroma_qp_offset );
+    H2( "      --aq-mode <integer>     AQ method [%d]\r\n"
+        "                                  - 0: Disabled\r\n"
+        "                                  - 1: Variance AQ (complexity mask)\r\n"
+        "                                  - 2: Auto-variance AQ (experimental)\r\n", defaults->rc.i_aq_mode );
+    H1( "      --aq-strength <float>   Reduces blocking and blurring in flat and\r\n"
+        "                              textured areas. [%.1f]\r\n", defaults->rc.f_aq_strength );
+    H1( "\r\n" );
+    H0( "  -p, --pass <integer>        Enable multipass ratecontrol\r\n"
+        "                                  - 1: First pass, creates stats file\r\n"
+        "                                  - 2: Last pass, does not overwrite stats file\r\n" );
+    H2( "                                  - 3: Nth pass, overwrites stats file\r\n" );
+    H1( "      --stats <string>        Filename for 2 pass stats [\"%s\"]\r\n", defaults->rc.psz_stat_out );
+    H2( "      --no-mbtree             Disable mb-tree ratecontrol.\r\n");
+    H2( "      --qcomp <float>         QP curve compression [%.2f]\r\n", defaults->rc.f_qcompress );
+    H2( "      --cplxblur <float>      Reduce fluctuations in QP (before curve compression) [%.1f]\r\n", defaults->rc.f_complexity_blur );
+    H2( "      --qblur <float>         Reduce fluctuations in QP (after curve compression) [%.1f]\r\n", defaults->rc.f_qblur );
+    H2( "      --zones <zone0>/<zone1>/...  Tweak the bitrate of regions of the video\r\n" );
+    H2( "                              Each zone is of the form\r\n"
+        "                                  <start frame>,<end frame>,<option>\r\n"
+        "                                  where <option> is either\r\n"
+        "                                      q=<integer> (force QP)\r\n"
+        "                                  or  b=<float> (bitrate multiplier)\r\n" );
+    H1( "\r\n" );
+    H1( "Analysis:\r\n" );
+    H1( "\r\n" );
+    H1( "  -A, --partitions <string>   Partitions to consider [\"p8x8,b8x8,i8x8,i4x4\"]\r\n"
+        "                                  - p8x8, p4x4, b8x8, i8x8, i4x4\r\n"
+        "                                  - none, all\r\n"
+        "                                  (p4x4 requires p8x8. i8x8 requires --8x8dct.)\r\n" );
+    H1( "      --direct <string>       Direct MV prediction mode [\"%s\"]\r\n"
+        "                                  - none, spatial, temporal, auto\r\n",
+                                       strtable_lookup( x264_direct_pred_names, defaults->analyse.i_direct_mv_pred ) );
+    H2( "      --no-weightb            Disable weighted prediction for B-frames\r\n" );
+    H1( "      --weightp <integer>     Weighted prediction for P-frames [%d]\r\n"
+        "                                  - 0: Disabled\r\n"
+        "                                  - 1: Blind offset\r\n"
+        "                                  - 2: Smart analysis\r\n", defaults->analyse.i_weighted_pred );
+    H1( "      --me <string>           Integer pixel motion estimation method [\"%s\"]\r\n",
+                                       strtable_lookup( x264_motion_est_names, defaults->analyse.i_me_method ) );
+    H2( "                                  - dia: diamond search, radius 1 (fast)\r\n"
+        "                                  - hex: hexagonal search, radius 2\r\n"
+        "                                  - umh: uneven multi-hexagon search\r\n"
+        "                                  - esa: exhaustive search\r\n"
+        "                                  - tesa: hadamard exhaustive search (slow)\r\n" );
+    else H1( "                                  - dia, hex, umh\r\n" );
+    H2( "      --merange <integer>     Maximum motion vector search range [%d]\r\n", defaults->analyse.i_me_range );
+    H2( "      --mvrange <integer>     Maximum motion vector length [-1 (auto)]\r\n" );
+    H2( "      --mvrange-thread <int>  Minimum buffer between threads [-1 (auto)]\r\n" );
+    H1( "  -m, --subme <integer>       Subpixel motion estimation and mode decision [%d]\r\n", defaults->analyse.i_subpel_refine );
+    H2( "                                  - 0: fullpel only (not recommended)\r\n"
+        "                                  - 1: SAD mode decision, one qpel iteration\r\n"
+        "                                  - 2: SATD mode decision\r\n"
+        "                                  - 3-5: Progressively more qpel\r\n"
+        "                                  - 6: RD mode decision for I/P-frames\r\n"
+        "                                  - 7: RD mode decision for all frames\r\n"
+        "                                  - 8: RD refinement for I/P-frames\r\n"
+        "                                  - 9: RD refinement for all frames\r\n"
+        "                                  - 10: QP-RD - requires trellis=2, aq-mode>0\r\n" );
+    else H1( "                                  decision quality: 1=fast, 10=best.\r\n"  );
+    H1( "      --psy-rd                Strength of psychovisual optimization [\"%.1f:%.1f\"]\r\n"
+        "                                  #1: RD (requires subme>=6)\r\n"
+        "                                  #2: Trellis (requires trellis, experimental)\r\n",
+                                       defaults->analyse.f_psy_rd, defaults->analyse.f_psy_trellis );
+    H2( "      --no-psy                Disable all visual optimizations that worsen\r\n"
+        "                              both PSNR and SSIM.\r\n" );
+    H2( "      --no-mixed-refs         Don't decide references on a per partition basis\r\n" );
+    H2( "      --no-chroma-me          Ignore chroma in motion estimation\r\n" );
+    H1( "      --no-8x8dct             Disable adaptive spatial transform size\r\n" );
+    H1( "  -t, --trellis <integer>     Trellis RD quantization. Requires CABAC. [%d]\r\n"
+        "                                  - 0: disabled\r\n"
+        "                                  - 1: enabled only on the final encode of a MB\r\n"
+        "                                  - 2: enabled on all mode decisions\r\n", defaults->analyse.i_trellis );
+    H2( "      --no-fast-pskip         Disables early SKIP detection on P-frames\r\n" );
+    H2( "      --no-dct-decimate       Disables coefficient thresholding on P-frames\r\n" );
+    H1( "      --nr <integer>          Noise reduction [%d]\r\n", defaults->analyse.i_noise_reduction );
+    H2( "\r\n" );
+    H2( "      --deadzone-inter <int>  Set the size of the inter luma quantization deadzone [%d]\r\n", defaults->analyse.i_luma_deadzone[0] );
+    H2( "      --deadzone-intra <int>  Set the size of the intra luma quantization deadzone [%d]\r\n", defaults->analyse.i_luma_deadzone[1] );
+    H2( "                                  Deadzones should be in the range 0 - 32.\r\n" );
+    H2( "      --cqm <string>          Preset quant matrices [\"flat\"]\r\n"
+        "                                  - jvt, flat\r\n" );
+    H1( "      --cqmfile <string>      Read custom quant matrices from a JM-compatible file\r\n" );
+    H2( "                                  Overrides any other --cqm* options.\r\n" );
+    H2( "      --cqm4 <list>           Set all 4x4 quant matrices\r\n"
+        "                                  Takes a comma-separated list of 16 integers.\r\n" );
+    H2( "      --cqm8 <list>           Set all 8x8 quant matrices\r\n"
+        "                                  Takes a comma-separated list of 64 integers.\r\n" );
+    H2( "      --cqm4i, --cqm4p, --cqm8i, --cqm8p\r\n"
+        "                              Set both luma and chroma quant matrices\r\n" );
+    H2( "      --cqm4iy, --cqm4ic, --cqm4py, --cqm4pc\r\n"
+        "                              Set individual quant matrices\r\n" );
+    H2( "\r\n" );
+    H2( "Video Usability Info (Annex E):\r\n" );
+    H2( "The VUI settings are not used by the encoder but are merely suggestions to\r\n" );
+    H2( "the playback equipment. See doc/vui.txt for details. Use at your own risk.\r\n" );
+    H2( "\r\n" );
+    H2( "      --overscan <string>     Specify crop overscan setting [\"%s\"]\r\n"
+        "                                  - undef, show, crop\r\n",
+                                       strtable_lookup( x264_overscan_names, defaults->vui.i_overscan ) );
+    H2( "      --videoformat <string>  Specify video format [\"%s\"]\r\n"
+        "                                  - component, pal, ntsc, secam, mac, undef\r\n",
+                                       strtable_lookup( x264_vidformat_names, defaults->vui.i_vidformat ) );
+    H2( "      --fullrange <string>    Specify full range samples setting [\"%s\"]\r\n"
+        "                                  - off, on\r\n",
+                                       strtable_lookup( x264_fullrange_names, defaults->vui.b_fullrange ) );
+    H2( "      --colorprim <string>    Specify color primaries [\"%s\"]\r\n"
+        "                                  - undef, bt709, bt470m, bt470bg\r\n"
+        "                                    smpte170m, smpte240m, film\r\n",
+                                       strtable_lookup( x264_colorprim_names, defaults->vui.i_colorprim ) );
+    H2( "      --transfer <string>     Specify transfer characteristics [\"%s\"]\r\n"
+        "                                  - undef, bt709, bt470m, bt470bg, linear,\r\n"
+        "                                    log100, log316, smpte170m, smpte240m\r\n",
+                                       strtable_lookup( x264_transfer_names, defaults->vui.i_transfer ) );
+    H2( "      --colormatrix <string>  Specify color matrix setting [\"%s\"]\r\n"
+        "                                  - undef, bt709, fcc, bt470bg\r\n"
+        "                                    smpte170m, smpte240m, GBR, YCgCo\r\n",
+                                       strtable_lookup( x264_colmatrix_names, defaults->vui.i_colmatrix ) );
+    H2( "      --chromaloc <integer>   Specify chroma sample location (0 to 5) [%d]\r\n",
+                                       defaults->vui.i_chroma_loc );
+
+    H2( "      --nal-hrd <string>      Signal HRD information (requires vbv-bufsize)\r\n"
+        "                                  - none, vbr, cbr (cbr not allowed in .mp4)\r\n" );
+    H2( "      --pic-struct            Force pic_struct in Picture Timing SEI\r\n" );
+
+    H0( "\r\n" );
+    H0( "Input/Output:\r\n" );
+    H0( "\r\n" );
+    H0( "  -o, --output                Specify output file\r\n" );
+    H1( "      --muxer <string>        Specify output container format [\"%s\"]\r\n"
+        "                                  - %s\r\n", muxer_names[0], stringify_names( buf, muxer_names ) );
+    H0( "      --sar width:height      Specify Sample Aspect Ratio\r\n" );
+    H0( "      --fps <float|rational>  Specify framerate\r\n" );
+    H0( "      --level <string>        Specify level (as defined by Annex A)\r\n" );
+    H1( "\r\n" );
+    H1( "  -v, --verbose               Print stats for each frame\r\n" );
+    H0( "      --quiet                 Quiet Mode\r\n" );
+    H1( "      --psnr                  Enable PSNR computation\r\n" );
+    H1( "      --ssim                  Enable SSIM computation\r\n" );
+    H1( "      --threads <integer>     Force a specific number of threads\r\n" );
+    H2( "      --sliced-threads        Low-latency but lower-efficiency threading\r\n" );
+    H2( "      --sync-lookahead <integer> Number of buffer frames for threaded lookahead\r\n" );
+    H2( "      --non-deterministic     Slightly improve quality of SMP, at the cost of repeatability\r\n" );
+    H2( "      --asm <integer>         Override CPU detection\r\n" );
+    H2( "      --no-asm                Disable all CPU optimizations\r\n" );
+    H2( "      --dump-yuv <string>     Save reconstructed frames\r\n" );
+    H2( "      --sps-id <integer>      Set SPS and PPS id numbers [%d]\r\n", defaults->i_sps_id );
+    H2( "      --aud                   Use access unit delimiters\r\n" );
+    H2( "      --force-cfr             Force constant framerate timestamp generation\r\n" );
+    H0( "\r\n" );
+}
+
+static void update_help_layout(HWND hDlg)
+{
+    RECT rcDlg, rcNewDlg, rcItem, rcNewItem;
+    rcDlg.left   = 0;
+    rcDlg.top    = 0;
+    rcDlg.right  = HELP_DLG_WIDTH;
+    rcDlg.bottom = HELP_DLG_HEIGHT;
+    MapDialogRect(hDlg, &rcDlg);
+    GetClientRect(hDlg, &rcNewDlg);
+    //HELP_IDC_CONSOLE
+    rcItem.left   = HELP_CONS_X;
+    rcItem.top    = HELP_CONS_Y;
+    rcItem.right  = HELP_CONS_X + HELP_CONS_WIDTH;
+    rcItem.bottom = HELP_CONS_Y + HELP_CONS_HEIGHT;
+    MapDialogRect(hDlg, &rcItem);
+    rcNewItem.left   = rcItem.left   + rcNewDlg.left   - rcDlg.left;
+    rcNewItem.top    = rcItem.top    + rcNewDlg.top    - rcDlg.top;
+    rcNewItem.right  = rcItem.right  + rcNewDlg.right  - rcDlg.right;
+    rcNewItem.bottom = rcItem.bottom + rcNewDlg.bottom - rcDlg.bottom;
+    MoveWindow(GetDlgItem(hDlg, HELP_IDC_CONSOLE), rcNewItem.left, rcNewItem.top, rcNewItem.right - rcNewItem.left, rcNewItem.bottom - rcNewItem.top, TRUE);
+    //HELP_IDC_OK
+    rcItem.left   = HELP_OK_X;
+    rcItem.top    = HELP_OK_Y;
+    rcItem.right  = HELP_OK_X + HELP_OK_WIDTH;
+    rcItem.bottom = HELP_OK_Y + HELP_OK_HEIGHT;
+    MapDialogRect(hDlg, &rcItem);
+    rcNewItem.left   = rcItem.left   + (rcNewDlg.left - rcDlg.left + rcNewDlg.right - rcDlg.right + 1) / 2;
+    rcNewItem.top    = rcItem.top    + rcNewDlg.bottom - rcDlg.bottom;
+    rcNewItem.right  = rcItem.right  + (rcNewDlg.left - rcDlg.left + rcNewDlg.right - rcDlg.right + 1) / 2;
+    rcNewItem.bottom = rcItem.bottom + rcNewDlg.bottom - rcDlg.bottom;
+    MoveWindow(GetDlgItem(hDlg, HELP_IDC_OK), rcNewItem.left, rcNewItem.top, rcNewItem.right - rcNewItem.left, rcNewItem.bottom - rcNewItem.top, TRUE);
+    //HELP_IDC_COPY
+    rcItem.left   = HELP_COPY_X;
+    rcItem.top    = HELP_COPY_Y;
+    rcItem.right  = HELP_COPY_X + HELP_COPY_WIDTH;
+    rcItem.bottom = HELP_COPY_Y + HELP_COPY_HEIGHT;
+    MapDialogRect(hDlg, &rcItem);
+    rcNewItem.left   = rcItem.left   + (rcNewDlg.left - rcDlg.left + rcNewDlg.right - rcDlg.right + 1) / 2;
+    rcNewItem.top    = rcItem.top    + rcNewDlg.bottom - rcDlg.bottom;
+    rcNewItem.right  = rcItem.right  + (rcNewDlg.left - rcDlg.left + rcNewDlg.right - rcDlg.right + 1) / 2;
+    rcNewItem.bottom = rcItem.bottom + rcNewDlg.bottom - rcDlg.bottom;
+    MoveWindow(GetDlgItem(hDlg, HELP_IDC_COPY), rcNewItem.left, rcNewItem.top, rcNewItem.right - rcNewItem.left, rcNewItem.bottom - rcNewItem.top, TRUE);
+}
+
+INT_PTR CALLBACK callback_help(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lParam)
+{
+    switch (uMsg)
+    {
+        case WM_INITDIALOG:
+        {
+            HFONT hfont = (HFONT)GetStockObject(SYSTEM_FIXED_FONT);
+            char *buffer = malloc(65536);
+
+            if (hfont)
+                SendDlgItemMessage(hDlg, HELP_IDC_CONSOLE, WM_SETFONT, (WPARAM)hfont, MAKELPARAM(TRUE, 0));
+            if (buffer)
+            {
+                strcpy(buffer, "");
+                Help(buffer, 2);
+                SendDlgItemMessage(hDlg, HELP_IDC_CONSOLE, WM_SETTEXT, 0, (LPARAM)buffer);
+                free(buffer);
+            }
+            return FALSE;
+        }
+
+        case WM_COMMAND:
+            if (HIWORD(wParam) == BN_CLICKED)
+            {
+                switch (LOWORD(wParam))
+                {
+                    case IDOK:
+                    case IDCANCEL:
+                    case HELP_IDC_OK:
+                        ShowWindow(hDlg, SW_HIDE);
+                        break;
+
+                    case HELP_IDC_COPY:
+                        if (OpenClipboard(hDlg))
+                        {
+                            int text_size = SendDlgItemMessage(hDlg, HELP_IDC_CONSOLE, WM_GETTEXTLENGTH, 0, 0);
+
+                            EmptyClipboard();
+                            if (text_size > 0)
+                            {
+                                HGLOBAL clipbuffer;
+
+                                /* Add terminating NULL */
+                                text_size += 1;
+
+                                clipbuffer = GlobalAlloc(GMEM_MOVEABLE | GMEM_DDESHARE, text_size * sizeof(char));
+                                if (clipbuffer)
+                                {
+                                    char *buffer = (char *)GlobalLock(clipbuffer);
+
+                                    if (buffer)
+                                    {
+                                        if (SendDlgItemMessage(hDlg, HELP_IDC_CONSOLE, WM_GETTEXT, (WPARAM)text_size, (LPARAM)buffer) <= 0)
+                                            strcpy(buffer, "");
+
+                                        GlobalUnlock(clipbuffer);
+                                        if (!SetClipboardData(CF_TEXT, clipbuffer))
+                                            GlobalFree(clipbuffer);
+                                    }
+                                    else
+                                        GlobalFree(clipbuffer);
+                                }
+                            }
+                            CloseClipboard();
+                        }
+                        break;
+
+                    default:
+                        return FALSE;
+                }
+            }
+            else
+                return FALSE;
+            break;
+
+        case WM_SIZE:
+            if (wParam != SIZE_MINIMIZED)
+                update_help_layout(hDlg);
+            break;
+
+        case WM_SIZING:
+        {
+            RECT *rc = (RECT *)lParam;
+            int width = rc->right - rc->left;
+            int height = rc->bottom - rc->top;
+            if (width < HELP_DLG_MIN_WIDTH)
+                switch (wParam)
+                {
+                    case WMSZ_LEFT:
+                    case WMSZ_TOPLEFT:
+                    case WMSZ_BOTTOMLEFT:
+                        rc->left = rc->right - HELP_DLG_MIN_WIDTH;
+                        break;
+
+                    default:
+                        rc->right = rc->left + HELP_DLG_MIN_WIDTH;
+                        break;
+                }
+            if (height < HELP_DLG_MIN_HEIGHT)
+                switch (wParam)
+                {
+                    case WMSZ_TOP:
+                    case WMSZ_TOPLEFT:
+                    case WMSZ_TOPRIGHT:
+                        rc->top = rc->bottom - HELP_DLG_MIN_HEIGHT;
+                        break;
+
+                    default:
+                        rc->bottom = rc->top + HELP_DLG_MIN_HEIGHT;
+                        break;
+                }
+            break;
+        }
 
         default:
             return FALSE;

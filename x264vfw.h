@@ -41,8 +41,8 @@
 #include "resource.h"
 
 /* Name */
-#define X264_NAME_L     L"x264vfw"
-#define X264_DESC_L     L"x264vfw - H.264/MPEG-4 AVC codec"
+#define X264VFW_NAME_L L"x264vfw"
+#define X264VFW_DESC_L L"x264vfw - H.264/MPEG-4 AVC codec"
 
 /* Codec FourCC */
 #define FOURCC_X264 mmioFOURCC('X','2','6','4')
@@ -60,25 +60,55 @@
 
 #define X264VFW_WEBSITE "http://sourceforge.net/projects/x264vfw/"
 
+#define X264VFW_FORMAT_VERSION 1
+
 /* Limits */
-#define X264_BITRATE_MAX 999999
-#define X264_QUANT_MAX   51
-#define X264_BFRAME_MAX  16
-#define X264_THREAD_MAX  128
+#define MAX_QUANT   51
+#define MAX_BITRATE 999999
 
 #define MAX_STATS_PATH   (MAX_PATH - 5) /* -5 because x264 add ".temp" for temp file */
 #define MAX_STATS_SIZE   X264_MAX(MAX_STATS_PATH, MAX_PATH)
+#define MAX_OUTPUT_PATH  MAX_PATH
+#define MAX_OUTPUT_SIZE  X264_MAX(MAX_OUTPUT_PATH, MAX_PATH)
 #define MAX_CMDLINE      4096
-#define MAX_ZONES_SIZE   4096
 
-typedef char fourcc_str[4 + 1];
+#define COUNT_PRESET  10
+#define COUNT_TUNE    7
+#define COUNT_PROFILE 4
+#define COUNT_LEVEL   16
+#define COUNT_FOURCC  7
+
+/* Types */
+typedef struct
+{
+    const char * const name;
+    const char * const value;
+} named_str_t;
+
+typedef struct
+{
+    const char * const name;
+    const DWORD value;
+} named_fourcc_t;
+
+typedef struct
+{
+    const char * const name;
+    const int value;
+} named_int_t;
 
 /* CONFIG: VFW config */
 typedef struct
 {
-    int b_save;
-
-    /* Main */
+    int i_format_version;
+    /* Basic */
+    int i_preset;
+    int i_tuning;
+    int i_profile;
+    int i_level;
+    int b_fastdecode;
+    int b_zerolatency;
+    /* Rate control */
     int i_encoding_type;
     int i_qp;
     int i_rf_constant;  /* 1pass VBR, nominal QP */
@@ -88,129 +118,53 @@ typedef struct
     int b_createstats;  /* Creates the statsfile in single pass mode */
     int b_updatestats;  /* Updates the statsfile during 2nd pass */
     char stats[MAX_STATS_SIZE];
-    char extra_cmdline[MAX_CMDLINE];
-
-    /* Misc */
-    int i_avc_level;
+    /* Output */
+    int i_output_mode;
+    int i_fourcc;
+#if X264VFW_USE_VIRTUALDUB_HACK
+    int b_vd_hack;
+#else
+    int reserved_b_vd_hack;
+#endif
+    char output_file[MAX_OUTPUT_SIZE];
+    /* Sample Aspect Ratio */
     int i_sar_width;
     int i_sar_height;
-
     /* Debug */
     int i_log_level;
     int b_psnr;
     int b_ssim;
     int b_no_asm;
-
-    /* VFW */
-    int i_fcc_num;
-    fourcc_str fcc;     /* FourCC used */
-#if X264VFW_USE_VIRTUALDUB_HACK
-    int b_vd_hack;
-#endif
+    /* Decoder && AVI Muxer */
 #if defined(HAVE_FFMPEG) && X264VFW_USE_DECODER
     int b_disable_decoder;
+#else
+    int reserved_b_disable_decoder;
 #endif
-
-    /* Analysis */
-    int b_dct8x8;
-    int b_intra_i8x8;
-    int b_intra_i4x4;
-    int b_i8x8;
-    int b_i4x4;
-    int b_psub16x16;
-    int b_psub8x8;
-    int b_bsub16x16;
-    int b_fast_pskip;
-    int i_refmax;
-    int b_mixedref;
-    int i_me_method;
-    int i_me_range;
-    int i_subpel_refine;
-    int b_chroma_me;
-    float f_psy_rdo;
-    int i_keyint_min;
-    int i_keyint_max;
-    int i_scenecut_threshold;
-    int i_p_wpred;
-    int i_bframe;
-    int i_bframe_adaptive;
-    int i_bframe_bias;
-    int i_direct_mv_pred;
-    int i_b_refs;
-    int b_b_wpred;
-
-    /* Encoding */
-    int b_filter;
-    int i_inloop_a;
-    int i_inloop_b;
-    int i_interlaced;
-    int b_cabac;
-    int b_dct_decimate;
-    int i_noise_reduction;
-    int i_trellis;
-    int i_intra_deadzone;
-    int i_inter_deadzone;
-    int i_cqm;
-    char cqmfile[MAX_PATH];
-    float f_psy_trellis;
-
-    /* Rate control */
-    int i_vbv_maxrate;
-    int i_vbv_bufsize;
-    int i_vbv_occupancy;
-    int i_qp_min;
-    int i_qp_max;
-    int i_qp_step;
-    float f_ipratio;
-    float f_pbratio;
-    int i_chroma_qp_offset;
-    float f_qcomp;
-    float f_cplxblur;
-    float f_qblur;
-    float f_ratetol;
-
-    /* AQ */
-    int i_aq_mode;
-    float f_aq_strength;
-
-    /* Multithreading */
-#if X264VFW_USE_THREADS
-    int i_threads;
-    int b_mt_deterministic;
-    int b_mt_sliced;
-#endif
-
-    /* VUI */
-    int i_overscan;
-    int i_vidformat;
-    int i_fullrange;
-    int i_colorprim;
-    int i_transfer;
-    int i_colmatrix;
-    int i_chromaloc;
-
-    /* Config */
-    int b_use_cmdline;
-    char cmdline[MAX_CMDLINE];
+    /* Extra command line */
+    char extra_cmdline[MAX_CMDLINE];
 } CONFIG;
+
+typedef struct
+{
+    CONFIG config;
+    HWND hMainDlg;
+    HWND hHelpDlg;
+    int b_dlg_updated;
+    int b_save;
+} CONFIG_DATA;
 
 /* CODEC: VFW codec instance */
 typedef struct
 {
-    CONFIG config;
-
-    /* ICM_COMPRESS_FRAMES_INFO params */
-    int i_frame_total;
-    int i_fps_num;
-    int i_fps_den;
-
     /* x264 handle */
     x264_t *h;
 
-    /* Log console handle */
-    HWND hCons;
-    int b_visible;
+    /* Configuration GUI params */
+    CONFIG config;
 
+    /* Internal codec params */
+    int b_encoder_error;
 #if X264VFW_USE_BUGGY_APPS_HACK
     BITMAPINFOHEADER *prev_lpbiOutput;
     DWORD prev_output_biSizeImage;
@@ -218,19 +172,40 @@ typedef struct
 #endif
 #if X264VFW_USE_VIRTUALDUB_HACK
     int b_use_vd_hack;
-    DWORD save_fcc;
+    DWORD save_fourcc;
 #endif
     int b_no_output;
+    int b_fast1pass;
+    int b_user_ref;
     int i_frame_remain;
-    int b_encoder_error;
+    int b_warn_frame_loss;
 
+    /* Preset/Tuning/Profile */
+    const char *preset;
+    const char *tune;
+    const char *profile;
+
+    /* ICM_COMPRESS_FRAMES_INFO params */
+    int i_frame_total;
+    uint32_t i_fps_num;
+    uint32_t i_fps_den;
+
+    /* Colorspace conversion */
     x264vfw_csp_function_t csp;
     x264_picture_t conv_pic;
 
+    /* Log console */
+    HWND hCons;
+    int b_visible;
+
+    /* CLI output */
     int b_cli_output;
+    char *cli_output_file;
+    const char *cli_output_muxer;
     cli_output_t cli_output;
     hnd_t cli_hout;
 
+    /* Decoder */
 #if defined(HAVE_FFMPEG) && X264VFW_USE_DECODER
     int               decoder_enabled;
     AVCodec           *decoder;
@@ -271,30 +246,19 @@ void x264_log_vfw_destroy(CODEC *codec);
 void x264vfw_log(CODEC *codec, int i_level, const char *psz_fmt, ...);
 
 /* Config functions */
+void config_defaults(CONFIG *config);
 void config_reg_load(CONFIG *config);
 void config_reg_save(CONFIG *config);
-void config_defaults(CONFIG *config);
 
 /* Dialog callbacks */
-INT_PTR CALLBACK callback_main (HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lParam);
-INT_PTR CALLBACK callback_tabs(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lParam);
+INT_PTR CALLBACK callback_main(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lParam);
 INT_PTR CALLBACK callback_about(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lParam);
-INT_PTR CALLBACK callback_err_console(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lParam);
+INT_PTR CALLBACK callback_log(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lParam);
+INT_PTR CALLBACK callback_help(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lParam);
 
 /* DLL instance */
 extern HINSTANCE g_hInst;
-
-/* Supported FourCC codes */
-/* FIXME: static is not good, but sizeof operator doesn't work with extern */
-static const fourcc_str fcc_str_table[] =
-{
-    "H264\0",
-    "h264\0",
-    "X264\0",
-    "x264\0",
-    "AVC1\0",
-    "avc1\0",
-    "VSSH\0"
-};
+/* DLL critical section */
+extern CRITICAL_SECTION g_CS;
 
 #endif

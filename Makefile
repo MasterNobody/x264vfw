@@ -96,13 +96,13 @@ SRC_C = codec.c config.c csp.c driverproc.c
 SRC_RES = resource.rc
 
 # Muxers
-MUXERS := $(shell grep -E "(IN|OUT)PUT" config.h)
+CONFIG := $(shell cat config.h)
 
 SRC_C += output/raw.c
 SRC_C += output/matroska.c output/matroska_ebml.c
 SRC_C += output/flv.c output/flv_bytestream.c
 
-ifneq ($(findstring MP4_OUTPUT, $(MUXERS)),)
+ifneq ($(findstring HAVE_GPAC, $(CONFIG)),)
 SRC_C += output/mp4.c
 VFW_LDFLAGS += -lgpac_static
 endif
@@ -128,6 +128,13 @@ VPATH = $(DIR_SRC):$(DIR_BUILD)
 
 all: $(DLL)
 
+ifneq ($(wildcard .depend),)
+include .depend
+endif
+
+# Resource dependence manually
+resource.obj: resource.rc resource.h x264vfw_config.h
+
 %.obj: %.rc
 	@echo " W: $(@D)/$(<F)"
 	@mkdir -p "$(DIR_BUILD)/$(@D)"
@@ -141,7 +148,11 @@ all: $(DLL)
 	@mkdir -p "$(DIR_BUILD)/$(@D)"
 	@$(CC) $(CFLAGS) -c -o "$(DIR_BUILD)/$@" $<
 
-$(DLL): config.mak config.h $(OBJECTS)
+.depend: config.mak
+	@rm -f .depend
+	@$(foreach SRC, $(SRC_C), $(CC) $(CFLAGS) $(SRC) -MT $(SRC:%.c=%.obj) -MM -g0 1>> .depend;)
+
+$(DLL): .depend config.mak config.h $(OBJECTS)
 	@echo " L: $(@F)"
 	@mkdir -p "$(DIR_BUILD)"
 	@cp -f "$(DIR_SRC)/driverproc.def" "$(DIR_BUILD)/driverproc.def"
@@ -155,6 +166,8 @@ $(DLL): config.mak config.h $(OBJECTS)
 clean:
 	@echo " Cl: Object files and target lib"
 	@rm -rf "$(DIR_BUILD)"
+	@echo " Cl: .depend"
+	@rm -f .depend
 
 distclean: clean
 	@echo " Cl: config.mak"

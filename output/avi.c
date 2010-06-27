@@ -79,6 +79,7 @@ static int open_file( char *psz_filename, hnd_t *p_handle )
         return -1;
     else if( !x264_is_regular_file( fh ) )
     {
+        fclose( fh );
         DPRINTF( "avi [error]: AVI output is incompatible with non-regular file `%s'\n", psz_filename );
         return -1;
     }

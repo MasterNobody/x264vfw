@@ -31,6 +31,8 @@
 
 /* Global DLL instance */
 HINSTANCE g_hInst;
+/* Global DLL critical section */
+CRITICAL_SECTION g_CS;
 
 /* Calling back point for our DLL so we can keep track of the window in g_hInst */
 BOOL WINAPI DllMain(HANDLE hModule, DWORD ul_reason_for_call, LPVOID lpReserved)
@@ -41,6 +43,7 @@ BOOL WINAPI DllMain(HANDLE hModule, DWORD ul_reason_for_call, LPVOID lpReserved)
     switch (ul_reason_for_call)
     {
         case DLL_PROCESS_ATTACH:
+            InitializeCriticalSection(&g_CS);
             pthread_win32_process_attach_np();
             pthread_win32_thread_attach_np();
             break;
@@ -56,6 +59,18 @@ BOOL WINAPI DllMain(HANDLE hModule, DWORD ul_reason_for_call, LPVOID lpReserved)
         case DLL_PROCESS_DETACH:
             pthread_win32_thread_detach_np();
             pthread_win32_process_detach_np();
+            DeleteCriticalSection(&g_CS);
+            break;
+    }
+#else
+    switch (ul_reason_for_call)
+    {
+        case DLL_PROCESS_ATTACH:
+            InitializeCriticalSection(&g_CS);
+            break;
+
+        case DLL_PROCESS_DETACH:
+            DeleteCriticalSection(&g_CS);
             break;
     }
 #endif
@@ -148,8 +163,8 @@ LRESULT WINAPI attribute_align_arg DriverProc(DWORD_PTR dwDriverId, HDRVR hDrive
             if (lParam2 != sizeof(CONFIG))
                 return ICERR_BADSIZE;
             memcpy((void *)lParam1, &codec->config, sizeof(CONFIG));
-            /* Reset params that don't need saving */
-            ((CONFIG *)lParam1)->b_save = FALSE;
+            /* Set format version */
+            ((CONFIG *)lParam1)->i_format_version = X264VFW_FORMAT_VERSION;
             return ICERR_OK;
 
         case ICM_SETSTATE:
@@ -158,7 +173,7 @@ LRESULT WINAPI attribute_align_arg DriverProc(DWORD_PTR dwDriverId, HDRVR hDrive
                 config_reg_load(&codec->config);
                 return 0;
             }
-            if (lParam2 != sizeof(CONFIG))
+            if (lParam2 != sizeof(CONFIG) || ((CONFIG *)lParam1)->i_format_version != X264VFW_FORMAT_VERSION)
                 return 0;
             memcpy(&codec->config, (void *)lParam1, sizeof(CONFIG));
             return sizeof(CONFIG);
@@ -186,8 +201,8 @@ LRESULT WINAPI attribute_align_arg DriverProc(DWORD_PTR dwDriverId, HDRVR hDrive
 #else
             icinfo->dwVersionICM = 0x0104; /* MinGW's vfw.h doesn't define ICVERSION for some weird reason */
 #endif
-            wcscpy(icinfo->szName, X264_NAME_L);
-            wcscpy(icinfo->szDescription, X264_DESC_L);
+            wcscpy(icinfo->szName, X264VFW_NAME_L);
+            wcscpy(icinfo->szDescription, X264VFW_DESC_L);
 
             return sizeof(ICINFO);
         }
@@ -195,16 +210,16 @@ LRESULT WINAPI attribute_align_arg DriverProc(DWORD_PTR dwDriverId, HDRVR hDrive
         case ICM_CONFIGURE:
             if (lParam1 != -1)
             {
-                CONFIG temp;
+                CONFIG_DATA temp;
 
-                codec->config.b_save = FALSE;
-                memcpy(&temp, &codec->config, sizeof(CONFIG));
+                memset(&temp, 0, sizeof(CONFIG_DATA));
+                memcpy(&temp.config, &codec->config, sizeof(CONFIG));
 
                 DialogBoxParam(g_hInst, MAKEINTRESOURCE(IDD_CONFIG), (HWND)lParam1, callback_main, (LPARAM)&temp);
 
                 if (temp.b_save)
                 {
-                    memcpy(&codec->config, &temp, sizeof(CONFIG));
+                    memcpy(&codec->config, &temp.config, sizeof(CONFIG));
                     config_reg_save(&codec->config);
                 }
             }

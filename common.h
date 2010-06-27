@@ -74,19 +74,19 @@
 
 #define asm __asm__
 
-#ifdef WORDS_BIGENDIAN
+#if WORDS_BIGENDIAN
 #define endian_fix(x) (x)
 #define endian_fix64(x) (x)
 #define endian_fix32(x) (x)
 #define endian_fix16(x) (x)
 #else
-#if defined(__GNUC__) && defined(HAVE_MMX)
+#if defined(__GNUC__) && HAVE_MMX
 static ALWAYS_INLINE uint32_t endian_fix32( uint32_t x )
 {
     asm("bswap %0":"+r"(x));
     return x;
 }
-#elif defined(__GNUC__) && defined(HAVE_ARMV6)
+#elif defined(__GNUC__) && HAVE_ARMV6
 static ALWAYS_INLINE uint32_t endian_fix32( uint32_t x )
 {
     asm("rev %0, %0":"+r"(x));
@@ -98,7 +98,7 @@ static ALWAYS_INLINE uint32_t endian_fix32( uint32_t x )
     return (x<<24) + ((x<<8)&0xff0000) + ((x>>8)&0xff00) + (x>>24);
 }
 #endif
-#if defined(__GNUC__) && defined(ARCH_X86_64)
+#if defined(__GNUC__) && ARCH_X86_64
 static ALWAYS_INLINE uint64_t endian_fix64( uint64_t x )
 {
     asm("bswap %0":"+r"(x));
@@ -124,11 +124,19 @@ static inline uint8_t x264_is_regular_file( FILE *filehandle )
 {
     struct stat file_stat;
     if( fstat( fileno( filehandle ), &file_stat ) )
-        return 0;
+        return -1;
     return S_ISREG( file_stat.st_mode );
 }
 
-#ifdef _DEBUG
+static inline uint8_t x264_is_regular_file_path( const char *filename )
+{
+    struct stat file_stat;
+    if( stat( filename, &file_stat ) )
+        return -1;
+    return S_ISREG( file_stat.st_mode );
+}
+
+#if X264VFW_DEBUG_OUTPUT
 #define DPRINTF_BUF_SZ 1024
 static inline void DPRINTF(const char *fmt, ...)
 {
@@ -148,7 +156,7 @@ static inline void DVPRINTF(const char *fmt, va_list args)
     OutputDebugString(buf);
 }
 #else
-static inline void DPRINTF(const char *fmt, ...) { }
+static inline void DPRINTF(const char *fmt, ...) {}
 static inline void DVPRINTF(const char *fmt, va_list args) {}
 #endif
 

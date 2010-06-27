@@ -30,8 +30,8 @@ typedef struct
     int64_t frame_duration;
 
     char b_writing_frame;
-    int i_timebase_num;
-    int i_timebase_den;
+    uint32_t i_timebase_num;
+    uint32_t i_timebase_den;
 
 } mkv_hnd_t;
 
@@ -150,6 +150,8 @@ static int write_headers( hnd_t handle, x264_nal_t *p_nal )
                           avcC, avcC_len, p_mkv->frame_duration, 50000,
                           p_mkv->width, p_mkv->height,
                           p_mkv->d_width, p_mkv->d_height );
+    if( ret < 0 )
+        return ret;
 
     free( avcC );
 
