@@ -212,7 +212,7 @@ typedef struct
     AVCodecContext    *decoder_context;
     AVFrame           *decoder_frame;
     void              *decoder_buf;
-    unsigned int      decoder_buf_size;
+    DWORD             decoder_buf_size;
     AVPacket          decoder_pkt;
     enum PixelFormat  decoder_pix_fmt;
     int               decoder_vflip;

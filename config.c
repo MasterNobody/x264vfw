@@ -85,6 +85,8 @@ extern const named_fourcc_t fourcc_table[COUNT_FOURCC];
 
 extern const char * const muxer_names[];
 
+extern const char * const log_level_names[];
+
 static const reg_named_str_t reg_named_str_table[] =
 {
     /* Basic */
@@ -1474,15 +1476,16 @@ static void Help(char *buffer, int longhelp)
     else H0( "                                  - psy tunings: film,animation,grain,\r\n"
              "                                                 stillimage,psnr,ssim\r\n"
              "                                  - other tunings: fastdecode,zerolatency\r\n" );
-    H2( "      --slow-firstpass        Don't force these faster settings with --pass 1:\r\n"
+    H2( "      --fast-firstpass        Force these faster settings with --pass 1:\r\n"
         "                                  --no-8x8dct --me dia --partitions none\r\n"
         "                                  --ref 1 --subme {2 if >2 else unchanged}\r\n"
         "                                  --trellis 0 --fast-pskip\r\n" );
-    else H1( "      --slow-firstpass        Don't force faster settings with --pass 1\r\n" );
+    else H1( "      --fast-firstpass        Force faster settings with --pass 1\r\n" );
+    H1( "      --slow-firstpass        Don't force faster settings with --pass 1\r\n" );
     H0( "\r\n" );
     H0( "Frame-type options:\r\n" );
     H0( "\r\n" );
-    H0( "  -I, --keyint <integer>      Maximum GOP size [%d]\r\n", defaults->i_keyint_max );
+    H0( "  -I, --keyint <integer or \"infinite\"> Maximum GOP size [%d]\r\n", defaults->i_keyint_max );
     H2( "  -i, --min-keyint <integer>  Minimum GOP size [auto]\r\n" );
     H2( "      --no-scenecut           Disable adaptive I-frame decision\r\n" );
     H2( "      --scenecut <integer>    How aggressively to insert extra I-frames [%d]\r\n", defaults->i_scenecut_threshold );
@@ -1500,10 +1503,10 @@ static void Help(char *buffer, int longhelp)
         "                                  - normal: Non-strict (not Blu-ray compatible)\r\n",
         strtable_lookup( x264_b_pyramid_names, defaults->i_bframe_pyramid ) );
     H1( "      --open-gop <string>     Use recovery points to close GOPs [none]\r\n"
-        "                                  - none: Use standard closed GOPs\r\n"
-        "                                  - display: Base GOP length on display order\r\n"
-        "                                             (not Blu-ray compatible)\r\n"
-        "                                  - coded: Base GOP length on coded order\r\n"
+        "                                  - none: closed GOPs only\r\n"
+        "                                  - normal: standard open GOPs\r\n"
+        "                                            (not Blu-ray compatible)\r\n"
+        "                                  - bluray: Blu-ray-compatible open GOPs\r\n"
         "                              Only available with b-frames\r\n" );
     H1( "      --no-cabac              Disable CABAC\r\n" );
     H1( "  -r, --ref <integer>         Number of reference frames [%d]\r\n", defaults->i_frame_reference );
@@ -1676,6 +1679,9 @@ static void Help(char *buffer, int longhelp)
     H1( "\r\n" );
     H1( "  -v, --verbose               Print stats for each frame\r\n" );
     H0( "      --quiet                 Quiet Mode\r\n" );
+    H1( "      --log-level <string>    Specify the maximum level of logging [\"%s\"]\r\n"
+        "                                  - %s\r\n", strtable_lookup( log_level_names, defaults->i_log_level ),
+                                       stringify_names( buf, log_level_names ) );
     H1( "      --psnr                  Enable PSNR computation\r\n" );
     H1( "      --ssim                  Enable SSIM computation\r\n" );
     H1( "      --threads <integer>     Force a specific number of threads\r\n" );

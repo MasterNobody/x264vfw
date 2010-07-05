@@ -106,6 +106,8 @@ const char * const muxer_names[] =
     NULL
 };
 
+const char * const log_level_names[] = { "none", "error", "warning", "info", "debug", NULL };
+
 /* Return a valid x264 colorspace or X264VFW_CSP_NONE if it is not supported */
 static int get_csp(BITMAPINFOHEADER *hdr)
 {
@@ -190,6 +192,7 @@ static int x264vfw_picture_fill(AVPicture *picture, uint8_t *ptr, enum PixelForm
             return size + 2 * size2;
         }
         case PIX_FMT_YUYV422:
+        case PIX_FMT_UYVY422:
             picture->linesize[0] = width * 2;
             picture->data[0] = ptr;
             return picture->linesize[0] * height;
@@ -418,6 +421,7 @@ enum {
     OPT_PROFILE,
     OPT_PRESET,
     OPT_TUNE,
+    OPT_FASTFIRSTPASS,
     OPT_SLOWFIRSTPASS,
     OPT_FULLHELP,
     OPT_FPS,
@@ -429,10 +433,11 @@ enum {
     OPT_TCFILE_OUT,
     OPT_TIMEBASE,
     OPT_PULLDOWN,
+    OPT_LOG_LEVEL,
 #if X264VFW_USE_VIRTUALDUB_HACK
     OPT_VD_HACK,
 #endif
-    OPT_NO_OUTPUT,
+    OPT_NO_OUTPUT
 } OptionsOPT;
 
 static char short_options[] = "8A:B:b:f:hI:i:m:o:p:q:r:t:Vvw";
@@ -445,6 +450,7 @@ static struct option long_options[] =
     { "profile",           required_argument, NULL, OPT_PROFILE       },
     { "preset",            required_argument, NULL, OPT_PRESET        },
     { "tune",              required_argument, NULL, OPT_TUNE          },
+    { "fast-firstpass",    no_argument,       NULL, OPT_FASTFIRSTPASS },
     { "slow-firstpass",    no_argument,       NULL, OPT_SLOWFIRSTPASS },
     { "bitrate",           required_argument, NULL, 'B'               },
     { "bframes",           required_argument, NULL, 'b'               },
@@ -551,6 +557,7 @@ static struct option long_options[] =
     { "no-ssim",           no_argument,       NULL, 0                 },
     { "quiet",             no_argument,       NULL, OPT_QUIET         },
     { "verbose",           no_argument,       NULL, 'v'               },
+    { "log-level",         required_argument, NULL, OPT_LOG_LEVEL     },
     { "progress",          no_argument,       NULL, OPT_NOPROGRESS    },
     { "no-progress",       no_argument,       NULL, OPT_NOPROGRESS    },
     { "visualize",         no_argument,       NULL, OPT_VISUALIZE     },
@@ -804,6 +811,18 @@ static int parse_enum_name(const char *arg, const char * const *names, const cha
     return -1;
 }
 
+static int parse_enum_value(const char *arg, const char * const *names, int *dst)
+{
+    int i;
+    for(i = 0; names[i]; i++)
+        if (!strcasecmp(arg, names[i]))
+        {
+            *dst = i;
+            return 0;
+        }
+    return -1;
+}
+
 /* Parse command line for all other options */
 static int parse_cmdline(int argc, char **argv, x264_param_t *param, CODEC *codec)
 {
@@ -861,12 +880,23 @@ static int parse_cmdline(int argc, char **argv, x264_param_t *param, CODEC *code
                 param->i_log_level = X264_LOG_DEBUG;
                 break;
 
+            case OPT_LOG_LEVEL:
+                if (!parse_enum_value(optarg, log_level_names, &param->i_log_level))
+                    param->i_log_level += X264_LOG_NONE;
+                else
+                    param->i_log_level = atoi(optarg);
+                break;
+
             case OPT_TUNE:
             case OPT_PRESET:
                 break;
 
             case OPT_PROFILE:
                 codec->profile = optarg;
+                break;
+
+            case OPT_FASTFIRSTPASS:
+                codec->b_fast1pass = TRUE;
                 break;
 
             case OPT_SLOWFIRSTPASS:
@@ -1119,12 +1149,7 @@ LRESULT compress_begin(CODEC *codec, BITMAPINFO *lpbiInput, BITMAPINFO *lpbiOutp
     param.i_timebase_num = param.i_fps_den;
     param.i_timebase_den = param.i_fps_num;
 
-/*
-    if (codec->preset && !strcasecmp(codec->preset, "placebo"))
-        codec->b_fast1pass = 0;
-*/
-
-    /* If "1st pass (fast)" mode is used, apply faster settings. */
+    /* If "1st pass (fast)" mode or --fast-firstpass is used, apply faster settings. */
     if (codec->b_fast1pass)
         x264_param_apply_fastfirstpass(&param);
 
@@ -1456,6 +1481,7 @@ LRESULT decompress_get_format(CODEC *codec, BITMAPINFO *lpbiInput, BITMAPINFO *l
     BITMAPINFOHEADER *outhdr = &lpbiOutput->bmiHeader;
     int              iWidth;
     int              iHeight;
+    int              picture_size;
 
     if (!lpbiOutput)
         return sizeof(BITMAPINFOHEADER);
@@ -1471,6 +1497,10 @@ LRESULT decompress_get_format(CODEC *codec, BITMAPINFO *lpbiInput, BITMAPINFO *l
     if (iWidth % 2 || iHeight % 2)
         return ICERR_BADFORMAT;
 
+    picture_size = x264vfw_picture_get_size(PIX_FMT_BGRA, iWidth, iHeight);
+    if (picture_size < 0)
+        return ICERR_BADFORMAT;
+
     memset(outhdr, 0, sizeof(BITMAPINFOHEADER));
     outhdr->biSize        = sizeof(BITMAPINFOHEADER);
     outhdr->biWidth       = iWidth;
@@ -1478,7 +1508,7 @@ LRESULT decompress_get_format(CODEC *codec, BITMAPINFO *lpbiInput, BITMAPINFO *l
     outhdr->biPlanes      = 1;
     outhdr->biBitCount    = 32;
     outhdr->biCompression = BI_RGB;
-    outhdr->biSizeImage   = x264vfw_picture_get_size(PIX_FMT_BGRA, iWidth, iHeight);
+    outhdr->biSizeImage   = picture_size;
 
     return ICERR_OK;
 }
@@ -1491,6 +1521,7 @@ LRESULT decompress_query(CODEC *codec, BITMAPINFO *lpbiInput, BITMAPINFO *lpbiOu
     int              iHeight;
     int              i_csp;
     enum PixelFormat pix_fmt;
+    int              picture_size;
 
     if (!supported_fourcc(inhdr->biCompression))
         return ICERR_BADFORMAT;
@@ -1517,9 +1548,13 @@ LRESULT decompress_query(CODEC *codec, BITMAPINFO *lpbiInput, BITMAPINFO *lpbiOu
     if (pix_fmt == PIX_FMT_NONE)
         return ICERR_BADFORMAT;
 
+    picture_size = x264vfw_picture_get_size(pix_fmt, iWidth, iHeight);
+    if (picture_size < 0)
+        return ICERR_BADFORMAT;
+
     /* MSDN says that biSizeImage may be set to zero for BI_RGB bitmaps
        But some buggy applications don't set it also for other bitmap types */
-    if (outhdr->biSizeImage != 0 && outhdr->biSizeImage < x264vfw_picture_get_size(pix_fmt, iWidth, iHeight))
+    if (outhdr->biSizeImage != 0 && outhdr->biSizeImage < picture_size)
         return ICERR_BADFORMAT;
 
     return ICERR_OK;
@@ -1533,7 +1568,7 @@ LRESULT decompress_begin(CODEC *codec, BITMAPINFO *lpbiInput, BITMAPINFO *lpbiOu
 
     if (decompress_query(codec, lpbiInput, lpbiOutput) != ICERR_OK)
     {
-        x264vfw_log(codec, X264_LOG_ERROR, "incompatible input/output frame format (decode)\n");
+        x264vfw_log(codec, X264_LOG_DEBUG, "incompatible input/output frame format (decode)\n");
         return ICERR_BADFORMAT;
     }
 
@@ -1545,21 +1580,21 @@ LRESULT decompress_begin(CODEC *codec, BITMAPINFO *lpbiInput, BITMAPINFO *lpbiOu
     codec->decoder = avcodec_find_decoder(CODEC_ID_H264);
     if (!codec->decoder)
     {
-        x264vfw_log(codec, X264_LOG_ERROR, "avcodec_find_decoder failed\n");
+        x264vfw_log(codec, X264_LOG_DEBUG, "avcodec_find_decoder failed\n");
         return ICERR_ERROR;
     }
 
     codec->decoder_context = avcodec_alloc_context();
     if (!codec->decoder_context)
     {
-        x264vfw_log(codec, X264_LOG_ERROR, "avcodec_alloc_context failed\n");
+        x264vfw_log(codec, X264_LOG_DEBUG, "avcodec_alloc_context failed\n");
         return ICERR_ERROR;
     }
 
     codec->decoder_frame = avcodec_alloc_frame();
     if (!codec->decoder_frame)
     {
-        x264vfw_log(codec, X264_LOG_ERROR, "avcodec_alloc_frame failed\n");
+        x264vfw_log(codec, X264_LOG_DEBUG, "avcodec_alloc_frame failed\n");
         av_freep(&codec->decoder_context);
         return ICERR_ERROR;
     }
@@ -1570,7 +1605,7 @@ LRESULT decompress_begin(CODEC *codec, BITMAPINFO *lpbiInput, BITMAPINFO *lpbiOu
 
     if (avcodec_open(codec->decoder_context, codec->decoder) < 0)
     {
-        x264vfw_log(codec, X264_LOG_ERROR, "avcodec_open failed\n");
+        x264vfw_log(codec, X264_LOG_DEBUG, "avcodec_open failed\n");
         av_freep(&codec->decoder_context);
         av_freep(&codec->decoder_frame);
         return ICERR_ERROR;
@@ -1586,15 +1621,22 @@ LRESULT decompress_begin(CODEC *codec, BITMAPINFO *lpbiInput, BITMAPINFO *lpbiOu
 LRESULT decompress(CODEC *codec, ICDECOMPRESS *icd)
 {
     BITMAPINFOHEADER *inhdr = icd->lpbiInput;
-    unsigned int neededsize = inhdr->biSizeImage + FF_INPUT_BUFFER_PADDING_SIZE;
+    DWORD neededsize = inhdr->biSizeImage + FF_INPUT_BUFFER_PADDING_SIZE;
     int len, got_picture;
     AVPicture picture;
+    int picture_size;
 
     got_picture = 0;
 #if X264VFW_USE_VIRTUALDUB_HACK
     if (!(inhdr->biSizeImage == 1 && ((uint8_t *)icd->lpInput)[0] == 0x7f))
     {
 #endif
+        /* Check overflow */
+        if (neededsize < FF_INPUT_BUFFER_PADDING_SIZE)
+        {
+            x264vfw_log(codec, X264_LOG_DEBUG, "buffer overflow check failed\n");
+            return ICERR_ERROR;
+        }
         if (codec->decoder_buf_size < neededsize)
         {
             av_free(codec->decoder_buf);
@@ -1602,7 +1644,7 @@ LRESULT decompress(CODEC *codec, ICDECOMPRESS *icd)
             codec->decoder_buf = av_malloc(neededsize);
             if (!codec->decoder_buf)
             {
-                x264vfw_log(codec, X264_LOG_ERROR, "failed to realloc decoder buffer\n");
+                x264vfw_log(codec, X264_LOG_DEBUG, "failed to realloc decoder buffer\n");
                 return ICERR_ERROR;
             }
             codec->decoder_buf_size = neededsize;
@@ -1611,21 +1653,47 @@ LRESULT decompress(CODEC *codec, ICDECOMPRESS *icd)
         memset(codec->decoder_buf + inhdr->biSizeImage, 0, FF_INPUT_BUFFER_PADDING_SIZE);
         codec->decoder_pkt.data = codec->decoder_buf;
         codec->decoder_pkt.size = inhdr->biSizeImage;
+
+        if (inhdr->biSizeImage >= 4)
+        {
+            uint8_t *buf = codec->decoder_buf;
+            uint32_t buf_size = inhdr->biSizeImage;
+            uint32_t nal_size = endian_fix32(*(uint32_t *)buf);
+            /* Check startcode */
+            if ((nal_size & 0x00ffffff) != 0x00000001)
+            {
+                /* Convert to Annex B */
+                *(uint32_t *)buf = endian_fix32(0x00000001);
+                while ((uint64_t)buf_size >= (uint64_t)nal_size + 8)
+                {
+                    buf += nal_size + 4;
+                    buf_size -= nal_size + 4;
+                    nal_size = endian_fix32(*(uint32_t *)buf);
+                    *(uint32_t *)buf = endian_fix32(0x00000001);
+                }
+            }
+        }
+
         len = avcodec_decode_video2(codec->decoder_context, codec->decoder_frame, &got_picture, &codec->decoder_pkt);
         if (len < 0)
         {
-            x264vfw_log(codec, X264_LOG_ERROR, "avcodec_decode_video2 failed\n");
+            x264vfw_log(codec, X264_LOG_DEBUG, "avcodec_decode_video2 failed\n");
             return ICERR_ERROR;
         }
 #if X264VFW_USE_VIRTUALDUB_HACK
     }
 #endif
 
+    picture_size = x264vfw_picture_get_size(codec->decoder_pix_fmt, inhdr->biWidth, inhdr->biHeight);
+    if (picture_size < 0)
+    {
+        x264vfw_log(codec, X264_LOG_DEBUG, "x264vfw_picture_get_size failed\n");
+        return ICERR_ERROR;
+    }
+
     if (!got_picture)
     {
         /* Frame was decoded but delayed so we would show the BLACK-frame instead */
-        int picture_size = x264vfw_picture_get_size(codec->decoder_pix_fmt, inhdr->biWidth, inhdr->biHeight);
-
         if (codec->decoder_pix_fmt == PIX_FMT_YUV420P)
         {
             int luma_size = picture_size * 2 / 3;
@@ -1634,6 +1702,8 @@ LRESULT decompress(CODEC *codec, ICDECOMPRESS *icd)
         }
         else if (codec->decoder_pix_fmt == PIX_FMT_YUYV422)
             wmemset(icd->lpOutput, 0x8010, picture_size / sizeof(wchar_t)); /* TV Scale */
+        else if (codec->decoder_pix_fmt == PIX_FMT_UYVY422)
+            wmemset(icd->lpOutput, 0x1080, picture_size / sizeof(wchar_t)); /* TV Scale */
         else
             memset(icd->lpOutput, 0x00, picture_size);
         //icd->lpbiOutput->biSizeImage = picture_size;
@@ -1642,7 +1712,7 @@ LRESULT decompress(CODEC *codec, ICDECOMPRESS *icd)
 
     if (x264vfw_picture_fill(&picture, icd->lpOutput, codec->decoder_pix_fmt, inhdr->biWidth, inhdr->biHeight) < 0)
     {
-        x264vfw_log(codec, X264_LOG_ERROR, "x264vfw_picture_fill failed\n");
+        x264vfw_log(codec, X264_LOG_DEBUG, "x264vfw_picture_fill failed\n");
         return ICERR_ERROR;
     }
     if (codec->decoder_swap_UV)
@@ -1691,13 +1761,13 @@ LRESULT decompress(CODEC *codec, ICDECOMPRESS *icd)
                                     NULL, NULL, NULL);
         if (!codec->sws)
         {
-            x264vfw_log(codec, X264_LOG_ERROR, "sws_getContext failed\n");
+            x264vfw_log(codec, X264_LOG_DEBUG, "sws_getContext failed\n");
             return ICERR_ERROR;
         }
     }
 
     sws_scale(codec->sws, (const uint8_t * const *)codec->decoder_frame->data, codec->decoder_frame->linesize, 0, inhdr->biHeight, picture.data, picture.linesize);
-    //icd->lpbiOutput->biSizeImage = x264vfw_picture_get_size(codec->decoder_pix_fmt, inhdr->biWidth, inhdr->biHeight);
+    //icd->lpbiOutput->biSizeImage = picture_size;
 
     return ICERR_OK;
 }
