@@ -140,24 +140,24 @@ static inline uint8_t x264_is_regular_file_path( const char *filename )
 #define DPRINTF_BUF_SZ 1024
 static inline void DPRINTF(const char *fmt, ...)
 {
-    va_list args;
+    va_list arg;
     char buf[DPRINTF_BUF_SZ];
 
-    va_start(args, fmt);
-    vsprintf(buf, fmt, args);
-    va_end(args);
+    va_start(arg, fmt);
+    vsprintf(buf, fmt, arg);
+    va_end(arg);
     OutputDebugString(buf);
 }
-static inline void DVPRINTF(const char *fmt, va_list args)
+static inline void DVPRINTF(const char *fmt, va_list arg)
 {
     char buf[DPRINTF_BUF_SZ];
 
-    vsprintf(buf, fmt, args);
+    vsprintf(buf, fmt, arg);
     OutputDebugString(buf);
 }
 #else
 static inline void DPRINTF(const char *fmt, ...) {}
-static inline void DVPRINTF(const char *fmt, va_list args) {}
+static inline void DVPRINTF(const char *fmt, va_list arg) {}
 #endif
 
 #endif

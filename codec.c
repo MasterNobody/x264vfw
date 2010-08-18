@@ -305,6 +305,55 @@ LRESULT compress_query(CODEC *codec, BITMAPINFO *lpbiInput, BITMAPINFO *lpbiOutp
     return ICERR_OK;
 }
 
+/* Logging and printing for within the cli system */
+static void x264_cli_vlog(const char *name, int i_level, const char *fmt, va_list arg)
+{
+    char msg[1024];
+    char *s_level;
+    switch (i_level)
+    {
+        case X264_LOG_ERROR:
+            s_level = "error";
+            break;
+
+        case X264_LOG_WARNING:
+            s_level = "warning";
+            break;
+
+        case X264_LOG_INFO:
+            s_level = "info";
+            break;
+
+        case X264_LOG_DEBUG:
+            s_level = "debug";
+            break;
+
+        default:
+            s_level = "unknown";
+            break;
+    }
+    sprintf(msg, "%s [%s]: ", name, s_level);
+    vsprintf(msg+strlen(msg), fmt, arg);
+    DPRINTF(msg);
+}
+
+void x264_cli_log(const char *name, int i_level, const char *fmt, ...)
+{
+    va_list arg;
+    va_start(arg, fmt);
+    x264_cli_vlog(name, i_level, fmt, arg);
+    va_end(arg);
+}
+
+void x264_cli_printf(int i_level, const char *fmt, ...)
+{
+    va_list arg;
+    va_start(arg, fmt);
+    DVPRINTF(fmt, arg);
+    va_end(arg);
+}
+
+/* Logging and printing for within the vfw system */
 void x264_log_vfw_create(CODEC *codec)
 {
     x264_log_vfw_destroy(codec);
@@ -325,37 +374,37 @@ void x264_log_vfw_destroy(CODEC *codec)
 static void x264_log_vfw(void *p_private, int i_level, const char *psz_fmt, va_list arg)
 {
     char  msg[1024];
+    char  *s_level;
     int   idx;
     CODEC *codec = p_private;
-    char  *psz_prefix;
     HWND  h_console;
     HDC   hdc;
 
-    DVPRINTF(psz_fmt, arg);
+    x264_cli_vlog("x264vfw", i_level, psz_fmt, arg);
 
     switch (i_level)
     {
         case X264_LOG_ERROR:
-            psz_prefix = "error";
+            s_level = "error";
             break;
 
         case X264_LOG_WARNING:
-            psz_prefix = "warning";
+            s_level = "warning";
             break;
 
         case X264_LOG_INFO:
-            psz_prefix = "info";
+            s_level = "info";
             break;
 
         case X264_LOG_DEBUG:
-            psz_prefix = "debug";
+            s_level = "debug";
             break;
 
         default:
-            psz_prefix = "unknown";
+            s_level = "unknown";
             break;
     }
-    sprintf(msg, "x264vfw [%s]: ", psz_prefix);
+    sprintf(msg, "x264vfw [%s]: ", s_level);
     vsprintf(msg+strlen(msg), psz_fmt, arg);
 
     /* Strip final linefeeds (required) */
@@ -405,7 +454,7 @@ void x264vfw_log(CODEC *codec, int i_level, const char *psz_fmt, ...)
         x264_log_vfw(codec, i_level, psz_fmt, arg);
     }
     else
-        DVPRINTF(psz_fmt, arg);
+        x264_cli_vlog("x264vfw", i_level, psz_fmt, arg);
     va_end(arg);
 }
 
@@ -722,7 +771,6 @@ static int select_output(const char *muxer, char *filename, x264_param_t *param,
 
     if (!strcasecmp(ext, "mp4"))
     {
-#if HAVE_GPAC
         codec->cli_output = mp4_output;
         param->b_annexb = 0;
         param->b_dts_compress = 0;
@@ -732,10 +780,6 @@ static int select_output(const char *muxer, char *filename, x264_param_t *param,
             x264vfw_log(codec, X264_LOG_WARNING, "cbr nal-hrd is not compatible with mp4\n");
             param->i_nal_hrd = X264_NAL_HRD_VBR;
         }
-#else
-        x264vfw_log(codec, X264_LOG_ERROR, "not compiled with MP4 output support\n");
-        return -1;
-#endif
     }
     else if (!strcasecmp(ext, "mkv"))
     {
@@ -972,6 +1016,7 @@ LRESULT compress_begin(CODEC *codec, BITMAPINFO *lpbiInput, BITMAPINFO *lpbiOutp
     int argc;
     char stat_out[MAX_STATS_SIZE];
     char stat_in[MAX_STATS_SIZE];
+    uint32_t prev_timebase_den;
 
     /* Destroy previous handle */
     compress_end(codec);
@@ -1193,6 +1238,8 @@ LRESULT compress_begin(CODEC *codec, BITMAPINFO *lpbiInput, BITMAPINFO *lpbiOutp
         goto fail;
     }
 
+    prev_timebase_den = param.i_timebase_den / gcd( param.i_timebase_num, param.i_timebase_den ); 
+
     /* Open the encoder */
     codec->h = x264_encoder_open(&param);
     if (!codec->h)
@@ -1202,6 +1249,8 @@ LRESULT compress_begin(CODEC *codec, BITMAPINFO *lpbiInput, BITMAPINFO *lpbiOutp
     }
 
     x264_encoder_parameters(codec->h, &param);
+
+    codec->dts_compress_multiplier = param.i_timebase_den / prev_timebase_den;
 
     if (codec->b_cli_output)
     {
@@ -1444,7 +1493,9 @@ LRESULT compress_end(CODEC *codec)
     {
         if (codec->cli_hout)
         {
-            codec->cli_output.close_file(codec->cli_hout, codec->conv_pic.i_pts - 1, codec->conv_pic.i_pts - 2);
+            int64_t largest_pts = (codec->conv_pic.i_pts - 1) * codec->dts_compress_multiplier;
+            int64_t second_largest_pts = largest_pts - codec->dts_compress_multiplier;
+            codec->cli_output.close_file(codec->cli_hout, largest_pts, second_largest_pts);
             codec->cli_hout = NULL;
         }
         memset(&codec->cli_output, 0, sizeof(cli_output_t));

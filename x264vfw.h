@@ -37,7 +37,8 @@
 #endif
 
 #include "csp.h"
-#include "muxers.h"
+#include "x264cli.h"
+#include "output/output.h"
 #include "resource.h"
 
 /* Name */
@@ -204,6 +205,7 @@ typedef struct
     const char *cli_output_muxer;
     cli_output_t cli_output;
     hnd_t cli_hout;
+    int dts_compress_multiplier;
 
     /* Decoder */
 #if defined(HAVE_FFMPEG) && X264VFW_USE_DECODER

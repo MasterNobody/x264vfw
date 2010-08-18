@@ -22,7 +22,10 @@
   OutFile "${ShortName}.exe"
 
   ;Default installation folder
-  InstallDir "$SYSDIR"
+  InstallDir ""
+
+  ;System32 or SysWOW64 dir according to OS
+  Var SYSDIR_32bit
 
 ;--------------------------------
 ;Interface Configuration
@@ -38,7 +41,8 @@
 
   !define MUI_WELCOMEPAGE_TITLE_3LINES
   !insertmacro MUI_PAGE_WELCOME
-  !insertmacro MUI_PAGE_LICENSE ..\Copying
+  !insertmacro MUI_PAGE_LICENSE "..\COPYING"
+  !insertmacro MUI_PAGE_DIRECTORY
   !insertmacro MUI_PAGE_INSTFILES
   !define MUI_FINISHPAGE_TITLE_3LINES
   !insertmacro MUI_PAGE_FINISH
@@ -58,6 +62,8 @@
 
 Section "-Required"
 
+  SetOutPath $INSTDIR
+
   ;Create uninstaller
   WriteUninstaller "$INSTDIR\${ShortName}-uninstall.exe"
 
@@ -68,30 +74,28 @@ Section "-Required"
   WriteRegDWORD HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${ShortName}" "NoModify" 1
   WriteRegDWORD HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${ShortName}" "NoRepair" 1
 
-  SetOutPath "$INSTDIR"
   File ".\x264vfw.dll"
   File ".\x264vfw.ico"
 
-  CreateDirectory $SMPROGRAMS\${ShortName}
+  CreateDirectory "$SMPROGRAMS\${ShortName}"
 
-  IfFileExists "$INSTDIR\rundll32.exe" RUNDLL32_SYSDIR RUNDLL32_WINDIR
-RUNDLL32_WINDIR:
-  SetOutPath "$WINDIR"
-  CreateShortcut "$SMPROGRAMS\${ShortName}\Configure ${ShortName}.lnk" "$WINDIR\rundll32.exe" "x264vfw.dll,Configure" "$INSTDIR\x264vfw.ico"
-  SetOutPath "$INSTDIR"
-  Goto RUNDLL32_end
+  IfFileExists "$SYSDIR_32bit\rundll32.exe" RUNDLL32_SYSDIR RUNDLL32_NOT_SYSDIR
 RUNDLL32_SYSDIR:
-  CreateShortcut "$SMPROGRAMS\${ShortName}\Configure ${ShortName}.lnk" "$INSTDIR\rundll32.exe" "x264vfw.dll,Configure" "$INSTDIR\x264vfw.ico"
+  CreateShortcut "$SMPROGRAMS\${ShortName}\Configure ${ShortName}.lnk" "$SYSDIR_32bit\rundll32.exe" "x264vfw.dll,Configure" "$INSTDIR\x264vfw.ico"
+  Goto RUNDLL32_end
+RUNDLL32_NOT_SYSDIR:
+  CreateShortcut "$SMPROGRAMS\${ShortName}\Configure ${ShortName}.lnk" "rundll32.exe" "x264vfw.dll,Configure" "$INSTDIR\x264vfw.ico"
 RUNDLL32_end:
 
   CreateShortcut "$SMPROGRAMS\${ShortName}\Uninstall ${ShortName}.lnk" "$INSTDIR\${ShortName}-uninstall.exe"
 
+  GetFullPathName /SHORT $R0 "$INSTDIR\x264vfw.dll"
   ${If} ${IsNT}
-    WriteRegStr HKLM "Software\Microsoft\Windows NT\CurrentVersion\drivers32"    "vidc.x264"    "x264vfw.dll"
-    WriteRegStr HKLM "Software\Microsoft\Windows NT\CurrentVersion\drivers.desc" "x264vfw.dll"  "${FullName}"
+    WriteRegStr HKLM "Software\Microsoft\Windows NT\CurrentVersion\drivers32"    "vidc.x264"    $R0
+    WriteRegStr HKLM "Software\Microsoft\Windows NT\CurrentVersion\drivers.desc" $R0            "${FullName}"
   ${Else}
-    WriteINIStr "$WINDIR\system.ini" "drivers32" "vidc.x264" "x264vfw.dll"
-    WriteRegStr HKLM "System\CurrentControlSet\Control\MediaResources\icm\vidc.x264" "Driver"       "x264vfw.dll"
+    WriteINIStr "$WINDIR\system.ini" "drivers32" "vidc.x264" $R0
+    WriteRegStr HKLM "System\CurrentControlSet\Control\MediaResources\icm\vidc.x264" "Driver"       $R0
     WriteRegStr HKLM "System\CurrentControlSet\Control\MediaResources\icm\vidc.x264" "Description"  "${FullName}"
     WriteRegStr HKLM "System\CurrentControlSet\Control\MediaResources\icm\vidc.x264" "FriendlyName" "${FullName}"
   ${EndIf}
@@ -104,7 +108,9 @@ SectionEnd
 Function .onInit
 
   ${If} ${RunningX64}
-    StrCpy $INSTDIR "$WINDIR\SysWOW64"
+    StrCpy $SYSDIR_32bit "$WINDIR\SysWOW64"
+  ${Else}
+    StrCpy $SYSDIR_32bit $SYSDIR
   ${EndIf}
 
   ; Check Administrator's rights
@@ -120,7 +126,32 @@ not_admin:
   Abort
 admin:
 
-  ClearErrors
+  ReadRegStr $R0 HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${ShortName}" "UninstallString"
+  ; GetParent
+  StrCpy $R1 0
+  IntOp  $R1 $R1 - 1
+  StrCpy $R2 $R0 1 $R1
+  StrCmp $R2 '\' +2
+  StrCmp $R2 ''  +1 -3
+  IntOp  $R1 $R1 + 1
+  StrCpy $R1 $R0 $R1
+  ; Was a previous installation inside the $WINDIR?
+  StrLen $R2 "$WINDIR\"
+  StrCpy $R2 $R0 $R2
+  StrCmp $R2 "$WINDIR\" uninstall_ask uninstall_not_needed
+uninstall_ask:
+  MessageBox MB_YESNO|MB_ICONQUESTION "A previous installation of ${ShortName} has been detected inside the Windows directory.$\r$\nDo you wish to uninstall it? (recommended)" \
+    /SD IDYES IDNO uninstall_not_needed
+  GetTempFileName $R2
+  CopyFiles $R0 $R2
+  ExecWait '"$R2" /S _?=$R1'
+  Delete $R2
+  StrCpy $R1 ""
+uninstall_not_needed:
+  StrCmp $INSTDIR "" +1 +2
+  StrCpy $INSTDIR $R1
+  StrCmp $INSTDIR "" +1 +2
+  StrCpy $INSTDIR "$PROGRAMFILES32\${ShortName}\"
 
 FunctionEnd
 
@@ -133,23 +164,21 @@ Section "Uninstall"
   DeleteRegKey HKCU "Software\GNU\x264"
 keep_settings:
 
-  Push $R0
-
   ReadRegStr $R0 HKLM "Software\Microsoft\Windows NT\CurrentVersion\drivers32" "vidc.x264"
   DeleteRegValue HKLM "Software\Microsoft\Windows NT\CurrentVersion\drivers.desc" $R0
   DeleteRegValue HKLM "Software\Microsoft\Windows NT\CurrentVersion\drivers32" "vidc.x264"
   DeleteINIStr "$WINDIR\system.ini" "drivers32" "vidc.x264"
   DeleteRegKey HKLM "System\CurrentControlSet\Control\MediaResources\icm\vidc.x264"
+
   Delete /REBOOTOK "$INSTDIR\x264vfw.dll"
   Delete /REBOOTOK "$INSTDIR\x264vfw.ico"
-
-  Pop $R0
 
   Delete /REBOOTOK "$SMPROGRAMS\${ShortName}\Configure ${ShortName}.lnk"
   Delete /REBOOTOK "$SMPROGRAMS\${ShortName}\Uninstall ${ShortName}.lnk"
   RMDir  /REBOOTOK "$SMPROGRAMS\${ShortName}"
 
   Delete /REBOOTOK "$INSTDIR\${ShortName}-uninstall.exe"
+  RMDir  $INSTDIR
   DeleteRegKey HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${ShortName}"
 
 SectionEnd
@@ -159,10 +188,10 @@ SectionEnd
 
 Function un.onInit
 
-  StrCpy $INSTDIR "$SYSDIR"
-
   ${If} ${RunningX64}
-    StrCpy $INSTDIR "$WINDIR\SysWOW64"
+    StrCpy $SYSDIR_32bit "$WINDIR\SysWOW64"
+  ${Else}
+    StrCpy $SYSDIR_32bit $SYSDIR
   ${EndIf}
 
 FunctionEnd

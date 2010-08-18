@@ -20,7 +20,8 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02111, USA.
  *****************************************************************************/
 
-#include "muxers.h"
+#include "output.h"
+#undef DECLARE_ALIGNED
 #include <libavformat/avformat.h>
 
 typedef struct
@@ -77,13 +78,9 @@ static int open_file( char *psz_filename, hnd_t *p_handle )
     FILE *fh = fopen( psz_filename, "w" );
     if( !fh )
         return -1;
-    else if( !x264_is_regular_file( fh ) )
-    {
-        fclose( fh );
-        DPRINTF( "avi [error]: AVI output is incompatible with non-regular file `%s'\n", psz_filename );
-        return -1;
-    }
+    int b_regular = x264_is_regular_file( fh );
     fclose( fh );
+    FAIL_IF_ERR( !b_regular, "avi", "AVI output is incompatible with non-regular file `%s'\n", psz_filename )
 
     if( !(h = malloc( sizeof(avi_hnd_t) )) )
         return -1;

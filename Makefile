@@ -87,6 +87,7 @@ CFLAGS += "-DHAVE_FFMPEG"
 CFLAGS += "-I$(FFMPEG_DIR)"
 VFW_LDFLAGS += "-L$(FFMPEG_DIR)/libavformat" -lavformat
 VFW_LDFLAGS += "-L$(FFMPEG_DIR)/libavcodec" -lavcodec
+VFW_LDFLAGS += "-L$(FFMPEG_DIR)/libavcore" -lavcore
 VFW_LDFLAGS += "-L$(FFMPEG_DIR)/libavutil" -lavutil
 VFW_LDFLAGS += "-L$(FFMPEG_DIR)/libswscale" -lswscale
 endif
@@ -101,11 +102,7 @@ CONFIG := $(shell cat config.h)
 SRC_C += output/raw.c
 SRC_C += output/matroska.c output/matroska_ebml.c
 SRC_C += output/flv.c output/flv_bytestream.c
-
-ifneq ($(findstring HAVE_GPAC, $(CONFIG)),)
-SRC_C += output/mp4.c
-VFW_LDFLAGS += -lgpac_static
-endif
+SRC_C += output/mp4.c output/isom.c output/isom_util.c output/mp4sys.c
 
 ifeq ($(HAVE_FFMPEG),yes)
 SRC_C += output/avi.c

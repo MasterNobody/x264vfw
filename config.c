@@ -199,7 +199,7 @@ static int scale2pos(int i_scale)
 }
 
 #define GordianKnotWorkaround(encoding_type)\
-{\
+do {\
     switch (encoding_type)\
     {\
         case 0:\
@@ -221,7 +221,7 @@ static int scale2pos(int i_scale)
           assert(0);\
           break;\
     }\
-}
+} while (0)
 
 void config_defaults(CONFIG *config)
 {
@@ -626,7 +626,7 @@ static void CheckControlTextIsNumber(HWND hDlgItem, int bSigned, int iDecimalPla
 }
 
 #define CHECKED_SET_INT(var, hDlg, nIDDlgItem, bSigned, min, max)\
-{\
+do {\
     CheckControlTextIsNumber(GetDlgItem(hDlg, nIDDlgItem), bSigned, 0);\
     var = GetDlgItemInt(hDlg, nIDDlgItem, NULL, bSigned);\
     if (var < min)\
@@ -641,10 +641,10 @@ static void CheckControlTextIsNumber(HWND hDlgItem, int bSigned, int iDecimalPla
         SetDlgItemInt(hDlg, nIDDlgItem, var, bSigned);\
         SendMessage(GetDlgItem(hDlg, nIDDlgItem), EM_SETSEL, -2, -2);\
     }\
-}
+} while (0)
 
 #define CHECKED_SET_MIN_INT(var, hDlg, nIDDlgItem, bSigned, min, max)\
-{\
+do {\
     CheckControlTextIsNumber(GetDlgItem(hDlg, nIDDlgItem), bSigned, 0);\
     var = GetDlgItemInt(hDlg, nIDDlgItem, NULL, bSigned);\
     if (var < min)\
@@ -655,10 +655,10 @@ static void CheckControlTextIsNumber(HWND hDlgItem, int bSigned, int iDecimalPla
     }\
     else if (var > max)\
         var = max;\
-}
+} while (0)
 
 #define CHECKED_SET_MAX_INT(var, hDlg, nIDDlgItem, bSigned, min, max)\
-{\
+do {\
     CheckControlTextIsNumber(GetDlgItem(hDlg, nIDDlgItem), bSigned, 0);\
     var = GetDlgItemInt(hDlg, nIDDlgItem, NULL, bSigned);\
     if (var < min)\
@@ -669,10 +669,10 @@ static void CheckControlTextIsNumber(HWND hDlgItem, int bSigned, int iDecimalPla
         SetDlgItemInt(hDlg, nIDDlgItem, var, bSigned);\
         SendMessage(GetDlgItem(hDlg, nIDDlgItem), EM_SETSEL, -2, -2);\
     }\
-}
+} while (0)
 
 #define CHECKED_SET_SHOW_INT(var, hDlg, nIDDlgItem, bSigned, min, max)\
-{\
+do {\
     CheckControlTextIsNumber(GetDlgItem(hDlg, nIDDlgItem), bSigned, 0);\
     var = GetDlgItemInt(hDlg, nIDDlgItem, NULL, bSigned);\
     if (var < min)\
@@ -680,7 +680,7 @@ static void CheckControlTextIsNumber(HWND hDlgItem, int bSigned, int iDecimalPla
     else if (var > max)\
         var = max;\
     SetDlgItemInt(hDlg, nIDDlgItem, var, bSigned);\
-}
+} while (0)
 
 static int get_extension_index(const char *filename, const char *list)
 {
