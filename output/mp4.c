@@ -6,6 +6,8 @@
  * Authors: Laurent Aimar <fenrir@via.ecp.fr>
  *          Loren Merritt <lorenm@u.washington.edu>
  *          Yusuke Nakamura <muken.the.vfrmaniac@gmail.com>
+ *          Takashi Hirata <silverfilain@gmail.com>
+ *          golgol7777 <golgol7777@gmail.com>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -42,42 +44,47 @@ if( cond )\
 #define MP4_FAIL_IF_ERR_EX( cond, ... )\
 if( cond )\
 {\
-    destruct_mp4_hnd( p_mp4 );\
-    free( p_mp4 );\
+    remove_mp4_hnd( p_mp4 );\
     MP4_LOG_ERROR( __VA_ARGS__ );\
     return -1;\
 }
 
+/*******************/
+
 typedef struct
 {
     isom_root_t *p_root;
-    isom_sample_t *p_sample;
+    int brand_3gpp;
     uint32_t i_track;
     uint32_t i_sample_entry;
     uint64_t i_time_inc;
     int64_t i_start_offset;
+    uint32_t i_sei_size;
+    uint8_t *p_sei_buffer;
     int i_numframe;
 } mp4_hnd_t;
 
-static void destruct_mp4_hnd( hnd_t handle )
+/*******************/
+
+static void remove_mp4_hnd( hnd_t handle )
 {
     mp4_hnd_t *p_mp4 = handle;
+    if( !p_mp4 )
+        return;
+    if( p_mp4->p_sei_buffer )
+    {
+        free( p_mp4->p_sei_buffer );
+        p_mp4->p_sei_buffer = NULL;
+    }
     if( p_mp4->p_root )
     {
         isom_destroy_root( p_mp4->p_root );
         p_mp4->p_root = NULL;
     }
-    if( p_mp4->p_sample )
-    {
-        if( p_mp4->p_sample->data )
-        {
-            free( p_mp4->p_sample->data );
-            p_mp4->p_sample->data = NULL;
-        }
-        free( p_mp4->p_sample );
-        p_mp4->p_sample = NULL;
-    }
+    free( p_mp4 );
 }
+
+/*******************/
 
 static int close_file( hnd_t handle, int64_t largest_pts, int64_t second_largest_pts )
 {
@@ -88,10 +95,10 @@ static int close_file( hnd_t handle, int64_t largest_pts, int64_t second_largest
 
     if( p_mp4->p_root )
     {
-        /* Add the last sample_delta. */
+        /* Flush the rest of samples and add the last sample_delta. */
         uint32_t last_delta = largest_pts - second_largest_pts;
-        MP4_LOG_IF_ERR( isom_set_last_sample_delta( p_mp4->p_root, p_mp4->i_track, (last_delta ? last_delta : 1) * p_mp4->i_time_inc ),
-                        "failed to set last sample's duration.\n" );
+        MP4_LOG_IF_ERR( isom_flush_pooled_samples( p_mp4->p_root, p_mp4->i_track, (last_delta ? last_delta : 1) * p_mp4->i_time_inc ),
+                        "failed to flush the rest of samples.\n" );
 
         /*
          * Declare the explicit time-line mapping.
@@ -123,11 +130,9 @@ static int close_file( hnd_t handle, int64_t largest_pts, int64_t second_largest
 
         /* Write media data size here. */
         MP4_LOG_IF_ERR( isom_write_mdat_size( p_mp4->p_root ), "failed to write mdat size.\n" );
-
-        destruct_mp4_hnd( p_mp4 ); /* including isom_destroy_root( p_mp4->p_root ); */
     }
 
-    free( p_mp4 );
+    remove_mp4_hnd( p_mp4 ); /* including isom_destroy_root( p_mp4->p_root ); */
 
     return 0;
 }
@@ -147,15 +152,18 @@ static int open_file( char *psz_filename, hnd_t *p_handle )
     MP4_FAIL_IF_ERR( !p_mp4, "failed to allocate memory for muxer information.\n" );
     memset( p_mp4, 0, sizeof(mp4_hnd_t) );
 
-    p_mp4->p_sample = isom_create_sample();
-    MP4_FAIL_IF_ERR_EX( !p_mp4->p_sample, "failed to create sample struct for video.\n" );
-
     p_mp4->p_root = isom_create_root( psz_filename );
     MP4_FAIL_IF_ERR_EX( !p_mp4->p_root, "failed to create root.\n" );
 
     /* FIXME: I think this does not make sense at all. track number must be retrieved in some other way.  */
     p_mp4->i_track = 1 + isom_add_mandatory_boxes( p_mp4->p_root, ISOM_HDLR_TYPE_VISUAL );
     MP4_FAIL_IF_ERR_EX( !p_mp4->i_track, "failed to add_mandatory_boxes.\n" );
+
+    char* ext = get_filename_extension( psz_filename );
+    if( !strcmp( ext, "3gp" ) )
+        p_mp4->brand_3gpp = 1;
+    else if( !strcmp( ext, "3g2" ) )
+        p_mp4->brand_3gpp = 2;
 
     *p_handle = p_mp4;
 
@@ -205,10 +213,6 @@ static int set_param( hnd_t handle, x264_param_t *p_param )
     MP4_FAIL_IF_ERR( isom_set_track_presentation_size( p_mp4->p_root, p_mp4->i_track, dw, dh ),
                      "failed to set presentation size.\n" );
 
-    p_mp4->p_sample->data = malloc( p_param->i_width * p_param->i_height * 3 / 2 );
-    MP4_FAIL_IF_ERR( !p_mp4->p_sample->data,
-                     "failed to allocate memory for video sample's buffer.\n" );
-
     return 0;
 }
 
@@ -233,12 +237,17 @@ static int write_headers( hnd_t handle, x264_nal_t *p_nal )
     MP4_FAIL_IF_ERR( isom_add_pps_entry( p_mp4->p_root, p_mp4->i_track, p_mp4->i_sample_entry, pps, pps_size ),
                      "failed to add pps.\n" );
     /* SEI */
-    memcpy( p_mp4->p_sample->data + p_mp4->p_sample->length, sei, sei_size );
-    p_mp4->p_sample->length += sei_size;
+    p_mp4->p_sei_buffer = malloc( sei_size );
+    MP4_FAIL_IF_ERR( !p_mp4->p_sei_buffer,
+                     "failed to allocate sei transition buffer.\n" );
+    memcpy( p_mp4->p_sei_buffer, sei, sei_size );
+    p_mp4->i_sei_size = sei_size;
 
     /* Write ftyp. */
-    uint32_t brands[3] = { ISOM_BRAND_TYPE_ISOM, ISOM_BRAND_TYPE_AVC1, ISOM_BRAND_TYPE_MP42 };
-    MP4_FAIL_IF_ERR( isom_set_brands( p_mp4->p_root, brands[1], 1, brands, 2 ) || isom_write_ftyp( p_mp4->p_root ),
+    uint32_t brands[5] = { ISOM_BRAND_TYPE_ISOM, ISOM_BRAND_TYPE_MP42, ISOM_BRAND_TYPE_3GP6, ISOM_BRAND_TYPE_3G2A };
+    uint32_t minor_version = 0;
+    if( p_mp4->brand_3gpp == 2 ) minor_version = 0x00010000;
+    MP4_FAIL_IF_ERR( isom_set_brands( p_mp4->p_root, brands[1+p_mp4->brand_3gpp], minor_version, brands, 2+p_mp4->brand_3gpp ) || isom_write_ftyp( p_mp4->p_root ),
                      "failed to set brands / ftyp.\n" );
 
     /* Write mdat header. */
@@ -251,22 +260,32 @@ static int write_frame( hnd_t handle, uint8_t *p_nalu, int i_size, x264_picture_
 {
     mp4_hnd_t *p_mp4 = handle;
 
-    memcpy( p_mp4->p_sample->data + p_mp4->p_sample->length, p_nalu, i_size );
-    p_mp4->p_sample->length += i_size;
-
     if( !p_mp4->i_numframe )
         p_mp4->i_start_offset = p_picture->i_dts * -1;
 
-    p_mp4->p_sample->dts = (uint64_t)(p_picture->i_dts + p_mp4->i_start_offset) * p_mp4->i_time_inc;
-    p_mp4->p_sample->cts = (uint64_t)(p_picture->i_pts + p_mp4->i_start_offset) * p_mp4->i_time_inc;
-    p_mp4->p_sample->prop.sync_point = p_picture->b_keyframe;
-    p_mp4->p_sample->index = 1;
+    isom_sample_t *p_sample = isom_create_sample( i_size + p_mp4->i_sei_size );
+    MP4_FAIL_IF_ERR( !p_sample,
+                     "failed to create a video sample data.\n" );
+
+    if( p_mp4->p_sei_buffer )
+    {
+        memcpy( p_sample->data, p_mp4->p_sei_buffer, p_mp4->i_sei_size );
+        free( p_mp4->p_sei_buffer );
+        p_mp4->p_sei_buffer = NULL;
+    }
+
+    memcpy( p_sample->data + p_mp4->i_sei_size, p_nalu, i_size );
+    p_mp4->i_sei_size = 0;
+
+    p_sample->dts = (uint64_t)(p_picture->i_dts + p_mp4->i_start_offset) * p_mp4->i_time_inc;
+    p_sample->cts = (uint64_t)(p_picture->i_pts + p_mp4->i_start_offset) * p_mp4->i_time_inc;
+    p_sample->prop.sync_point = p_picture->b_keyframe;
+    p_sample->index = 1;
 
     /* Write data per sample. */
-    MP4_FAIL_IF_ERR( isom_write_sample( p_mp4->p_root, p_mp4->i_track, p_mp4->p_sample, 0.5 ),
+    MP4_FAIL_IF_ERR( isom_write_sample( p_mp4->p_root, p_mp4->i_track, p_sample, 0.5 ),
                      "failed to write a video frame.\n" );
 
-    p_mp4->p_sample->length = 0;
     p_mp4->i_numframe++;
 
     return i_size;

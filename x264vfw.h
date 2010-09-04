@@ -76,7 +76,7 @@
 #define COUNT_PRESET  10
 #define COUNT_TUNE    7
 #define COUNT_PROFILE 4
-#define COUNT_LEVEL   16
+#define COUNT_LEVEL   17
 #define COUNT_FOURCC  7
 
 /* Types */

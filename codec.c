@@ -68,6 +68,7 @@ const named_int_t level_table[COUNT_LEVEL] =
 {
     { "Auto", -1 },
     { "1.0",  10 },
+    { "1b",    9 },
     { "1.1",  11 },
     { "1.2",  12 },
     { "1.3",  13 },
@@ -561,7 +562,7 @@ static struct option long_options[] =
     { "no-mixed-refs",     no_argument,       NULL, 0                 },
     { "chroma-me",         no_argument,       NULL, 0                 },
     { "no-chroma-me",      no_argument,       NULL, 0                 },
-    { "8x8dct",            no_argument,       NULL, 0                 },
+    { "8x8dct",            no_argument,       NULL, '8'               },
     { "no-8x8dct",         no_argument,       NULL, 0                 },
     { "trellis",           required_argument, NULL, 't'               },
     { "fast-pskip",        no_argument,       NULL, 0                 },

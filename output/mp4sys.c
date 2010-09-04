@@ -3,7 +3,7 @@
  *****************************************************************************
  * Copyright (C) 2010 L-SMASH project
  *
- * Authors: Takashi Hirata <felidlabo AT gmail DOT com>
+ * Authors: Takashi Hirata <silverfilain AT gmail DOT com>
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -33,8 +33,6 @@
 #define MP4A_INTERNAL
 #include "mp4sys.h"
 
-#define debug_if(x) if(x)
-
 #ifdef __MINGW32__ /* FIXME: This is redundant. Should be concentrated in isom_util.h */
 #define mp4sys_fseek fseeko64
 #define mp4sys_ftell ftello64
@@ -43,127 +41,6 @@
 #define mp4sys_ftell ftell
 #endif
 
-/***************************************************************************
-    bitstream writer
-****************************************************************************/
-
-typedef struct {
-    isom_bs_t* bs;
-    uint8_t store;
-    uint8_t cache;
-} mp4sys_bits_t;
-
-void mp4sys_bits_init( mp4sys_bits_t* bits, isom_bs_t *bs )
-{
-    debug_if( !bits || !bs )
-        return;
-    bits->bs = bs;
-    bits->store = 0;
-    bits->cache = 0;
-}
-
-mp4sys_bits_t* mp4sys_bits_create( isom_bs_t *bs )
-{
-    debug_if( !bs )
-        return NULL;
-    mp4sys_bits_t* bits = (mp4sys_bits_t*)malloc( sizeof(mp4sys_bits_t) );
-    if( !bits )
-        return NULL;
-    mp4sys_bits_init( bits, bs );
-    return bits;
-}
-
-#define BITS_IN_BYTE 8
-void mp4sys_bits_align( mp4sys_bits_t *bits )
-{
-    debug_if( !bits )
-        return;
-    if( !bits->store )
-        return;
-    isom_bs_put_byte( bits->bs, bits->cache << ( BITS_IN_BYTE - bits->store ) );
-}
-
-/* Must be used ONLY for bits struct created with isom_create_bits.
-   Otherwise, just free() the bits struct. */
-void mp4sys_bits_cleanup( mp4sys_bits_t *bits )
-{
-    debug_if( !bits )
-        return;
-    mp4sys_bits_align( bits );
-    free( bits );
-}
-
-/* we can change value's type to unsigned int for 64-bit operation if needed. */
-static inline uint8_t mp4sys_bits_mask_lsb8( uint32_t value, uint32_t width )
-{
-    return (uint8_t)( value & ~( ~0U << width ) );
-}
-
-/* We can change value's type to unsigned int for 64-bit operation if needed. */
-void mp4sys_bits_put( mp4sys_bits_t *bits, uint32_t value, uint32_t width )
-{
-    debug_if( !bits || !width )
-        return;
-    if( bits->store )
-    {
-        if( bits->store + width < BITS_IN_BYTE )
-        {
-            /* cache can contain all of value's bits. */
-            bits->cache <<= width;
-            bits->cache |= mp4sys_bits_mask_lsb8( value, width );
-            bits->store += width;
-            return;
-        }
-        /* flush cache with value's some leading bits. */
-        uint32_t free_bits = BITS_IN_BYTE - bits->store;
-        bits->cache <<= free_bits;
-        bits->cache |= mp4sys_bits_mask_lsb8( value >> (width -= free_bits), free_bits );
-        isom_bs_put_byte( bits->bs, bits->cache );
-        bits->store = 0;
-        bits->cache = 0;
-    }
-    /* cache is empty here. */
-    /* byte unit operation. */
-    while( width > BITS_IN_BYTE )
-        isom_bs_put_byte( bits->bs, (uint8_t)(value >> (width -= BITS_IN_BYTE)) );
-    /* bit unit operation for residual. */
-    if( width )
-    {
-        bits->cache = mp4sys_bits_mask_lsb8( value, width );
-        bits->store = width;
-    }
-}
-
-/****
- bitstream with bytestream for adhoc operation
-****/
-
-mp4sys_bits_t* mp4sys_adhoc_bits_create()
-{
-    isom_bs_t* bs = isom_bs_create( NULL ); /* no file writing */
-    if( !bs )
-        return NULL;
-    mp4sys_bits_t* bits = mp4sys_bits_create( bs );
-    if( !bits )
-    {
-        isom_bs_cleanup( bs );
-        return NULL;
-    }
-    return bits;
-}
-
-void mp4sys_adhoc_bits_cleanup( mp4sys_bits_t* bits )
-{
-    if( !bits )
-        return;
-    isom_bs_cleanup( bits->bs );
-    mp4sys_bits_cleanup( bits );
-}
-
-void* mp4sys_bs_export_data( mp4sys_bits_t* bits, uint32_t* length )
-{
-    return isom_bs_export_data( bits->bs, length );
-}
 
 /***************************************************************************
     implementation of part of ISO/IEC 14496-3 (ISO/IEC 14496-1 relevant)
@@ -1232,27 +1109,27 @@ int mp4sys_setup_AudioSpecificConfig( mp4sys_audio_summary_t* summary )
     return 0 ;
 }
 
-/* Set AudioSpecificConfig into summary from memory block */
-int mp4sys_summary_add_AudioSpecificConfig( mp4sys_audio_summary_t* summary, void* asc, uint32_t asc_length )
+/* Copy exdata into summary from memory block */
+int mp4sys_summary_add_exdata( mp4sys_audio_summary_t* summary, void* exdata, uint32_t exdata_length )
 {
     if( !summary )
         return -1;
     /* atomic operation */
-    void* new_asc = NULL;
-    if( asc && asc_length != 0 )
+    void* new_exdata = NULL;
+    if( exdata && exdata_length != 0 )
     {
-        new_asc = malloc( asc_length );
-        if( !new_asc )
+        new_exdata = malloc( exdata_length );
+        if( !new_exdata )
             return -1;
-        memcpy( new_asc, asc, asc_length );
-        summary->exdata_length = asc_length;
+        memcpy( new_exdata, exdata, exdata_length );
+        summary->exdata_length = exdata_length;
     }
     else
         summary->exdata_length = 0;
 
     if( summary->exdata )
         free( summary->exdata );
-    summary->exdata = new_asc;
+    summary->exdata = new_exdata;
     return 0;
 }
 
@@ -1458,6 +1335,8 @@ typedef int ( *mp4sys_importer_probe )( struct mp4sys_importer_tag* importer );
 
 typedef struct
 {
+    const char*                    name;
+    int                            detectable;
     mp4sys_importer_probe          probe;
     mp4sys_importer_get_accessunit get_accessunit;
     mp4sys_importer_cleanup        cleanup;
@@ -1465,10 +1344,11 @@ typedef struct
 
 typedef struct mp4sys_importer_tag
 {
-    FILE* stream;
-    void* info; /* importer internal status information. */
+    FILE*                     stream;
+    int                       is_stdin;
+    void*                     info; /* importer internal status information. */
     mp4sys_importer_functions funcs;
-    isom_entry_list_t* summaries;
+    isom_entry_list_t*        summaries;
 } mp4sys_importer_t;
 
 /***************************************************************************
@@ -1637,14 +1517,14 @@ static mp4sys_audio_summary_t* mp4sys_adts_create_summary( mp4sys_adts_fixed_hea
     summary->samples_in_frame       = 1024;
     summary->aot                    = header->profile_ObjectType + MP4A_AUDIO_OBJECT_TYPE_AAC_MAIN;
     summary->sbr_mode               = MP4A_AAC_SBR_NOT_SPECIFIED;
-#if 0 /* FIXME: This is very unstable. So many players crash with this. */
+#if 0 /* FIXME: This is very unstable. Many players crash with this. */
     if( header->ID != 0 )
     {
         /*
          * NOTE: This ADTS seems of ISO/IEC 13818-7 (MPEG-2 AAC).
-         * It has special object_type_indications, depending on it's profile.
-         * It shall not have decoder specific information, so AudioObjectType neither.
-         * see ISO/IEC 14496-1, 8.6.7 DecoderSpecificInfo.
+         * It has special object_type_indications, depending on it's profile (Legacy Interface).
+         * If ADIF header is not available, it should not have decoder specific information, so AudioObjectType neither.
+         * see ISO/IEC 14496-1, 8.6.7 DecoderSpecificInfo and 14496-3 Subpart 9: MPEG-1/2 Audio in MPEG-4.
          */
         summary->object_type_indication = header->profile_ObjectType + MP4SYS_OBJECT_TYPE_Audio_ISO_13818_7_Main_Profile;
         summary->aot                    = MP4A_AUDIO_OBJECT_TYPE_NULL;
@@ -1827,6 +1707,7 @@ static void mp4sys_adts_cleanup( mp4sys_importer_t* importer )
         free( importer->info );
 }
 
+/* returns 0 if it seems adts. */
 static int mp4sys_adts_probe( mp4sys_importer_t* importer )
 {
     uint8_t buf[MP4SYS_ADTS_MAX_FRAME_LENGTH];
@@ -1858,7 +1739,6 @@ static int mp4sys_adts_probe( mp4sys_importer_t* importer )
     info->variable_header = variable_header;
 
     if( isom_add_entry( importer->summaries, summary ) )
-    if( !info )
     {
         free( info );
         mp4sys_cleanup_audio_summary( summary );
@@ -1870,9 +1750,386 @@ static int mp4sys_adts_probe( mp4sys_importer_t* importer )
 }
 
 const static mp4sys_importer_functions mp4sys_adts_importer = {
+    "adts",
+    1,
     mp4sys_adts_probe,
     mp4sys_adts_get_accessunit,
     mp4sys_adts_cleanup
+};
+
+/***************************************************************************
+    mp3 (Legacy Interface) importer
+***************************************************************************/
+
+static void mp4sys_mp3_cleanup( mp4sys_importer_t* importer )
+{
+    debug_if( importer && importer->info )
+        free( importer->info );
+}
+
+typedef struct
+{
+    uint16_t syncword;           /* <12> */
+    uint8_t  ID;                 /* <1> */
+    uint8_t  layer;              /* <2> */
+//  uint8_t  protection_bit;     /* <1> don't care. */
+    uint8_t  bitrate_index;      /* <4> */
+    uint8_t  sampling_frequency; /* <2> */
+    uint8_t  padding_bit;        /* <1> */
+//  uint8_t  private_bit;        /* <1> don't care. */
+    uint8_t  mode;               /* <2> */
+//  uint8_t  mode_extension;     /* <2> don't care. */
+//  uint8_t  copyright;          /* <1> don't care. */
+//  uint8_t  original_copy;      /* <1> don't care. */
+    uint8_t  emphasis;           /* <2> for error check only. */
+
+} mp4sys_mp3_header_t;
+
+static int mp4sys_mp3_parse_header( uint8_t* buf, mp4sys_mp3_header_t* header )
+{
+    /* FIXME: should we rewrite these code using bitstream reader? */
+    uint32_t data = (buf[0] << 24) | (buf[1] << 16) | (buf[2] << 8) | buf[3];
+    header->syncword           = (data >> 20) & 0xFFF; /* NOTE: don't consider what is called MPEG2.5, which last bit is 0. */
+    header->ID                 = (data >> 19) & 0x1;
+    header->layer              = (data >> 17) & 0x3;
+//  header->protection_bit     = (data >> 16) & 0x1; /* don't care. */
+    header->bitrate_index      = (data >> 12) & 0xF;
+    header->sampling_frequency = (data >> 10) & 0x3;
+    header->padding_bit        = (data >>  9) & 0x1;
+//  header->private_bit        = (data >>  8) & 0x1; /* don't care. */
+    header->mode               = (data >>  6) & 0x3;
+//  header->mode_extension     = (data >>  4) & 0x3;
+//  header->copyright          = (data >>  3) & 0x1; /* don't care. */
+//  header->original_copy      = (data >>  2) & 0x1; /* don't care. */
+    header->emphasis           = data         & 0x3; /* for error check only. */
+
+    if( header->syncword != 0xFFF )                                    return -1;
+    if( header->layer == 0x0 )                                         return -1;
+    if( header->bitrate_index == 0x0 || header->bitrate_index == 0xF ) return -1; /* FIXME: "free" bitrate is unsupported currently. */
+    if( header->sampling_frequency == 0x3)                             return -1;
+    if( header->emphasis == 0x2)                                       return -1;
+    return 0;
+}
+
+#define MP4SYS_MP3_MAX_FRAME_LENGTH (1152*(16/8)*2)
+#define MP4SYS_MP3_HEADER_LENGTH    4
+#define MP4SYS_MODE_IS_2CH( mode )  (!!~(mode))
+#define MP4SYS_LAYER_I              0x3
+
+static const uint32_t mp4sys_mp3_frequency_tbl[2][3] = {
+    { 22050, 24000, 16000 }, /* MPEG-2 BC audio */
+    { 44100, 48000, 32000 }  /* MPEG-1 audio */
+};
+
+static mp4sys_audio_summary_t* mp4sys_mp3_create_summary( mp4sys_mp3_header_t* header, int legacy_mode )
+{
+    mp4sys_audio_summary_t* summary = (mp4sys_audio_summary_t*)malloc( sizeof(mp4sys_audio_summary_t) );
+    if( !summary )
+        return NULL;
+    memset( summary, 0, sizeof(mp4sys_audio_summary_t) );
+    summary->object_type_indication = header->ID ? MP4SYS_OBJECT_TYPE_Audio_ISO_11172_3 : MP4SYS_OBJECT_TYPE_Audio_ISO_13818_3;
+    summary->stream_type            = MP4SYS_STREAM_TYPE_AudioStream;
+    summary->max_au_length          = MP4SYS_MP3_MAX_FRAME_LENGTH;
+    summary->frequency              = mp4sys_mp3_frequency_tbl[header->ID][header->sampling_frequency];
+    summary->channels               = MP4SYS_MODE_IS_2CH( header->mode ) + 1;
+    summary->bit_depth              = 16;
+    summary->samples_in_frame       = header->layer == MP4SYS_LAYER_I ? 384 : 1152;
+    summary->aot                    = MP4A_AUDIO_OBJECT_TYPE_Layer_1 + (MP4SYS_LAYER_I - header->layer); /* no effect with Legacy Interface. */
+    summary->sbr_mode               = MP4A_AAC_SBR_NOT_SPECIFIED; /* no effect */
+    summary->exdata                 = NULL;
+    summary->exdata_length          = 0;
+#if 0 /* FIXME: This is very unstable. Many players crash with this. */
+    if( !legacy_mode )
+    {
+        summary->object_type_indication = MP4SYS_OBJECT_TYPE_Audio_ISO_14496_3;
+        if( mp4sys_setup_AudioSpecificConfig( summary ) )
+        {
+            mp4sys_cleanup_audio_summary( summary );
+            return NULL;
+        }
+    }
+#endif
+    return summary;
+}
+
+typedef enum
+{
+    MP4SYS_MP3_ERROR  = -1,
+    MP4SYS_MP3_OK     = 0,
+    MP4SYS_MP3_CHANGE = 1,
+    MP4SYS_MP3_EOF    = 2
+} mp4sys_mp3_status;
+
+typedef struct
+{
+    mp4sys_mp3_status   status;
+    mp4sys_mp3_header_t header;
+    uint8_t             raw_header[MP4SYS_MP3_HEADER_LENGTH];
+} mp4sys_mp3_info_t;
+
+static int mp4sys_mp3_get_accessunit( mp4sys_importer_t* importer, uint32_t track_number , void* userbuf, uint32_t *size )
+{
+    debug_if( !importer || !importer->info || !userbuf || !size )
+        return -1;
+    if( !importer->info || track_number != 1 )
+        return -1;
+    mp4sys_mp3_info_t* info = (mp4sys_mp3_info_t*)importer->info;
+    mp4sys_mp3_header_t* header = (mp4sys_mp3_header_t*)&info->header;
+    mp4sys_mp3_status current_status = info->status;
+
+    const uint32_t bitrate_tbl[2][3][16] = {
+        {   /* MPEG-2 BC audio */
+            { 0,  8, 16, 24,  32,  40,  48,  56,  64,  80,  96, 112, 128, 144, 160, 0 }, /* Layer III */
+            { 0,  8, 16, 24,  32,  40,  48,  56,  64,  80,  96, 112, 128, 144, 160, 0 }, /* Layer II  */
+            { 0, 32, 48, 56,  64,  80,  96, 112, 128, 144, 160, 176, 192, 224, 256, 0 }  /* Layer I   */
+        },
+        {   /* MPEG-1 audio */
+            { 0, 32, 40, 48,  56,  64,  80,  96, 112, 128, 160, 192, 224, 256, 320, 0 }, /* Layer III */
+            { 0, 32, 48, 56,  64,  80,  96, 112, 128, 160, 192, 224, 256, 320, 384, 0 }, /* Layer II  */
+            { 0, 32, 64, 96, 128, 160, 192, 224, 256, 288, 320, 352, 384, 416, 448, 0 }  /* Layer I   */
+        }
+    };
+    uint32_t bitrate = bitrate_tbl[header->ID][header->layer-1][header->bitrate_index];
+    uint32_t frequency = mp4sys_mp3_frequency_tbl[header->ID][header->sampling_frequency];
+    debug_if( bitrate == 0 || frequency == 0 )
+        return -1;
+    uint32_t frame_size;
+    if( header->layer == MP4SYS_LAYER_I )
+    {
+        /* mp1's 'slot' is 4 bytes unit. see 11172-3, 2.4.2.1 Audio Sequence General. */
+        frame_size = ( 12 * 1000 * bitrate / frequency + header->padding_bit ) * 4;
+    }
+    else
+    {
+        /* mp2/3's 'slot' is 1 bytes unit. */
+        frame_size = 144 * 1000 * bitrate / frequency + header->padding_bit;
+    }
+
+    if( current_status == MP4SYS_MP3_ERROR || frame_size <= 4 || *size < frame_size )
+        return -1;
+    if( current_status == MP4SYS_MP3_EOF )
+    {
+        *size = 0;
+        return 0;
+    }
+    if( current_status == MP4SYS_MP3_CHANGE )
+    {
+        mp4sys_audio_summary_t* summary = mp4sys_mp3_create_summary( header, 1 ); /* FIXME: use legacy mode. */
+        if( !summary )
+            return -1;
+        isom_entry_t* entry = isom_get_entry( importer->summaries, track_number );
+        if( !entry || !entry->data )
+            return -1;
+        mp4sys_cleanup_audio_summary( entry->data );
+        entry->data = summary;
+    }
+    /* read a frame's data. */
+    memcpy( userbuf, info->raw_header, MP4SYS_MP3_HEADER_LENGTH );
+    frame_size -= MP4SYS_MP3_HEADER_LENGTH;
+    if( fread( ((uint8_t*)userbuf)+MP4SYS_MP3_HEADER_LENGTH, 1, frame_size, importer->stream ) != frame_size )
+    {
+        info->status = MP4SYS_MP3_ERROR;
+        return -1;
+    }
+    *size = MP4SYS_MP3_HEADER_LENGTH + frame_size;
+
+    /* now we succeeded to read current frame, so "return" takes 0 always below. */
+    /* preparation for next frame */
+
+    uint8_t buf[MP4SYS_MP3_HEADER_LENGTH];
+    size_t ret = fread( buf, 1, MP4SYS_MP3_HEADER_LENGTH, importer->stream );
+    if( ret == 0 )
+    {
+        info->status = MP4SYS_MP3_EOF;
+        return 0;
+    }
+    if( ret == 1 && *buf == 0x00 )
+    {
+        /* NOTE: ugly hack for mp1 stream created with SCMPX. */
+        info->status = MP4SYS_MP3_EOF;
+        return 0;
+    }
+    if( ret != MP4SYS_MP3_HEADER_LENGTH )
+    {
+        info->status = MP4SYS_MP3_ERROR;
+        return 0;
+    }
+
+    mp4sys_mp3_header_t new_header = {0};
+    if( mp4sys_mp3_parse_header( buf, &new_header ) )
+    {
+        info->status = MP4SYS_MP3_ERROR;
+        return 0;
+    }
+    memcpy( info->raw_header, buf, MP4SYS_MP3_HEADER_LENGTH );
+
+    /* currently UNsupported "change(s)". */
+    if( header->layer != new_header.layer /* This means change of object_type_indication with Legacy Interface. */
+        || header->sampling_frequency != new_header.sampling_frequency ) /* This may change timescale. */
+    {
+        info->status = MP4SYS_MP3_ERROR;
+        return 0;
+    }
+
+    /* currently supported "change(s)". */
+    if( MP4SYS_MODE_IS_2CH( header->mode ) != MP4SYS_MODE_IS_2CH( new_header.mode ) )
+        info->status = MP4SYS_MP3_CHANGE;
+    else
+        info->status = MP4SYS_MP3_OK; /* no change which matters to mp4 muxing was found */
+    info->header = new_header;
+    return 0;
+}
+
+static int mp4sys_mp3_probe( mp4sys_importer_t* importer )
+{
+    uint8_t buf[MP4SYS_MP3_HEADER_LENGTH];
+    if( fread( buf, 1, MP4SYS_MP3_HEADER_LENGTH, importer->stream ) != MP4SYS_MP3_HEADER_LENGTH )
+        return -1;
+
+    mp4sys_mp3_header_t header = {0};
+    if( mp4sys_mp3_parse_header( buf, &header ) )
+        return -1;
+
+    /* now the stream seems valid mp3 */
+
+    mp4sys_audio_summary_t* summary = mp4sys_mp3_create_summary( &header, 1 ); /* FIXME: use legacy mode. */
+    if( !summary )
+        return -1;
+
+    /* importer status */
+    mp4sys_mp3_info_t* info = malloc( sizeof(mp4sys_mp3_info_t) );
+    if( !info )
+    {
+        mp4sys_cleanup_audio_summary( summary );
+        return -1;
+    }
+    memset( info, 0, sizeof(mp4sys_mp3_info_t) );
+    info->status = MP4SYS_MP3_OK;
+    info->header = header;
+    memcpy( info->raw_header, buf, MP4SYS_MP3_HEADER_LENGTH );
+
+    if( isom_add_entry( importer->summaries, summary ) )
+    {
+        free( info );
+        mp4sys_cleanup_audio_summary( summary );
+        return -1;
+    }
+    importer->info = info;
+
+    return 0;
+}
+
+const static mp4sys_importer_functions mp4sys_mp3_importer = {
+    "MPEG-1/2BC_Audio_Legacy",
+    1,
+    mp4sys_mp3_probe,
+    mp4sys_mp3_get_accessunit,
+    mp4sys_mp3_cleanup
+};
+
+/***************************************************************************
+    AMR-NB storage format importer
+    http://www.ietf.org/rfc/rfc3267.txt 5. AMR and AMR-WB Storage Format
+***************************************************************************/
+static int mp4sys_amrnb_get_accessunit( mp4sys_importer_t* importer, uint32_t track_number , void* userbuf, uint32_t *size )
+{
+    debug_if( !importer || !userbuf || !size )
+        return -1;
+    if( track_number != 1 )
+        return -1;
+
+    uint8_t* buf = userbuf;
+    if( fread( buf, 1, 1, importer->stream ) == 0 )
+    {
+        /* EOF */
+        *size = 0;
+        return 0;
+    }
+    uint8_t FT = (*buf >> 3) & 0x0F;
+
+    /* AMR-NB has varieties of frame-size table like this. so I'm not sure yet. */
+    const int frame_size[] = { 13, 14, 16, 18, 20, 21, 27, 32, 5, 5, 5, 5, 0, 0, 0, 1 };
+    int read_size = frame_size[FT];
+    if( read_size == 0 || *size < read_size-- )
+        return -1;
+    if( read_size == 0 )
+        return 0;
+    if( fread( buf+1, 1, read_size, importer->stream ) != read_size )
+        return -1;
+    *size = read_size + 1;
+    return 0;
+}
+
+#define MP4SYS_DAMR_LENGTH 17
+
+int mp4sys_amrnb_create_damr( mp4sys_audio_summary_t *summary )
+{
+    isom_bs_t* bs = isom_bs_create( NULL ); /* no file writing */
+    if( !bs )
+        return -1;
+    isom_bs_put_be32( bs, MP4SYS_DAMR_LENGTH );
+    isom_bs_put_bytes( bs, "damr", 4 ); /* FIXME: corresponding to ISOM_BOX_TYPE_DAMR defined in isom.h */
+    /* NOTE: These are specific to each codec vendor, but we're surely not a vendor.
+              Using dummy data. */
+    isom_bs_put_be32( bs, 0x20202020 ); /* vendor */
+    isom_bs_put_byte( bs, 0 );          /* decoder_version */
+
+    /* NOTE: Using safe value for these settings, maybe sub-optimal. */
+    isom_bs_put_be16( bs, 0x83FF );     /* mode_set, represents for possibly existing frame-type (0x83FF == all). */
+    isom_bs_put_byte( bs, 1 );          /* mode_change_period */
+    isom_bs_put_byte( bs, 1 );          /* frames_per_sample */
+
+    if( summary->exdata )
+        free( summary->exdata );
+    summary->exdata = isom_bs_export_data( bs, &summary->exdata_length );
+    isom_bs_cleanup( bs );
+    if( !summary->exdata )
+        return -1;
+    summary->exdata_length = MP4SYS_DAMR_LENGTH;
+    return 0;
+}
+
+#define MP4SYS_AMRNB_STORAGE_MAGIC_LENGTH 6
+
+static int mp4sys_amrnb_probe( mp4sys_importer_t* importer )
+{
+    uint8_t buf[MP4SYS_AMRNB_STORAGE_MAGIC_LENGTH];
+    if( fread( buf, 1, MP4SYS_AMRNB_STORAGE_MAGIC_LENGTH, importer->stream ) != MP4SYS_AMRNB_STORAGE_MAGIC_LENGTH )
+        return -1;
+    if( memcmp( buf, "#!AMR\n", MP4SYS_AMRNB_STORAGE_MAGIC_LENGTH ) )
+        return -1;
+    mp4sys_audio_summary_t* summary = malloc( sizeof(mp4sys_audio_summary_t) );
+    memset( summary, 0, sizeof(mp4sys_audio_summary_t) );
+    if( !summary )
+        return -1;
+    /* FIXME: Using a workaround for L-SMASH's structure issue.
+              This summary cannot provide enough information to determine isom_codec_code without this.
+              isom_codec_code cannot be a member of summary, because inclusion of isom.h is a cycling reference. */
+    summary->object_type_indication = MP4SYS_OBJECT_TYPE_PRIV_SAMR_AUDIO; /* FIXME: private OTI. */
+    summary->stream_type            = MP4SYS_STREAM_TYPE_AudioStream;
+    summary->exdata                 = NULL; /* to be set in mp4sys_amrnb_create_damr() */
+    summary->exdata_length          = 0;    /* to be set in mp4sys_amrnb_create_damr() */
+    summary->max_au_length          = 32;
+    summary->aot                    = MP4A_AUDIO_OBJECT_TYPE_NULL; /* no effect */
+    summary->frequency              = 8000;
+    summary->channels               = 1;
+    summary->bit_depth              = 16;
+    summary->samples_in_frame       = 160;
+    summary->sbr_mode               = MP4A_AAC_SBR_NOT_SPECIFIED; /* no effect */
+    if( mp4sys_amrnb_create_damr( summary ) || isom_add_entry( importer->summaries, summary ) )
+    {
+        mp4sys_cleanup_audio_summary( summary );
+        return -1;
+    }
+    return 0;
+}
+
+const static mp4sys_importer_functions mp4sys_amrnb_importer = {
+    "amrnb",
+    1,
+    mp4sys_amrnb_probe,
+    mp4sys_amrnb_get_accessunit,
+    NULL
 };
 
 /***************************************************************************
@@ -1882,6 +2139,8 @@ const static mp4sys_importer_functions mp4sys_adts_importer = {
 /******** importer listing table ********/
 const static mp4sys_importer_functions* mp4sys_importer_tbl[] = {
     &mp4sys_adts_importer,
+    &mp4sys_mp3_importer,
+    &mp4sys_amrnb_importer,
     NULL,
 };
 
@@ -1890,7 +2149,7 @@ void mp4sys_importer_close( mp4sys_importer_t* importer )
 {
     if( !importer )
         return;
-    if( importer->stream )
+    if( !importer->is_stdin && importer->stream )
         fclose( importer->stream );
     if( importer->funcs.cleanup )
         importer->funcs.cleanup( importer );
@@ -1899,15 +2158,31 @@ void mp4sys_importer_close( mp4sys_importer_t* importer )
     free( importer );
 }
 
-mp4sys_importer_t* mp4sys_importer_open( char* identifier )
+mp4sys_importer_t* mp4sys_importer_open( const char* identifier, const char* format )
 {
+    if( identifier == NULL )
+        return NULL;
+
+    int auto_detect = ( format == NULL || !strcmp( format, "auto" ) );
     mp4sys_importer_t* importer = (mp4sys_importer_t*)malloc( sizeof(mp4sys_importer_t) );
     if( !importer )
         return NULL;
     memset( importer, 0, sizeof(mp4sys_importer_t) );
-    if( (importer->stream = fopen( identifier, "rb" )) == NULL )
+
+    if( !strcmp( identifier, "-" ) )
     {
-        free( importer );
+        /* special treatment for stdin */
+        if( auto_detect )
+        {
+            free( importer );
+            return NULL;
+        }
+        importer->stream = stdin;
+        importer->is_stdin = 1;
+    }
+    else if( (importer->stream = fopen( identifier, "rb" )) == NULL )
+    {
+        mp4sys_importer_close( importer );
         return NULL;
     }
     importer->summaries = isom_create_entry_list();
@@ -1916,9 +2191,31 @@ mp4sys_importer_t* mp4sys_importer_open( char* identifier )
         mp4sys_importer_close( importer );
         return NULL;
     }
+    /* find importer */
     const mp4sys_importer_functions* funcs;
-    for( int i = 0; (funcs = mp4sys_importer_tbl[i]) && funcs->probe && funcs->probe( importer ); i++ )
-        mp4sys_fseek( importer->stream, 0, SEEK_SET );
+    if( auto_detect )
+    {
+        /* just rely on detector. */
+        for( int i = 0; (funcs = mp4sys_importer_tbl[i]) != NULL; i++ )
+        {
+            if( !funcs->detectable )
+                continue;
+            if( !funcs->probe( importer ) || mp4sys_fseek( importer->stream, 0, SEEK_SET ) )
+                break;
+        }
+    }
+    else
+    {
+        /* needs name matching. */
+        for( int i = 0; (funcs = mp4sys_importer_tbl[i]) != NULL; i++ )
+        {
+            if( strcmp( funcs->name, format ) )
+                continue;
+            if( funcs->probe( importer ) )
+                funcs = NULL;
+            break;
+        }
+    }
     if( !funcs )
     {
         mp4sys_importer_close( importer );
@@ -1949,7 +2246,7 @@ mp4sys_audio_summary_t* mp4sys_duplicate_audio_summary( mp4sys_importer_t* impor
     memcpy( summary, src_summary, sizeof(mp4sys_audio_summary_t) );
     summary->exdata = NULL;
     summary->exdata_length = 0;
-    if( mp4sys_summary_add_AudioSpecificConfig( summary, src_summary->exdata, src_summary->exdata_length ) )
+    if( mp4sys_summary_add_exdata( summary, src_summary->exdata, src_summary->exdata_length ) )
     {
         free( summary );
         return NULL;

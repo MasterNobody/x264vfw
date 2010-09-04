@@ -1611,7 +1611,7 @@ static void Help(char *buffer, int longhelp)
     H2( "      --no-mixed-refs         Don't decide references on a per partition basis\r\n" );
     H2( "      --no-chroma-me          Ignore chroma in motion estimation\r\n" );
     H1( "      --no-8x8dct             Disable adaptive spatial transform size\r\n" );
-    H1( "  -t, --trellis <integer>     Trellis RD quantization. Requires CABAC. [%d]\r\n"
+    H1( "  -t, --trellis <integer>     Trellis RD quantization. [%d]\r\n"
         "                                  - 0: disabled\r\n"
         "                                  - 1: enabled only on the final encode of a MB\r\n"
         "                                  - 2: enabled on all mode decisions\r\n", defaults->analyse.i_trellis );

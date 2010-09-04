@@ -3,7 +3,7 @@
  *****************************************************************************
  * Copyright (C) 2010 L-SMASH project
  *
- * Authors: Takashi Hirata <felidlabo AT gmail DOT com>
+ * Authors: Takashi Hirata <silverfilain AT gmail DOT com>
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -98,6 +98,12 @@ typedef enum {
     MP4SYS_OBJECT_TYPE_DTSE_AUDIO                         = 0xAC, /* DTS Express low bit rate audio, also known as DTS LBR */
 
     MP4SYS_OBJECT_TYPE_SQCP_AUDIO                         = 0xE1, /* 13K Voice */
+
+    /* FIXME: These OTIs are L-SMASH specific and for internal use. Shall never be coded into output.
+              This is a workaround for L-SMASH's structure issue and will be resolved in the future.
+              See mp4sys_amrnb_probe(). */
+    MP4SYS_OBJECT_TYPE_PRIV_SAMR_AUDIO                    = 0xFFE2, /* AMR-NB */
+
     MP4SYS_OBJECT_TYPE_NONE                               = 0xFF, /* no object type specified */
     /* Streams with this value with a StreamType indicating a systems stream (values 1,2,3,6,7,8,9)
        shall be treated as if the ObjectTypeIndication had been set to 0x01. */
@@ -437,18 +443,21 @@ typedef struct {
 typedef void mp4sys_importer_t;
 
 /* importing functions */
-mp4sys_importer_t* mp4sys_importer_open( char* identifier );
+mp4sys_importer_t* mp4sys_importer_open( const char* identifier, const char* format );
 void mp4sys_importer_close( mp4sys_importer_t* importer );
 int mp4sys_importer_get_access_unit( mp4sys_importer_t* importer, uint32_t track_number, void* buf, uint32_t* buf_size );
 unsigned int mp4sys_importer_get_track_count( mp4sys_importer_t* importer ); /* currently not supported */
 
-/* to facilitate to make DecoderSpecificInfo / AudioSpecificConfig */
+/* to facilitate to make exdata (typically DecoderSpecificInfo or AudioSpecificConfig). */
 int mp4sys_setup_AudioSpecificConfig( mp4sys_audio_summary_t* summary );
-int mp4sys_summary_set_AudioSpecificConfig( mp4sys_audio_summary_t* summary, void* asc, uint32_t asc_length );
+int mp4sys_amrnb_create_damr( mp4sys_audio_summary_t *summary );
+int mp4sys_summary_add_exdata( mp4sys_audio_summary_t* summary, void* exdata, uint32_t exdata_length );
+
+/* profileLevelIndication relative functions. */
 mp4sys_audioProfileLevelIndication mp4sys_get_audioProfileLevelIndication( mp4sys_audio_summary_t* summary );
 mp4sys_audioProfileLevelIndication mp4sys_max_audioProfileLevelIndication(
-	mp4sys_audioProfileLevelIndication a,
-	mp4sys_audioProfileLevelIndication b
+    mp4sys_audioProfileLevelIndication a,
+    mp4sys_audioProfileLevelIndication b
 );
 
 /* FIXME: these functions may change in the future.
