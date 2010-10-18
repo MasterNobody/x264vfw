@@ -41,6 +41,8 @@ typedef struct
     uint64_t written; /* data size written into "stream" already */
 } isom_bs_t;
 
+uint64_t isom_bs_get_pos( isom_bs_t *bs );
+void isom_bs_empty( isom_bs_t *bs );
 void isom_bs_free( isom_bs_t *bs );
 void isom_bs_alloc( isom_bs_t *bs, uint64_t size );
 isom_bs_t* isom_bs_create( char* filename );
@@ -59,13 +61,13 @@ int isom_bs_write_data( isom_bs_t *bs );
 void* isom_bs_export_data( isom_bs_t *bs, uint32_t* length );
 
 /*---- bytestream reader ----*/
-uint8_t isom_bs_read_byte( isom_bs_t *bs );
-uint8_t *isom_bs_read_bytes( isom_bs_t *bs, uint32_t size );
-uint16_t isom_bs_read_be16( isom_bs_t *bs );
-uint32_t isom_bs_read_be24( isom_bs_t *bs );
-uint32_t isom_bs_read_be32( isom_bs_t *bs );
-uint64_t isom_bs_read_be64( isom_bs_t *bs );
-int isom_bs_read_data( isom_bs_t *bs, uint64_t size );
+uint8_t isom_bs_get_byte( isom_bs_t *bs );
+uint8_t *isom_bs_get_bytes( isom_bs_t *bs, uint32_t size );
+uint16_t isom_bs_get_be16( isom_bs_t *bs );
+uint32_t isom_bs_get_be24( isom_bs_t *bs );
+uint32_t isom_bs_get_be32( isom_bs_t *bs );
+uint64_t isom_bs_get_be64( isom_bs_t *bs );
+int isom_bs_read_data( isom_bs_t *bs, uint32_t size );
 
 /*---- bitstream ----*/
 typedef struct {
@@ -76,14 +78,17 @@ typedef struct {
 
 void mp4sys_bits_init( mp4sys_bits_t* bits, isom_bs_t *bs );
 mp4sys_bits_t* mp4sys_bits_create( isom_bs_t *bs );
-void mp4sys_bits_align( mp4sys_bits_t *bits );
+void mp4sys_bits_put_align( mp4sys_bits_t *bits );
+void mp4sys_bits_get_align( mp4sys_bits_t *bits );
 void mp4sys_bits_cleanup( mp4sys_bits_t *bits );
 
 /*---- bitstream writer ----*/
 void mp4sys_bits_put( mp4sys_bits_t *bits, uint32_t value, uint32_t width );
+uint32_t mp4sys_bits_get( mp4sys_bits_t *bits, uint32_t width );
 mp4sys_bits_t* mp4sys_adhoc_bits_create();
 void mp4sys_adhoc_bits_cleanup( mp4sys_bits_t* bits );
-void* mp4sys_bs_export_data( mp4sys_bits_t* bits, uint32_t* length );
+void* mp4sys_bits_export_data( mp4sys_bits_t* bits, uint32_t* length );
+int mp4sys_bits_import_data( mp4sys_bits_t* bits, void* data, uint32_t length );
 
 /*---- list ----*/
 

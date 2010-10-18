@@ -38,7 +38,6 @@
 #endif
 
 #include "isom_util.h"
-#include "mp4sys.h"
 
 #define ISOM_MAX( a, b ) ((a) > (b) ? (a) : (b))
 #define ISOM_MIN( a, b ) ((a) < (b) ? (a) : (b))
@@ -402,6 +401,18 @@ typedef struct
     isom_entry_list_t *list;
 } isom_stss_t;
 
+/* Partial Sync Sample Box */
+typedef struct
+{
+    uint32_t sample_number;
+} isom_stps_entry_t;
+
+typedef struct
+{
+    isom_full_header_t full_header;
+    isom_entry_list_t *list;
+} isom_stps_t;
+
 /* Independent and Disposable Samples Box */
 typedef struct
 {
@@ -511,6 +522,7 @@ typedef struct
     isom_stts_t *stts;      /* Decoding Time to Sample Box */
     isom_ctts_t *ctts;      /* Composition Time to Sample Box */
     isom_stss_t *stss;      /* Sync Sample Box */
+    isom_stps_t *stps;      /* Partial Sync Sample Box / This box is defined by QuickTime file format */
     isom_sdtp_t *sdtp;      /* Independent and Disposable Samples Box */
     isom_stsc_t *stsc;      /* Sample To Chunk Box */
     isom_stsz_t *stsz;      /* Sample Size Box */
@@ -584,18 +596,20 @@ typedef isom_free_t isom_skip_t;
 /*** extended by ISO IEC 14496-14 (MP4 file format) ***/
 /* Object Descriptor Box
  * Note that this box is mandatory under 14496-1:2001 (mp41) while not mandatory under 14496-14:2003 (mp42). */
+struct mp4sys_ObjectDescriptor_t; /* FIXME: I think these structs using mp4sys should be placed in isom.c */
 typedef struct
 {
     isom_full_header_t full_header;
-    mp4sys_ObjectDescriptor_t *OD;
+    struct mp4sys_ObjectDescriptor_t *OD;
 } isom_iods_t;
 
 /** Sample Description Boxes **/
 /* ES Descriptor Box */
+struct mp4sys_ES_Descriptor_t; /* FIXME: I think these structs using mp4sys should be placed in isom.c */
 typedef struct
 {
     isom_full_header_t full_header;
-    mp4sys_ES_Descriptor_t *ES;
+    struct mp4sys_ES_Descriptor_t *ES;
 } isom_esds_t;
 
 /* MP4 Visual Sample Entry */
@@ -604,14 +618,6 @@ typedef struct
     ISOM_VISUAL_SAMPLE_ENTRY;
     isom_esds_t *esds;
 } isom_mp4v_entry_t;
-
-/* MP4 Audio Sample Entry */
-typedef struct
-{
-    ISOM_AUDIO_SAMPLE_ENTRY;
-    isom_esds_t *esds;
-    mp4sys_audioProfileLevelIndication pli; /* This is not used in mp4a box itself, but the value is specific for that. */
-} isom_mp4a_entry_t;
 
 /* Mpeg Sample Entry */
 typedef struct
@@ -705,6 +711,8 @@ typedef struct
     isom_free_t *free;      /* Free Space Box */
 
     isom_bs_t *bs;
+
+    double max_chunk_duration;      /* max duration per chunk in seconds */
 } isom_root_t;
 
 /** Track Box **/
@@ -917,6 +925,7 @@ enum qt_box_code
     QT_BOX_TYPE_LOAD = ISOM_4CC( 'l', 'o', 'a', 'd' ),
     QT_BOX_TYPE_MATT = ISOM_4CC( 'm', 'a', 't', 't' ),
     QT_BOX_TYPE_PNOT = ISOM_4CC( 'p', 'n', 'o', 't' ),
+    QT_BOX_TYPE_STPS = ISOM_4CC( 's', 't', 'p', 's' ),
 };
 
 enum isom_hdlr_code
@@ -1147,6 +1156,7 @@ enum isom_grouping_code
 typedef struct
 {
     uint8_t sync_point;
+    uint8_t partial_sync;
     uint8_t leading;
     uint8_t independent;
     uint8_t disposable;
@@ -1164,89 +1174,64 @@ typedef struct
 } isom_sample_t;
 
 
-int isom_add_dref_entry( isom_root_t *root, uint32_t trak_number, uint32_t flags, char *name, char *location );
-int isom_add_sps_entry( isom_root_t *root, uint32_t trak_number, uint32_t entry_number, uint8_t *sps, uint32_t sps_size );
-int isom_add_pps_entry( isom_root_t *root, uint32_t trak_number, uint32_t entry_number, uint8_t *pps, uint32_t pps_size );
-int isom_add_sample_entry( isom_root_t *root, uint32_t trak_number, uint32_t sample_type, void* summary );
-int isom_add_stts_entry( isom_root_t *root, uint32_t trak_number, uint32_t sample_delta );
-int isom_add_ctts_entry( isom_root_t *root, uint32_t trak_number, uint32_t sample_offset );
-int isom_add_stsc_entry( isom_root_t *root, uint32_t trak_number, uint32_t first_chunk, uint32_t samples_per_chunk, uint32_t sample_description_index );
-int isom_add_stsz_entry( isom_root_t *root, uint32_t trak_number, uint32_t entry_size );
-int isom_add_stss_entry( isom_root_t *root, uint32_t trak_number, uint32_t sample_number );
-int isom_add_co64_entry( isom_root_t *root, uint32_t trak_number, uint64_t chunk_offset );
-int isom_add_stco_entry( isom_root_t *root, uint32_t trak_number, uint64_t chunk_offset );
-int isom_add_sbgp_entry( isom_root_t *root, uint32_t trak_number, uint32_t grouping_number, uint32_t sample_count, uint32_t group_description_index );
-int isom_add_roll_group_entry( isom_root_t *root, uint32_t trak_number, uint32_t grouping_number, uint32_t description_length, int16_t roll_distance );
+int isom_add_sps_entry( isom_root_t *root, uint32_t track_ID, uint32_t entry_number, uint8_t *sps, uint32_t sps_size );
+int isom_add_pps_entry( isom_root_t *root, uint32_t track_ID, uint32_t entry_number, uint8_t *pps, uint32_t pps_size );
+int isom_add_sample_entry( isom_root_t *root, uint32_t track_ID, uint32_t sample_type, void* summary );
 
-int isom_add_btrt( isom_root_t *root, uint32_t trak_number, uint32_t entry_number );
-int isom_add_pasp( isom_root_t *root, uint32_t trak_number, uint32_t entry_number );
-int isom_add_ctts( isom_root_t *root, uint32_t trak_number );
-int isom_add_stss( isom_root_t *root, uint32_t trak_number );
-int isom_add_sdtp( isom_root_t *root, uint32_t trak_number );
-int isom_add_sbgp( isom_root_t *root, uint32_t trak_number, uint32_t grouping_type );
-int isom_add_trak( isom_root_t *root, uint32_t hdlr_type );
+int isom_add_btrt( isom_root_t *root, uint32_t track_ID, uint32_t entry_number );
 int isom_add_mdat( isom_root_t *root );
 int isom_add_free( isom_root_t *root, uint8_t *data, uint64_t data_length );
-
-void isom_remove_edts( isom_root_t *root, uint32_t trak_number );
-void isom_remove_btrt( isom_root_t *root, uint32_t trak_number, uint32_t entry_number );
-void isom_remove_ctts( isom_root_t *root, uint32_t trak_number );
-void isom_remove_stss( isom_root_t *root, uint32_t trak_number );
-void isom_remove_trak( isom_root_t *root, uint32_t trak_number );
-void isom_remove_mdat( isom_root_t *root );
-void isom_remove_free( isom_root_t *root );
 
 int isom_write_ftyp( isom_root_t *root );
 int isom_write_moov( isom_root_t *root );
 int isom_write_free( isom_root_t *root );
 
-uint32_t isom_get_trak_number( isom_trak_entry_t *trak );
-uint32_t isom_get_sample_count( isom_trak_entry_t *trak );
-uint64_t isom_get_dts( isom_stts_t *stts, uint32_t sample_number );
-uint64_t isom_get_cts( isom_stts_t *stts, isom_ctts_t *ctts, uint32_t sample_number );
-uint32_t isom_get_media_timescale( isom_root_t *root, uint32_t trak_number );
+uint32_t isom_get_media_timescale( isom_root_t *root, uint32_t track_ID );
 uint32_t isom_get_movie_timescale( isom_root_t *root );
 
 int isom_set_brands( isom_root_t *root, uint32_t major_brand, uint32_t minor_version, uint32_t *brands, uint32_t brand_count );
+int isom_set_max_chunk_duration( isom_root_t *root, double max_chunk_duration );
 int isom_set_handler( isom_trak_entry_t *trak, uint32_t handler_type, char *name );
 int isom_set_movie_timescale( isom_root_t *root, uint32_t timescale );
-int isom_set_media_timescale( isom_root_t *root, uint32_t trak_number, uint32_t timescale );
-int isom_set_track_mode( isom_root_t *root, uint32_t trak_number, uint32_t mode );
-int isom_set_track_presentation_size( isom_root_t *root, uint32_t trak_number, uint32_t width, uint32_t height );
-int isom_set_track_volume( isom_root_t *root, uint32_t trak_number, int16_t volume );
-int isom_set_sample_resolution( isom_root_t *root, uint32_t trak_number, uint32_t entry_number, uint16_t width, uint16_t height );
-int isom_set_sample_type( isom_root_t *root, uint32_t trak_number, uint32_t entry_number, uint32_t sample_type );
-int isom_set_sample_aspect_ratio( isom_root_t *root, uint32_t trak_number, uint32_t entry_number, uint32_t hSpacing, uint32_t vSpacing );
-int isom_set_avc_config( isom_root_t *root, uint32_t trak_number, uint32_t entry_number,
+int isom_set_media_timescale( isom_root_t *root, uint32_t track_ID, uint32_t timescale );
+int isom_set_track_mode( isom_root_t *root, uint32_t track_ID, uint32_t mode );
+int isom_set_track_presentation_size( isom_root_t *root, uint32_t track_ID, uint32_t width, uint32_t height );
+int isom_set_track_volume( isom_root_t *root, uint32_t track_ID, int16_t volume );
+int isom_set_sample_resolution( isom_root_t *root, uint32_t track_ID, uint32_t entry_number, uint16_t width, uint16_t height );
+int isom_set_sample_type( isom_root_t *root, uint32_t track_ID, uint32_t entry_number, uint32_t sample_type );
+int isom_set_sample_aspect_ratio( isom_root_t *root, uint32_t track_ID, uint32_t entry_number, uint32_t hSpacing, uint32_t vSpacing );
+int isom_set_avc_config( isom_root_t *root, uint32_t track_ID, uint32_t entry_number,
     uint8_t configurationVersion, uint8_t AVCProfileIndication, uint8_t profile_compatibility, uint8_t AVCLevelIndication, uint8_t lengthSizeMinusOne,
     uint8_t chroma_format, uint8_t bit_depth_luma_minus8, uint8_t bit_depth_chroma_minus8 );
-int isom_set_handler_name( isom_root_t *root, uint32_t trak_number, char *handler_name );
-int isom_set_last_sample_delta( isom_root_t *root, uint32_t trak_number, uint32_t sample_delta );
-int isom_set_language( isom_root_t *root, uint32_t trak_number, char *language );
+int isom_set_handler_name( isom_root_t *root, uint32_t track_ID, char *handler_name );
+int isom_set_last_sample_delta( isom_root_t *root, uint32_t track_ID, uint32_t sample_delta );
+int isom_set_language( isom_root_t *root, uint32_t track_ID, char *language );
+int isom_set_track_ID( isom_root_t *root, uint32_t track_ID, uint32_t new_track_ID );
 int isom_set_free( isom_root_t *root, uint8_t *data, uint64_t data_length );
 int isom_set_tyrant_chapter( isom_root_t *root, char *file_name );
 
-int isom_create_explicit_timeline_map( isom_root_t *root, uint32_t trak_number, uint64_t segment_duration, int64_t media_time, int32_t media_rate );
-int isom_modify_timeline_map( isom_root_t *root, uint32_t trak_number, uint32_t entry_number, uint64_t segment_duration, int64_t media_time, int32_t media_rate );
+int isom_create_explicit_timeline_map( isom_root_t *root, uint32_t track_ID, uint64_t segment_duration, int64_t media_time, int32_t media_rate );
+int isom_modify_timeline_map( isom_root_t *root, uint32_t track_ID, uint32_t entry_number, uint64_t segment_duration, int64_t media_time, int32_t media_rate );
 
-int isom_update_media_modification_time( isom_root_t *root, uint32_t trak_number );
-int isom_update_track_modification_time( isom_root_t *root, uint32_t trak_number );
+int isom_update_media_modification_time( isom_root_t *root, uint32_t track_ID );
+int isom_update_track_modification_time( isom_root_t *root, uint32_t track_ID );
 int isom_update_movie_modification_time( isom_root_t *root );
-int isom_update_track_duration( isom_root_t *root, uint32_t trak_number );
-int isom_update_bitrate_info( isom_root_t *root, uint32_t trak_number, uint32_t entry_number );
+int isom_update_track_duration( isom_root_t *root, uint32_t track_ID, uint32_t last_sample_delta );
+int isom_update_bitrate_info( isom_root_t *root, uint32_t track_ID, uint32_t entry_number );
 
 
-isom_root_t *isom_create_root( char *filename );
+isom_root_t *isom_create_movie( char *filename );
+uint32_t isom_create_track( isom_root_t *root, uint32_t handler_type );
 isom_sample_t *isom_create_sample( uint32_t size );
-void isom_remove_sample( isom_sample_t *sample );
-int isom_write_sample( isom_root_t *root, uint32_t trak_number, isom_sample_t *sample, double max_chunk_duration );
+void isom_delete_sample( isom_sample_t *sample );
+int isom_write_sample( isom_root_t *root, uint32_t track_ID, isom_sample_t *sample );
 int isom_write_mdat_size( isom_root_t *root );
-int isom_add_mandatory_boxes( isom_root_t *root, uint32_t hdlr_type );
-int isom_flush_pooled_samples( isom_root_t *root, uint32_t trak_number, uint32_t last_sample_delta );
+int isom_flush_pooled_samples( isom_root_t *root, uint32_t track_ID, uint32_t last_sample_delta );
 int isom_finish_movie( isom_root_t *root );
 void isom_destroy_root( isom_root_t *root );
 
-
-int isom_create_dac3_from_syncframe( mp4sys_audio_summary_t *summary, uint8_t *data, uint32_t data_length );
+void isom_delete_track( isom_root_t *root, uint32_t track_ID );
+void isom_delete_explicit_timeline_map( isom_root_t *root, uint32_t track_ID );
+void isom_delete_tyrant_chapter( isom_root_t *root );
 
 #endif

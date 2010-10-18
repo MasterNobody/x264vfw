@@ -1,7 +1,7 @@
 /*****************************************************************************
- * raw.c: x264 raw bitstream output module
+ * raw.c: raw muxer
  *****************************************************************************
- * Copyright (C) 2003-2009 x264 project
+ * Copyright (C) 2003-2010 x264 project
  *
  * Authors: Laurent Aimar <fenrir@via.ecp.fr>
  *          Loren Merritt <lorenm@u.washington.edu>
@@ -23,7 +23,7 @@
 
 #include "output.h"
 
-static int open_file( char *psz_filename, hnd_t *p_handle )
+static int open_file( char *psz_filename, hnd_t *p_handle, cli_output_opt_t *opt )
 {
     if( !strcmp( psz_filename, "-" ) )
         *p_handle = stdout;

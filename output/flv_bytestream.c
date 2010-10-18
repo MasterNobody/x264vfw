@@ -1,7 +1,9 @@
 /*****************************************************************************
- * flv_bytestream.c:
+ * flv_bytestream.c: flv muxer utilities
  *****************************************************************************
- * Copyright (C) 2009 Kieran Kunhya
+ * Copyright (C) 2009-2010 x264 project
+ *
+ * Authors: Kieran Kunhya <kieran@kunhya.com>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by

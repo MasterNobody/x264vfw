@@ -1,7 +1,9 @@
 /*****************************************************************************
- * matroska.c: x264 matroska output module
+ * matroska.c: matroska muxer
  *****************************************************************************
- * Copyright (C) 2005 Mike Matsnev
+ * Copyright (C) 2005-2010 x264 project
+ *
+ * Authors: Mike Matsnev <mike@haali.su>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -23,6 +25,8 @@
 
 typedef struct
 {
+    cli_output_opt_t opt;
+
     mk_writer *w;
 
     int width, height, d_width, d_height;
@@ -37,7 +41,7 @@ typedef struct
 
 } mkv_hnd_t;
 
-static int open_file( char *psz_filename, hnd_t *p_handle )
+static int open_file( char *psz_filename, hnd_t *p_handle, cli_output_opt_t *opt )
 {
     mkv_hnd_t *p_mkv;
 
@@ -48,6 +52,8 @@ static int open_file( char *psz_filename, hnd_t *p_handle )
         return -1;
 
     memset( p_mkv, 0, sizeof(*p_mkv) );
+
+    memcpy( &p_mkv->opt, opt, sizeof(cli_output_opt_t) );
 
     p_mkv->w = mk_create_writer( psz_filename );
     if( !p_mkv->w )
@@ -144,10 +150,10 @@ static int write_headers( hnd_t handle, x264_nal_t *p_nal )
 
     memcpy( avcC+11+sps_size, pps, pps_size );
 
-    ret = mk_writeHeader( p_mkv->w, "x264" X264_VERSION, "V_MPEG4/ISO/AVC",
-                          avcC, avcC_len, p_mkv->frame_duration, 50000,
-                          p_mkv->width, p_mkv->height,
-                          p_mkv->d_width, p_mkv->d_height, p_mkv->display_size_units );
+    ret = mk_write_header( p_mkv->w, "x264" X264_VERSION, "V_MPEG4/ISO/AVC",
+                           avcC, avcC_len, p_mkv->frame_duration, 50000,
+                           p_mkv->width, p_mkv->height,
+                           p_mkv->d_width, p_mkv->d_height, p_mkv->display_size_units );
     if( ret < 0 )
         return ret;
 

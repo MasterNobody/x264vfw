@@ -1,5 +1,5 @@
 /*****************************************************************************
- * avi.c: x264 avi output module (using libavformat)
+ * avi.c: avi muxer (using libavformat)
  *****************************************************************************
  * Copyright (C) 2010 x264 project
  *
@@ -26,6 +26,8 @@
 
 typedef struct
 {
+    cli_output_opt_t opt;
+
     AVFormatContext *mux_fc;
     AVStream *video_stm;
     uint8_t *data;
@@ -68,7 +70,7 @@ static int close_file( hnd_t handle, int64_t largest_pts, int64_t second_largest
     return 0;
 }
 
-static int open_file( char *psz_filename, hnd_t *p_handle )
+static int open_file( char *psz_filename, hnd_t *p_handle, cli_output_opt_t *opt )
 {
     avi_hnd_t *h;
     AVOutputFormat *mux_fmt;
@@ -80,11 +82,17 @@ static int open_file( char *psz_filename, hnd_t *p_handle )
         return -1;
     int b_regular = x264_is_regular_file( fh );
     fclose( fh );
-    FAIL_IF_ERR( !b_regular, "avi", "AVI output is incompatible with non-regular file `%s'\n", psz_filename )
+    if( !b_regular )
+    {
+        x264vfw_cli_log( opt->p_private, "avi", X264_LOG_ERROR, "AVI output is incompatible with non-regular file `%s'\n", psz_filename );
+        return -1;
+    }
 
     if( !(h = malloc( sizeof(avi_hnd_t) )) )
         return -1;
     memset( h, 0, sizeof(avi_hnd_t) );
+
+    memcpy( &h->opt, opt, sizeof(cli_output_opt_t) );
 
     av_register_all();
     mux_fmt = av_guess_format( "avi", NULL, NULL );

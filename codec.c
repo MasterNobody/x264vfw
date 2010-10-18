@@ -306,11 +306,29 @@ LRESULT compress_query(CODEC *codec, BITMAPINFO *lpbiInput, BITMAPINFO *lpbiOutp
     return ICERR_OK;
 }
 
-/* Logging and printing for within the cli system */
-static void x264_cli_vlog(const char *name, int i_level, const char *fmt, va_list arg)
+/* Log functions */
+void x264vfw_log_create(CODEC *codec)
+{
+    x264vfw_log_destroy(codec);
+    if (codec->config.i_log_level > 0)
+        codec->hCons = CreateDialog(g_hInst, MAKEINTRESOURCE(IDD_LOG), GetDesktopWindow(), callback_log);
+}
+
+void x264vfw_log_destroy(CODEC *codec)
+{
+    if (codec->hCons)
+    {
+        DestroyWindow(codec->hCons);
+        codec->hCons = NULL;
+    }
+    codec->b_visible = FALSE;
+}
+
+static void x264vfw_log_internal(CODEC *codec, const char *name, int i_level, const char *psz_fmt, va_list arg)
 {
     char msg[1024];
     char *s_level;
+
     switch (i_level)
     {
         case X264_LOG_ERROR:
@@ -334,87 +352,21 @@ static void x264_cli_vlog(const char *name, int i_level, const char *fmt, va_lis
             break;
     }
     sprintf(msg, "%s [%s]: ", name, s_level);
-    vsprintf(msg+strlen(msg), fmt, arg);
+    vsprintf(msg + strlen(msg), psz_fmt, arg);
+
     DPRINTF(msg);
-}
 
-void x264_cli_log(const char *name, int i_level, const char *fmt, ...)
-{
-    va_list arg;
-    va_start(arg, fmt);
-    x264_cli_vlog(name, i_level, fmt, arg);
-    va_end(arg);
-}
-
-void x264_cli_printf(int i_level, const char *fmt, ...)
-{
-    va_list arg;
-    va_start(arg, fmt);
-    DVPRINTF(fmt, arg);
-    va_end(arg);
-}
-
-/* Logging and printing for within the vfw system */
-void x264_log_vfw_create(CODEC *codec)
-{
-    x264_log_vfw_destroy(codec);
-    if (codec->config.i_log_level > 0)
-        codec->hCons = CreateDialog(g_hInst, MAKEINTRESOURCE(IDD_LOG), GetDesktopWindow(), callback_log);
-}
-
-void x264_log_vfw_destroy(CODEC *codec)
-{
-    if (codec->hCons)
+    if (codec && codec->hCons)
     {
-        DestroyWindow(codec->hCons);
-        codec->hCons = NULL;
-    }
-    codec->b_visible = FALSE;
-}
+        int  idx;
+        HWND h_console;
+        HDC  hdc;
 
-static void x264_log_vfw(void *p_private, int i_level, const char *psz_fmt, va_list arg)
-{
-    char  msg[1024];
-    char  *s_level;
-    int   idx;
-    CODEC *codec = p_private;
-    HWND  h_console;
-    HDC   hdc;
+        /* Strip final linefeeds (required) */
+        idx = strlen(msg) - 1;
+        while (idx >= 0 && (msg[idx] == '\n' || msg[idx] == '\r'))
+            msg[idx--] = 0;
 
-    x264_cli_vlog("x264vfw", i_level, psz_fmt, arg);
-
-    switch (i_level)
-    {
-        case X264_LOG_ERROR:
-            s_level = "error";
-            break;
-
-        case X264_LOG_WARNING:
-            s_level = "warning";
-            break;
-
-        case X264_LOG_INFO:
-            s_level = "info";
-            break;
-
-        case X264_LOG_DEBUG:
-            s_level = "debug";
-            break;
-
-        default:
-            s_level = "unknown";
-            break;
-    }
-    sprintf(msg, "x264vfw [%s]: ", s_level);
-    vsprintf(msg+strlen(msg), psz_fmt, arg);
-
-    /* Strip final linefeeds (required) */
-    idx = strlen(msg) - 1;
-    while (idx >= 0 && (msg[idx] == '\n' || msg[idx] == '\r'))
-        msg[idx--] = 0;
-
-    if (codec->hCons)
-    {
         if (!codec->b_visible)
         {
             ShowWindow(codec->hCons, SW_SHOWNORMAL);
@@ -444,19 +396,40 @@ static void x264_log_vfw(void *p_private, int i_level, const char *psz_fmt, va_l
     }
 }
 
+void x264vfw_cli_log(void *p_private, const char *name, int i_level, const char *psz_fmt, ...)
+{
+    CODEC *codec = p_private;
+    va_list arg;
+    va_start(arg, psz_fmt);
+    if (codec && (i_level <= codec->config.i_log_level - 1))
+    {
+        if (!codec->hCons)
+            x264vfw_log_create(codec);
+        x264vfw_log_internal(codec, name, i_level, psz_fmt, arg);
+    }
+    else
+        x264vfw_log_internal(NULL, name, i_level, psz_fmt, arg);
+    va_end(arg);
+}
+
 void x264vfw_log(CODEC *codec, int i_level, const char *psz_fmt, ...)
 {
     va_list arg;
     va_start(arg, psz_fmt);
-    if (i_level <= codec->config.i_log_level - 1)
+    if (codec && (i_level <= codec->config.i_log_level - 1))
     {
         if (!codec->hCons)
-            x264_log_vfw_create(codec);
-        x264_log_vfw(codec, i_level, psz_fmt, arg);
+            x264vfw_log_create(codec);
+        x264vfw_log_internal(codec, "x264vfw", i_level, psz_fmt, arg);
     }
     else
-        x264_cli_vlog("x264vfw", i_level, psz_fmt, arg);
+        x264vfw_log_internal(NULL, "x264vfw", i_level, psz_fmt, arg);
     va_end(arg);
+}
+
+static void x264vfw_log_callback(void *p_private, int i_level, const char *psz_fmt, va_list arg)
+{
+    x264vfw_log_internal(p_private, "x264vfw", i_level, psz_fmt, arg);
 }
 
 enum {
@@ -484,6 +457,7 @@ enum {
     OPT_TIMEBASE,
     OPT_PULLDOWN,
     OPT_LOG_LEVEL,
+    OPT_DTS_COMPRESSION,
 #if X264VFW_USE_VIRTUALDUB_HACK
     OPT_VD_HACK,
 #endif
@@ -493,161 +467,162 @@ enum {
 static char short_options[] = "8A:B:b:f:hI:i:m:o:p:q:r:t:Vvw";
 static struct option long_options[] =
 {
-    { "help",              no_argument,       NULL, 'h'               },
-    { "longhelp",          no_argument,       NULL, OPT_LONGHELP      },
-    { "fullhelp",          no_argument,       NULL, OPT_FULLHELP      },
-    { "version",           no_argument,       NULL, 'V'               },
-    { "profile",           required_argument, NULL, OPT_PROFILE       },
-    { "preset",            required_argument, NULL, OPT_PRESET        },
-    { "tune",              required_argument, NULL, OPT_TUNE          },
-    { "fast-firstpass",    no_argument,       NULL, OPT_FASTFIRSTPASS },
-    { "slow-firstpass",    no_argument,       NULL, OPT_SLOWFIRSTPASS },
-    { "bitrate",           required_argument, NULL, 'B'               },
-    { "bframes",           required_argument, NULL, 'b'               },
-    { "b-adapt",           required_argument, NULL, 0                 },
-    { "no-b-adapt",        no_argument,       NULL, 0                 },
-    { "b-bias",            required_argument, NULL, 0                 },
-    { "b-pyramid",         required_argument, NULL, 0                 },
-    { "open-gop",          required_argument, NULL, 0                 },
-    { "min-keyint",        required_argument, NULL, 'i'               },
-    { "keyint",            required_argument, NULL, 'I'               },
-    { "intra-refresh",     no_argument,       NULL, 0                 },
-    { "scenecut",          required_argument, NULL, 0                 },
-    { "no-scenecut",       no_argument,       NULL, 0                 },
-    { "nf",                no_argument,       NULL, 0                 },
-    { "no-deblock",        no_argument,       NULL, 0                 },
-    { "filter",            required_argument, NULL, 0                 },
-    { "deblock",           required_argument, NULL, 'f'               },
-    { "interlaced",        no_argument,       NULL, 0                 },
-    { "no-interlaced",     no_argument,       NULL, 0                 },
-    { "tff",               no_argument,       NULL, 0                 },
-    { "bff",               no_argument,       NULL, 0                 },
-    { "constrained-intra", no_argument,       NULL, 0                 },
-    { "cabac",             no_argument,       NULL, 0                 },
-    { "no-cabac",          no_argument,       NULL, 0                 },
-    { "qp",                required_argument, NULL, 'q'               },
-    { "qpmin",             required_argument, NULL, 0                 },
-    { "qpmax",             required_argument, NULL, 0                 },
-    { "qpstep",            required_argument, NULL, 0                 },
-    { "crf",               required_argument, NULL, 0                 },
-    { "rc-lookahead",      required_argument, NULL, 0                 },
-    { "ref",               required_argument, NULL, 'r'               },
-    { "asm",               required_argument, NULL, 0                 },
-    { "no-asm",            no_argument,       NULL, 0                 },
-    { "sar",               required_argument, NULL, 0                 },
-    { "fps",               required_argument, NULL, 0                 },
-    { "frames",            required_argument, NULL, OPT_FRAMES        },
-    { "seek",              required_argument, NULL, OPT_SEEK          },
-    { "output",            required_argument, NULL, 'o'               },
-    { "muxer",             required_argument, NULL, OPT_MUXER         },
-    { "demuxer",           required_argument, NULL, OPT_DEMUXER       },
-    { "stdout",            required_argument, NULL, OPT_MUXER         },
-    { "stdin",             required_argument, NULL, OPT_DEMUXER       },
-    { "index",             required_argument, NULL, OPT_INDEX         },
-    { "analyse",           required_argument, NULL, 0                 },
-    { "partitions",        required_argument, NULL, 'A'               },
-    { "direct",            required_argument, NULL, 0                 },
-    { "weightb",           no_argument,       NULL, 'w'               },
-    { "no-weightb",        no_argument,       NULL, 0                 },
-    { "weightp",           required_argument, NULL, 0                 },
-    { "me",                required_argument, NULL, 0                 },
-    { "merange",           required_argument, NULL, 0                 },
-    { "mvrange",           required_argument, NULL, 0                 },
-    { "mvrange-thread",    required_argument, NULL, 0                 },
-    { "subme",             required_argument, NULL, 'm'               },
-    { "psy-rd",            required_argument, NULL, 0                 },
-    { "psy",               no_argument,       NULL, 0                 },
-    { "no-psy",            no_argument,       NULL, 0                 },
-    { "mixed-refs",        no_argument,       NULL, 0                 },
-    { "no-mixed-refs",     no_argument,       NULL, 0                 },
-    { "chroma-me",         no_argument,       NULL, 0                 },
-    { "no-chroma-me",      no_argument,       NULL, 0                 },
-    { "8x8dct",            no_argument,       NULL, '8'               },
-    { "no-8x8dct",         no_argument,       NULL, 0                 },
-    { "trellis",           required_argument, NULL, 't'               },
-    { "fast-pskip",        no_argument,       NULL, 0                 },
-    { "no-fast-pskip",     no_argument,       NULL, 0                 },
-    { "dct-decimate",      no_argument,       NULL, 0                 },
-    { "no-dct-decimate",   no_argument,       NULL, 0                 },
-    { "aq-strength",       required_argument, NULL, 0                 },
-    { "aq-mode",           required_argument, NULL, 0                 },
-    { "deadzone-inter",    required_argument, NULL, 0                 },
-    { "deadzone-intra",    required_argument, NULL, 0                 },
-    { "level",             required_argument, NULL, 0                 },
-    { "ratetol",           required_argument, NULL, 0                 },
-    { "vbv-maxrate",       required_argument, NULL, 0                 },
-    { "vbv-bufsize",       required_argument, NULL, 0                 },
-    { "vbv-init",          required_argument, NULL, 0                 },
-    { "crf-max",           required_argument, NULL, 0                 },
-    { "ipratio",           required_argument, NULL, 0                 },
-    { "pbratio",           required_argument, NULL, 0                 },
-    { "chroma-qp-offset",  required_argument, NULL, 0                 },
-    { "pass",              required_argument, NULL, 'p'               },
-    { "stats",             required_argument, NULL, 0                 },
-    { "qcomp",             required_argument, NULL, 0                 },
-    { "mbtree",            no_argument,       NULL, 0                 },
-    { "no-mbtree",         no_argument,       NULL, 0                 },
-    { "qblur",             required_argument, NULL, 0                 },
-    { "cplxblur",          required_argument, NULL, 0                 },
-    { "zones",             required_argument, NULL, 0                 },
-    { "qpfile",            required_argument, NULL, OPT_QPFILE        },
-    { "threads",           required_argument, NULL, 0                 },
-    { "sliced-threads",    no_argument,       NULL, 0                 },
-    { "no-sliced-threads", no_argument,       NULL, 0                 },
-    { "slice-max-size",    required_argument, NULL, 0                 },
-    { "slice-max-mbs",     required_argument, NULL, 0                 },
-    { "slices",            required_argument, NULL, 0                 },
-    { "thread-input",      no_argument,       NULL, OPT_THREAD_INPUT  },
-    { "sync-lookahead",    required_argument, NULL, 0                 },
-    { "deterministic",     no_argument,       NULL, 0                 },
-    { "non-deterministic", no_argument,       NULL, 0                 },
-    { "psnr",              no_argument,       NULL, 0                 },
-    { "no-psnr",           no_argument,       NULL, 0                 },
-    { "ssim",              no_argument,       NULL, 0                 },
-    { "no-ssim",           no_argument,       NULL, 0                 },
-    { "quiet",             no_argument,       NULL, OPT_QUIET         },
-    { "verbose",           no_argument,       NULL, 'v'               },
-    { "log-level",         required_argument, NULL, OPT_LOG_LEVEL     },
-    { "progress",          no_argument,       NULL, OPT_NOPROGRESS    },
-    { "no-progress",       no_argument,       NULL, OPT_NOPROGRESS    },
-    { "visualize",         no_argument,       NULL, OPT_VISUALIZE     },
-    { "dump-yuv",          required_argument, NULL, 0                 },
-    { "sps-id",            required_argument, NULL, 0                 },
-    { "aud",               no_argument,       NULL, 0                 },
-    { "no-aud",            no_argument,       NULL, 0                 },
-    { "nr",                required_argument, NULL, 0                 },
-    { "cqm",               required_argument, NULL, 0                 },
-    { "cqmfile",           required_argument, NULL, 0                 },
-    { "cqm4",              required_argument, NULL, 0                 },
-    { "cqm4i",             required_argument, NULL, 0                 },
-    { "cqm4iy",            required_argument, NULL, 0                 },
-    { "cqm4ic",            required_argument, NULL, 0                 },
-    { "cqm4p",             required_argument, NULL, 0                 },
-    { "cqm4py",            required_argument, NULL, 0                 },
-    { "cqm4pc",            required_argument, NULL, 0                 },
-    { "cqm8",              required_argument, NULL, 0                 },
-    { "cqm8i",             required_argument, NULL, 0                 },
-    { "cqm8p",             required_argument, NULL, 0                 },
-    { "overscan",          required_argument, NULL, 0                 },
-    { "videoformat",       required_argument, NULL, 0                 },
-    { "fullrange",         required_argument, NULL, 0                 },
-    { "colorprim",         required_argument, NULL, 0                 },
-    { "transfer",          required_argument, NULL, 0                 },
-    { "colormatrix",       required_argument, NULL, 0                 },
-    { "chromaloc",         required_argument, NULL, 0                 },
-    { "force-cfr",         no_argument,       NULL, 0                 },
-    { "tcfile-in",         required_argument, NULL, OPT_TCFILE_IN     },
-    { "tcfile-out",        required_argument, NULL, OPT_TCFILE_OUT    },
-    { "timebase",          required_argument, NULL, OPT_TIMEBASE      },
-    { "pic-struct",        no_argument,       NULL, 0                 },
-    { "nal-hrd",           required_argument, NULL, 0                 },
-    { "pulldown",          required_argument, NULL, OPT_PULLDOWN      },
-    { "fake-interlaced",   no_argument,       NULL, 0                 },
+    { "help",              no_argument,       NULL, 'h'                 },
+    { "longhelp",          no_argument,       NULL, OPT_LONGHELP        },
+    { "fullhelp",          no_argument,       NULL, OPT_FULLHELP        },
+    { "version",           no_argument,       NULL, 'V'                 },
+    { "profile",           required_argument, NULL, OPT_PROFILE         },
+    { "preset",            required_argument, NULL, OPT_PRESET          },
+    { "tune",              required_argument, NULL, OPT_TUNE            },
+    { "fast-firstpass",    no_argument,       NULL, OPT_FASTFIRSTPASS   },
+    { "slow-firstpass",    no_argument,       NULL, OPT_SLOWFIRSTPASS   },
+    { "bitrate",           required_argument, NULL, 'B'                 },
+    { "bframes",           required_argument, NULL, 'b'                 },
+    { "b-adapt",           required_argument, NULL, 0                   },
+    { "no-b-adapt",        no_argument,       NULL, 0                   },
+    { "b-bias",            required_argument, NULL, 0                   },
+    { "b-pyramid",         required_argument, NULL, 0                   },
+    { "open-gop",          required_argument, NULL, 0                   },
+    { "min-keyint",        required_argument, NULL, 'i'                 },
+    { "keyint",            required_argument, NULL, 'I'                 },
+    { "intra-refresh",     no_argument,       NULL, 0                   },
+    { "scenecut",          required_argument, NULL, 0                   },
+    { "no-scenecut",       no_argument,       NULL, 0                   },
+    { "nf",                no_argument,       NULL, 0                   },
+    { "no-deblock",        no_argument,       NULL, 0                   },
+    { "filter",            required_argument, NULL, 0                   },
+    { "deblock",           required_argument, NULL, 'f'                 },
+    { "interlaced",        no_argument,       NULL, 0                   },
+    { "no-interlaced",     no_argument,       NULL, 0                   },
+    { "tff",               no_argument,       NULL, 0                   },
+    { "bff",               no_argument,       NULL, 0                   },
+    { "constrained-intra", no_argument,       NULL, 0                   },
+    { "cabac",             no_argument,       NULL, 0                   },
+    { "no-cabac",          no_argument,       NULL, 0                   },
+    { "qp",                required_argument, NULL, 'q'                 },
+    { "qpmin",             required_argument, NULL, 0                   },
+    { "qpmax",             required_argument, NULL, 0                   },
+    { "qpstep",            required_argument, NULL, 0                   },
+    { "crf",               required_argument, NULL, 0                   },
+    { "rc-lookahead",      required_argument, NULL, 0                   },
+    { "ref",               required_argument, NULL, 'r'                 },
+    { "asm",               required_argument, NULL, 0                   },
+    { "no-asm",            no_argument,       NULL, 0                   },
+    { "sar",               required_argument, NULL, 0                   },
+    { "fps",               required_argument, NULL, 0                   },
+    { "frames",            required_argument, NULL, OPT_FRAMES          },
+    { "seek",              required_argument, NULL, OPT_SEEK            },
+    { "output",            required_argument, NULL, 'o'                 },
+    { "muxer",             required_argument, NULL, OPT_MUXER           },
+    { "demuxer",           required_argument, NULL, OPT_DEMUXER         },
+    { "stdout",            required_argument, NULL, OPT_MUXER           },
+    { "stdin",             required_argument, NULL, OPT_DEMUXER         },
+    { "index",             required_argument, NULL, OPT_INDEX           },
+    { "analyse",           required_argument, NULL, 0                   },
+    { "partitions",        required_argument, NULL, 'A'                 },
+    { "direct",            required_argument, NULL, 0                   },
+    { "weightb",           no_argument,       NULL, 'w'                 },
+    { "no-weightb",        no_argument,       NULL, 0                   },
+    { "weightp",           required_argument, NULL, 0                   },
+    { "me",                required_argument, NULL, 0                   },
+    { "merange",           required_argument, NULL, 0                   },
+    { "mvrange",           required_argument, NULL, 0                   },
+    { "mvrange-thread",    required_argument, NULL, 0                   },
+    { "subme",             required_argument, NULL, 'm'                 },
+    { "psy-rd",            required_argument, NULL, 0                   },
+    { "psy",               no_argument,       NULL, 0                   },
+    { "no-psy",            no_argument,       NULL, 0                   },
+    { "mixed-refs",        no_argument,       NULL, 0                   },
+    { "no-mixed-refs",     no_argument,       NULL, 0                   },
+    { "chroma-me",         no_argument,       NULL, 0                   },
+    { "no-chroma-me",      no_argument,       NULL, 0                   },
+    { "8x8dct",            no_argument,       NULL, '8'                 },
+    { "no-8x8dct",         no_argument,       NULL, 0                   },
+    { "trellis",           required_argument, NULL, 't'                 },
+    { "fast-pskip",        no_argument,       NULL, 0                   },
+    { "no-fast-pskip",     no_argument,       NULL, 0                   },
+    { "dct-decimate",      no_argument,       NULL, 0                   },
+    { "no-dct-decimate",   no_argument,       NULL, 0                   },
+    { "aq-strength",       required_argument, NULL, 0                   },
+    { "aq-mode",           required_argument, NULL, 0                   },
+    { "deadzone-inter",    required_argument, NULL, 0                   },
+    { "deadzone-intra",    required_argument, NULL, 0                   },
+    { "level",             required_argument, NULL, 0                   },
+    { "ratetol",           required_argument, NULL, 0                   },
+    { "vbv-maxrate",       required_argument, NULL, 0                   },
+    { "vbv-bufsize",       required_argument, NULL, 0                   },
+    { "vbv-init",          required_argument, NULL, 0                   },
+    { "crf-max",           required_argument, NULL, 0                   },
+    { "ipratio",           required_argument, NULL, 0                   },
+    { "pbratio",           required_argument, NULL, 0                   },
+    { "chroma-qp-offset",  required_argument, NULL, 0                   },
+    { "pass",              required_argument, NULL, 'p'                 },
+    { "stats",             required_argument, NULL, 0                   },
+    { "qcomp",             required_argument, NULL, 0                   },
+    { "mbtree",            no_argument,       NULL, 0                   },
+    { "no-mbtree",         no_argument,       NULL, 0                   },
+    { "qblur",             required_argument, NULL, 0                   },
+    { "cplxblur",          required_argument, NULL, 0                   },
+    { "zones",             required_argument, NULL, 0                   },
+    { "qpfile",            required_argument, NULL, OPT_QPFILE          },
+    { "threads",           required_argument, NULL, 0                   },
+    { "sliced-threads",    no_argument,       NULL, 0                   },
+    { "no-sliced-threads", no_argument,       NULL, 0                   },
+    { "slice-max-size",    required_argument, NULL, 0                   },
+    { "slice-max-mbs",     required_argument, NULL, 0                   },
+    { "slices",            required_argument, NULL, 0                   },
+    { "thread-input",      no_argument,       NULL, OPT_THREAD_INPUT    },
+    { "sync-lookahead",    required_argument, NULL, 0                   },
+    { "deterministic",     no_argument,       NULL, 0                   },
+    { "non-deterministic", no_argument,       NULL, 0                   },
+    { "psnr",              no_argument,       NULL, 0                   },
+    { "no-psnr",           no_argument,       NULL, 0                   },
+    { "ssim",              no_argument,       NULL, 0                   },
+    { "no-ssim",           no_argument,       NULL, 0                   },
+    { "quiet",             no_argument,       NULL, OPT_QUIET           },
+    { "verbose",           no_argument,       NULL, 'v'                 },
+    { "log-level",         required_argument, NULL, OPT_LOG_LEVEL       },
+    { "progress",          no_argument,       NULL, OPT_NOPROGRESS      },
+    { "no-progress",       no_argument,       NULL, OPT_NOPROGRESS      },
+    { "visualize",         no_argument,       NULL, OPT_VISUALIZE       },
+    { "dump-yuv",          required_argument, NULL, 0                   },
+    { "sps-id",            required_argument, NULL, 0                   },
+    { "aud",               no_argument,       NULL, 0                   },
+    { "no-aud",            no_argument,       NULL, 0                   },
+    { "nr",                required_argument, NULL, 0                   },
+    { "cqm",               required_argument, NULL, 0                   },
+    { "cqmfile",           required_argument, NULL, 0                   },
+    { "cqm4",              required_argument, NULL, 0                   },
+    { "cqm4i",             required_argument, NULL, 0                   },
+    { "cqm4iy",            required_argument, NULL, 0                   },
+    { "cqm4ic",            required_argument, NULL, 0                   },
+    { "cqm4p",             required_argument, NULL, 0                   },
+    { "cqm4py",            required_argument, NULL, 0                   },
+    { "cqm4pc",            required_argument, NULL, 0                   },
+    { "cqm8",              required_argument, NULL, 0                   },
+    { "cqm8i",             required_argument, NULL, 0                   },
+    { "cqm8p",             required_argument, NULL, 0                   },
+    { "overscan",          required_argument, NULL, 0                   },
+    { "videoformat",       required_argument, NULL, 0                   },
+    { "fullrange",         required_argument, NULL, 0                   },
+    { "colorprim",         required_argument, NULL, 0                   },
+    { "transfer",          required_argument, NULL, 0                   },
+    { "colormatrix",       required_argument, NULL, 0                   },
+    { "chromaloc",         required_argument, NULL, 0                   },
+    { "force-cfr",         no_argument,       NULL, 0                   },
+    { "tcfile-in",         required_argument, NULL, OPT_TCFILE_IN       },
+    { "tcfile-out",        required_argument, NULL, OPT_TCFILE_OUT      },
+    { "timebase",          required_argument, NULL, OPT_TIMEBASE        },
+    { "pic-struct",        no_argument,       NULL, 0                   },
+    { "nal-hrd",           required_argument, NULL, 0                   },
+    { "pulldown",          required_argument, NULL, OPT_PULLDOWN        },
+    { "fake-interlaced",   no_argument,       NULL, 0                   },
+    { "dts-compress",      no_argument,       NULL, OPT_DTS_COMPRESSION },
 #if X264VFW_USE_VIRTUALDUB_HACK
-    { "vd-hack",           no_argument,       NULL, OPT_VD_HACK       },
+    { "vd-hack",           no_argument,       NULL, OPT_VD_HACK         },
 #endif
-    { "no-output",         no_argument,       NULL, OPT_NO_OUTPUT     },
-    { NULL,                0,                 NULL, 0                 }
+    { "no-output",         no_argument,       NULL, OPT_NO_OUTPUT       },
+    { NULL,                0,                 NULL, 0                   }
 };
 
 #define MAX_ARG_NUM (MAX_CMDLINE / 2 + 1)
@@ -774,7 +749,6 @@ static int select_output(const char *muxer, char *filename, x264_param_t *param,
     {
         codec->cli_output = mp4_output;
         param->b_annexb = 0;
-        param->b_dts_compress = 0;
         param->b_repeat_headers = 0;
         if (param->i_nal_hrd == X264_NAL_HRD_CBR)
         {
@@ -786,14 +760,12 @@ static int select_output(const char *muxer, char *filename, x264_param_t *param,
     {
         codec->cli_output = mkv_output;
         param->b_annexb = 0;
-        param->b_dts_compress = 0;
         param->b_repeat_headers = 0;
     }
     else if (!strcasecmp(ext, "flv"))
     {
         codec->cli_output = flv_output;
         param->b_annexb = 0;
-        param->b_dts_compress = 1;
         param->b_repeat_headers = 0;
     }
     else if (!strcasecmp(ext, "avi"))
@@ -801,7 +773,6 @@ static int select_output(const char *muxer, char *filename, x264_param_t *param,
 #if defined(HAVE_FFMPEG)
         codec->cli_output = avi_output;
         param->b_annexb = 1;
-        param->b_dts_compress = 0;
         param->b_repeat_headers = 1;
         if (param->b_vfr_input)
         {
@@ -952,6 +923,10 @@ static int parse_cmdline(int argc, char **argv, x264_param_t *param, CODEC *code
                 codec->b_user_ref = TRUE;
                 goto generic_option;
 
+            case OPT_DTS_COMPRESSION:
+                codec->cli_output_opt.use_dts_compress = 1;
+                break;
+
 #if X264VFW_USE_VIRTUALDUB_HACK
             case OPT_VD_HACK:
                 codec->b_use_vd_hack = TRUE;
@@ -1017,12 +992,11 @@ LRESULT compress_begin(CODEC *codec, BITMAPINFO *lpbiInput, BITMAPINFO *lpbiOutp
     int argc;
     char stat_out[MAX_STATS_SIZE];
     char stat_in[MAX_STATS_SIZE];
-    uint32_t prev_timebase_den;
 
     /* Destroy previous handle */
     compress_end(codec);
     /* Create log window (or clear it) */
-    x264_log_vfw_create(codec);
+    x264vfw_log_create(codec);
 
     if (compress_query(codec, lpbiInput, lpbiOutput) != ICERR_OK)
     {
@@ -1173,13 +1147,15 @@ LRESULT compress_begin(CODEC *codec, BITMAPINFO *lpbiInput, BITMAPINFO *lpbiOutp
     codec->b_cli_output = FALSE;
     codec->cli_output_file = config->i_output_mode == 1 ? config->output_file : "-";
     codec->cli_output_muxer = muxer_names[0];
+    memset(&codec->cli_output_opt, 0, sizeof(cli_output_t));
+    codec->cli_output_opt.p_private = codec;
 
     /* Sample Aspect Ratio */
     param.vui.i_sar_width = config->i_sar_width;
     param.vui.i_sar_height = config->i_sar_height;
 
     /* Debug */
-    param.pf_log = x264_log_vfw;
+    param.pf_log = x264vfw_log_callback;
     param.p_log_private = codec;
     param.i_log_level = config->i_log_level - 1;
     param.analyse.b_psnr = config->i_encoding_type > 0 && config->i_log_level >= 3 && config->b_psnr;
@@ -1230,16 +1206,13 @@ LRESULT compress_begin(CODEC *codec, BITMAPINFO *lpbiInput, BITMAPINFO *lpbiOutp
     if (!codec->b_cli_output)
     {
         param.b_annexb = 1;
-        param.b_dts_compress = 0;
         param.b_repeat_headers = 1; /* VFW needs SPS/PPS before each keyframe */
     }
-    if (!codec->b_no_output && codec->b_cli_output && codec->cli_output.open_file(codec->cli_output_file, &codec->cli_hout) < 0)
+    if (!codec->b_no_output && codec->b_cli_output && codec->cli_output.open_file(codec->cli_output_file, &codec->cli_hout, &codec->cli_output_opt) < 0)
     {
         x264vfw_log(codec, X264_LOG_ERROR, "could not open output file: '%s'\n", codec->cli_output_file);
         goto fail;
     }
-
-    prev_timebase_den = param.i_timebase_den / gcd( param.i_timebase_num, param.i_timebase_den ); 
 
     /* Open the encoder */
     codec->h = x264_encoder_open(&param);
@@ -1250,8 +1223,6 @@ LRESULT compress_begin(CODEC *codec, BITMAPINFO *lpbiInput, BITMAPINFO *lpbiOutp
     }
 
     x264_encoder_parameters(codec->h, &param);
-
-    codec->dts_compress_multiplier = param.i_timebase_den / prev_timebase_den;
 
     if (codec->b_cli_output)
     {
@@ -1494,8 +1465,8 @@ LRESULT compress_end(CODEC *codec)
     {
         if (codec->cli_hout)
         {
-            int64_t largest_pts = (codec->conv_pic.i_pts - 1) * codec->dts_compress_multiplier;
-            int64_t second_largest_pts = largest_pts - codec->dts_compress_multiplier;
+            int64_t largest_pts = codec->conv_pic.i_pts - 1;
+            int64_t second_largest_pts = largest_pts - 1;
             codec->cli_output.close_file(codec->cli_hout, largest_pts, second_largest_pts);
             codec->cli_hout = NULL;
         }

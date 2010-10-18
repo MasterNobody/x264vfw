@@ -54,16 +54,6 @@ static inline char *get_filename_extension( char *filename )
     return ext;
 }
 
-void x264_cli_log( const char *name, int i_level, const char *fmt, ... );
-void x264_cli_printf( int i_level, const char *fmt, ... );
-
-#define RETURN_IF_ERR( cond, name, ret, ... )\
-if( cond )\
-{\
-    x264_cli_log( name, X264_LOG_ERROR, __VA_ARGS__ );\
-    return ret;\
-}
-
-#define FAIL_IF_ERR( cond, name, ... ) RETURN_IF_ERR( cond, name, -1, __VA_ARGS__ )
+void x264vfw_cli_log( void *p_private, const char *name, int i_level, const char *psz_fmt, ... );
 
 #endif

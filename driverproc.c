@@ -136,7 +136,7 @@ LRESULT WINAPI attribute_align_arg DriverProc(DWORD_PTR dwDriverId, HDRVR hDrive
 #if defined(HAVE_FFMPEG) && X264VFW_USE_DECODER
             decompress_end(codec);
 #endif
-            x264_log_vfw_destroy(codec);
+            x264vfw_log_destroy(codec);
             free(codec);
             return DRV_OK;
 

@@ -542,10 +542,10 @@ static void dlg_update_items(CONFIG_DATA *cfg_data)
 /* Assigns tooltips */
 static BOOL CALLBACK enum_tooltips(HWND hDlg, LPARAM lParam)
 {
-    char help[1024];
+    char temp[1024];
 
     /* The tooltip for a control is named the same as the control itself */
-    if (LoadString(g_hInst, GetDlgCtrlID(hDlg), help, 1024))
+    if (LoadString(g_hInst, GetDlgCtrlID(hDlg), temp, 1024))
     {
         TOOLINFO ti;
 
@@ -553,7 +553,7 @@ static BOOL CALLBACK enum_tooltips(HWND hDlg, LPARAM lParam)
         ti.uFlags = TTF_SUBCLASS | TTF_IDISHWND;
         ti.hwnd = GetParent(hDlg);
         ti.uId = (LPARAM)hDlg;
-        ti.lpszText = help;
+        ti.lpszText = temp;
 
         SendMessage((HWND)lParam, TTM_ADDTOOL, 0, (LPARAM)&ti);
     }
@@ -1375,7 +1375,7 @@ static char *stringify_names(char *buf, const char * const names[])
     return buf;
 }
 
-static void Help(char *buffer, int longhelp)
+static void help(char *buffer, int longhelp)
 {
 #define H0(...) do { sprintf(buffer, __VA_ARGS__); buffer += strlen(buffer); } while (0)
 #define H1(...) if (longhelp>=1) do { sprintf(buffer, __VA_ARGS__); buffer += strlen(buffer); } while (0)
@@ -1694,6 +1694,7 @@ static void Help(char *buffer, int longhelp)
     H2( "      --sps-id <integer>      Set SPS and PPS id numbers [%d]\r\n", defaults->i_sps_id );
     H2( "      --aud                   Use access unit delimiters\r\n" );
     H2( "      --force-cfr             Force constant framerate timestamp generation\r\n" );
+    H2( "      --dts-compress          Eliminate initial delay with container DTS hack\r\n" );
     H0( "\r\n" );
 }
 
@@ -1755,7 +1756,7 @@ INT_PTR CALLBACK callback_help(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lPara
             if (buffer)
             {
                 strcpy(buffer, "");
-                Help(buffer, 2);
+                help(buffer, 2);
                 SendDlgItemMessage(hDlg, HELP_IDC_CONSOLE, WM_SETTEXT, 0, (LPARAM)buffer);
                 free(buffer);
             }

@@ -3,7 +3,8 @@
  *****************************************************************************
  * Copyright (C) 2010 L-SMASH project
  *
- * Authors: Takashi Hirata <silverfilain AT gmail DOT com>
+ * Authors: Takashi Hirata <silverfilain@gmail.com>
+ * Contributors: Yusuke Nakamura <muken.the.vfrmaniac@gmail.com>
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -103,6 +104,7 @@ typedef enum {
               This is a workaround for L-SMASH's structure issue and will be resolved in the future.
               See mp4sys_amrnb_probe(). */
     MP4SYS_OBJECT_TYPE_PRIV_SAMR_AUDIO                    = 0xFFE2, /* AMR-NB */
+    MP4SYS_OBJECT_TYPE_PRIV_SAWB_AUDIO                    = 0xFFE3, /* AMR-WB */
 
     MP4SYS_OBJECT_TYPE_NONE                               = 0xFF, /* no object type specified */
     /* Streams with this value with a StreamType indicating a systems stream (values 1,2,3,6,7,8,9)
@@ -450,7 +452,8 @@ unsigned int mp4sys_importer_get_track_count( mp4sys_importer_t* importer ); /* 
 
 /* to facilitate to make exdata (typically DecoderSpecificInfo or AudioSpecificConfig). */
 int mp4sys_setup_AudioSpecificConfig( mp4sys_audio_summary_t* summary );
-int mp4sys_amrnb_create_damr( mp4sys_audio_summary_t *summary );
+int mp4sys_amr_create_damr( mp4sys_audio_summary_t *summary );
+int mp4sys_create_dac3_from_syncframe( mp4sys_audio_summary_t *summary, uint8_t *data, uint32_t data_length );
 int mp4sys_summary_add_exdata( mp4sys_audio_summary_t* summary, void* exdata, uint32_t exdata_length );
 
 /* profileLevelIndication relative functions. */

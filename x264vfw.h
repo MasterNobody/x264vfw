@@ -204,8 +204,8 @@ typedef struct
     char *cli_output_file;
     const char *cli_output_muxer;
     cli_output_t cli_output;
+    cli_output_opt_t cli_output_opt;
     hnd_t cli_hout;
-    int dts_compress_multiplier;
 
     /* Decoder */
 #if defined(HAVE_FFMPEG) && X264VFW_USE_DECODER
@@ -243,8 +243,8 @@ LRESULT decompress_end(CODEC *);
 #endif
 
 /* Log functions */
-void x264_log_vfw_create(CODEC *codec);
-void x264_log_vfw_destroy(CODEC *codec);
+void x264vfw_log_create(CODEC *codec);
+void x264vfw_log_destroy(CODEC *codec);
 void x264vfw_log(CODEC *codec, int i_level, const char *psz_fmt, ...);
 
 /* Config functions */
