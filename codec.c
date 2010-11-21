@@ -1147,7 +1147,7 @@ LRESULT compress_begin(CODEC *codec, BITMAPINFO *lpbiInput, BITMAPINFO *lpbiOutp
     codec->b_cli_output = FALSE;
     codec->cli_output_file = config->i_output_mode == 1 ? config->output_file : "-";
     codec->cli_output_muxer = muxer_names[0];
-    memset(&codec->cli_output_opt, 0, sizeof(cli_output_t));
+    memset(&codec->cli_output_opt, 0, sizeof(cli_output_opt_t));
     codec->cli_output_opt.p_private = codec;
 
     /* Sample Aspect Ratio */
