@@ -432,7 +432,8 @@ static void x264vfw_log_callback(void *p_private, int i_level, const char *psz_f
     x264vfw_log_internal(p_private, "x264vfw", i_level, psz_fmt, arg);
 }
 
-enum {
+enum
+{
     OPT_FRAMES = 256,
     OPT_SEEK,
     OPT_QPFILE,
@@ -614,9 +615,11 @@ static struct option long_options[] =
     { "tcfile-out",        required_argument, NULL, OPT_TCFILE_OUT      },
     { "timebase",          required_argument, NULL, OPT_TIMEBASE        },
     { "pic-struct",        no_argument,       NULL, 0                   },
+    { "crop-rect",         required_argument, NULL, 0                   },
     { "nal-hrd",           required_argument, NULL, 0                   },
     { "pulldown",          required_argument, NULL, OPT_PULLDOWN        },
     { "fake-interlaced",   no_argument,       NULL, 0                   },
+    { "frame-packing",     required_argument, NULL, 0                   },
     { "dts-compress",      no_argument,       NULL, OPT_DTS_COMPRESSION },
 #if X264VFW_USE_VIRTUALDUB_HACK
     { "vd-hack",           no_argument,       NULL, OPT_VD_HACK         },

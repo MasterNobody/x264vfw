@@ -102,7 +102,8 @@ CONFIG := $(shell cat config.h)
 SRC_C += output/raw.c
 SRC_C += output/matroska.c output/matroska_ebml.c
 SRC_C += output/flv.c output/flv_bytestream.c
-SRC_C += output/mp4.c output/isom.c output/isom_util.c output/mp4sys.c
+SRC_C += output/mp4.c
+SRC_C += $(addprefix output/mp4/, isom.c utils.c mp4sys.c mp4a.c summary.c importer.c)
 
 ifeq ($(HAVE_FFMPEG),yes)
 SRC_C += output/avi.c

@@ -4,7 +4,6 @@
  * Copyright (C) 2010 L-SMASH project
  *
  * Authors: Takashi Hirata <silverfilain@gmail.com>
- * Contributors: Yusuke Nakamura <muken.the.vfrmaniac@gmail.com>
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -162,60 +161,6 @@ typedef enum {
     MP4SYS_SCENE_PLI_NONE_REQUIRED = 0xFF, /* no scene capability required */
 } mp4sys_sceneProfileLevelIndication;
 
-/* 14496-3 1.5.2.4 audioProfileLevelIndication Table 1.12 audioProfileLevelIndication values */
-typedef enum {
-    MP4SYS_AUDIO_PLI_Reserved                 = 0x00, /* Reserved for ISO use */
-    MP4SYS_AUDIO_PLI_Main_L1                  = 0x01, /* Main Audio Profile L1 */
-    MP4SYS_AUDIO_PLI_Main_L2                  = 0x02, /* Main Audio Profile L2 */
-    MP4SYS_AUDIO_PLI_Main_L3                  = 0x03, /* Main Audio Profile L3 */
-    MP4SYS_AUDIO_PLI_Main_L4                  = 0x04, /* Main Audio Profile L4 */
-    MP4SYS_AUDIO_PLI_Scalable_L1              = 0x05, /* Scalable Audio Profile L1 */
-    MP4SYS_AUDIO_PLI_Scalable_L2              = 0x06, /* Scalable Audio Profile L2 */
-    MP4SYS_AUDIO_PLI_Scalable_L3              = 0x07, /* Scalable Audio Profile L3 */
-    MP4SYS_AUDIO_PLI_Scalable_L4              = 0x08, /* Scalable Audio Profile L4 */
-    MP4SYS_AUDIO_PLI_Speech_L1                = 0x09, /* Speech Audio Profile L1 */
-    MP4SYS_AUDIO_PLI_Speech_L2                = 0x0A, /* Speech Audio Profile L2 */
-    MP4SYS_AUDIO_PLI_Synthetic_L1             = 0x0B, /* Synthetic Audio Profile L1 */
-    MP4SYS_AUDIO_PLI_Synthetic_L2             = 0x0C, /* Synthetic Audio Profile L2 */
-    MP4SYS_AUDIO_PLI_Synthetic_L3             = 0x0D, /* Synthetic Audio Profile L3 */
-    MP4SYS_AUDIO_PLI_HighQuality_L1           = 0x0E, /* High Quality Audio Profile L1 */
-    MP4SYS_AUDIO_PLI_HighQuality_L2           = 0x0F, /* High Quality Audio Profile L2 */
-    MP4SYS_AUDIO_PLI_HighQuality_L3           = 0x10, /* High Quality Audio Profile L3 */
-    MP4SYS_AUDIO_PLI_HighQuality_L4           = 0x11, /* High Quality Audio Profile L4 */
-    MP4SYS_AUDIO_PLI_HighQuality_L5           = 0x12, /* High Quality Audio Profile L5 */
-    MP4SYS_AUDIO_PLI_HighQuality_L6           = 0x13, /* High Quality Audio Profile L6 */
-    MP4SYS_AUDIO_PLI_HighQuality_L7           = 0x14, /* High Quality Audio Profile L7 */
-    MP4SYS_AUDIO_PLI_HighQuality_L8           = 0x15, /* High Quality Audio Profile L8 */
-    MP4SYS_AUDIO_PLI_LowDelay_L1              = 0x16, /* Low Delay Audio Profile L1 */
-    MP4SYS_AUDIO_PLI_LowDelay_L2              = 0x17, /* Low Delay Audio Profile L2 */
-    MP4SYS_AUDIO_PLI_LowDelay_L3              = 0x18, /* Low Delay Audio Profile L3 */
-    MP4SYS_AUDIO_PLI_LowDelay_L4              = 0x19, /* Low Delay Audio Profile L4 */
-    MP4SYS_AUDIO_PLI_LowDelay_L5              = 0x1A, /* Low Delay Audio Profile L5 */
-    MP4SYS_AUDIO_PLI_LowDelay_L6              = 0x1B, /* Low Delay Audio Profile L6 */
-    MP4SYS_AUDIO_PLI_LowDelay_L7              = 0x1C, /* Low Delay Audio Profile L7 */
-    MP4SYS_AUDIO_PLI_LowDelay_L8              = 0x1D, /* Low Delay Audio Profile L8 */
-    MP4SYS_AUDIO_PLI_Natural_L1               = 0x1E, /* Natural Audio Profile L1 */
-    MP4SYS_AUDIO_PLI_Natural_L2               = 0x1F, /* Natural Audio Profile L2 */
-    MP4SYS_AUDIO_PLI_Natural_L3               = 0x20, /* Natural Audio Profile L3 */
-    MP4SYS_AUDIO_PLI_Natural_L4               = 0x21, /* Natural Audio Profile L4 */
-    MP4SYS_AUDIO_PLI_MobileInternetworking_L1 = 0x22, /* Mobile Audio Internetworking Profile L1 */
-    MP4SYS_AUDIO_PLI_MobileInternetworking_L2 = 0x23, /* Mobile Audio Internetworking Profile L2 */
-    MP4SYS_AUDIO_PLI_MobileInternetworking_L3 = 0x24, /* Mobile Audio Internetworking Profile L3 */
-    MP4SYS_AUDIO_PLI_MobileInternetworking_L4 = 0x25, /* Mobile Audio Internetworking Profile L4 */
-    MP4SYS_AUDIO_PLI_MobileInternetworking_L5 = 0x26, /* Mobile Audio Internetworking Profile L5 */
-    MP4SYS_AUDIO_PLI_MobileInternetworking_L6 = 0x27, /* Mobile Audio Internetworking Profile L6 */
-    MP4SYS_AUDIO_PLI_AAC_L1                   = 0x28, /* AAC Profile L1 */
-    MP4SYS_AUDIO_PLI_AAC_L2                   = 0x29, /* AAC Profile L2 */
-    MP4SYS_AUDIO_PLI_AAC_L4                   = 0x2A, /* AAC Profile L4 */
-    MP4SYS_AUDIO_PLI_AAC_L5                   = 0x2B, /* AAC Profile L5 */
-    MP4SYS_AUDIO_PLI_HE_AAC_L2                = 0x2C, /* High Efficiency AAC Profile L2 */
-    MP4SYS_AUDIO_PLI_HE_AAC_L3                = 0x2D, /* High Efficiency AAC Profile L3 */
-    MP4SYS_AUDIO_PLI_HE_AAC_L4                = 0x2E, /* High Efficiency AAC Profile L4 */
-    MP4SYS_AUDIO_PLI_HE_AAC_L5                = 0x2F, /* High Efficiency AAC Profile L5 */
-    MP4SYS_AUDIO_PLI_NOT_SPECIFIED            = 0xFE, /* no audio profile specified */
-    MP4SYS_AUDIO_PLI_NONE_REQUIRED            = 0xFF, /* no audio capability required */
-} mp4sys_audioProfileLevelIndication;
-
 /* 14496-2 Annex G Profile and level indication and restrictions */
 typedef enum {
     MP4SYS_VISUAL_PLI_Reserved                       = 0x00, /* 0b00000000, Reserved */
@@ -289,7 +234,7 @@ typedef struct {
 
 #ifndef MP4SYS_INTERNAL
 
-#include "isom_util.h"
+#include "utils.h"
 
 typedef void mp4sys_ES_Descriptor_t;
 typedef void mp4sys_ObjectDescriptor_t;
@@ -327,7 +272,7 @@ int mp4sys_to_InitialObjectDescriptor(
     uint8_t include_inline_pli,
     mp4sys_ODProfileLevelIndication od_pli,
     mp4sys_sceneProfileLevelIndication scene_pli,
-    mp4sys_audioProfileLevelIndication audio_pli,
+    mp4a_audioProfileLevelIndication audio_pli,
     mp4sys_visualProfileLevelIndication visual_pli,
     mp4sys_graphicsProfileLevelIndication graph_pli
 );
@@ -335,8 +280,8 @@ int mp4sys_to_InitialObjectDescriptor(
 uint32_t mp4sys_update_ES_Descriptor_size( mp4sys_ES_Descriptor_t* esd );
 uint32_t mp4sys_update_ObjectDescriptor_size( mp4sys_ObjectDescriptor_t* od );
 
-int mp4sys_write_ES_Descriptor( isom_bs_t *bs, mp4sys_ES_Descriptor_t* esd );
-int mp4sys_write_ObjectDescriptor( isom_bs_t *bs, mp4sys_ObjectDescriptor_t* od );
+int mp4sys_write_ES_Descriptor( lsmash_bs_t *bs, mp4sys_ES_Descriptor_t* esd );
+int mp4sys_write_ObjectDescriptor( lsmash_bs_t *bs, mp4sys_ObjectDescriptor_t* od );
 
 int mp4sys_update_DecoderConfigDescriptor(
     mp4sys_ES_Descriptor_t* esd,
@@ -347,126 +292,6 @@ int mp4sys_update_DecoderConfigDescriptor(
 
 /* to facilitate to make ES_Descriptor */
 mp4sys_ES_Descriptor_t* mp4sys_setup_ES_Descriptor( mp4sys_ES_Descriptor_params_t* params );
-
-#endif /* #ifndef MP4SYS_INTERNAL */
-
-/***************************************************************************
-    MPEG-4 Systems for MPEG-4 Audio
-***************************************************************************/
-
-/* ISO/IEC 14496-3 1.6.2.2 Payloads, Table 1.15 Audio Object Types */
-typedef enum {
-    MP4A_AUDIO_OBJECT_TYPE_NULL                           = 0,
-    MP4A_AUDIO_OBJECT_TYPE_AAC_MAIN                       = 1, /* ISO/IEC 14496-3 subpart 4 */
-    MP4A_AUDIO_OBJECT_TYPE_AAC_LC                         = 2, /* ISO/IEC 14496-3 subpart 4 */
-    MP4A_AUDIO_OBJECT_TYPE_AAC_SSR                        = 3, /* ISO/IEC 14496-3 subpart 4 */
-    MP4A_AUDIO_OBJECT_TYPE_AAC_LTP                        = 4, /* ISO/IEC 14496-3 subpart 4 */
-    MP4A_AUDIO_OBJECT_TYPE_SBR                            = 5, /* ISO/IEC 14496-3 subpart 4 */
-    MP4A_AUDIO_OBJECT_TYPE_AAC_scalable                   = 6, /* ISO/IEC 14496-3 subpart 4 */
-    MP4A_AUDIO_OBJECT_TYPE_TwinVQ                         = 7, /* ISO/IEC 14496-3 subpart 4 */
-    MP4A_AUDIO_OBJECT_TYPE_CELP                           = 8, /* ISO/IEC 14496-3 subpart 3 */
-    MP4A_AUDIO_OBJECT_TYPE_HVXC                           = 9, /* ISO/IEC 14496-3 subpart 2 */
-    MP4A_AUDIO_OBJECT_TYPE_TTSI                           = 12, /* ISO/IEC 14496-3 subpart 6 */
-    MP4A_AUDIO_OBJECT_TYPE_Main_synthetic                 = 13, /* ISO/IEC 14496-3 subpart 5 */
-    MP4A_AUDIO_OBJECT_TYPE_Wavetable_synthesis            = 14, /* ISO/IEC 14496-3 subpart 5 */
-    MP4A_AUDIO_OBJECT_TYPE_General_MIDI                   = 15, /* ISO/IEC 14496-3 subpart 5 */
-    MP4A_AUDIO_OBJECT_TYPE_Algorithmic_Synthesis_Audio_FX = 16, /* ISO/IEC 14496-3 subpart 5 */
-    MP4A_AUDIO_OBJECT_TYPE_ER_AAC_LC                      = 17, /* ISO/IEC 14496-3 subpart 4 */
-    MP4A_AUDIO_OBJECT_TYPE_ER_AAC_LTP                     = 19, /* ISO/IEC 14496-3 subpart 4 */
-    MP4A_AUDIO_OBJECT_TYPE_ER_AAC_scalable                = 20, /* ISO/IEC 14496-3 subpart 4 */
-    MP4A_AUDIO_OBJECT_TYPE_ER_Twin_VQ                     = 21, /* ISO/IEC 14496-3 subpart 4 */
-    MP4A_AUDIO_OBJECT_TYPE_ER_BSAC                        = 22, /* ISO/IEC 14496-3 subpart 4 */
-    MP4A_AUDIO_OBJECT_TYPE_ER_AAC_LD                      = 23, /* ISO/IEC 14496-3 subpart 4 */
-    MP4A_AUDIO_OBJECT_TYPE_ER_CELP                        = 24, /* ISO/IEC 14496-3 subpart 3 */
-    MP4A_AUDIO_OBJECT_TYPE_ER_HVXC                        = 25, /* ISO/IEC 14496-3 subpart 2 */
-    MP4A_AUDIO_OBJECT_TYPE_ER_HILN                        = 26, /* ISO/IEC 14496-3 subpart 7 */
-    MP4A_AUDIO_OBJECT_TYPE_ER_Parametric                  = 27, /* ISO/IEC 14496-3 subpart 2 and 7 */
-    MP4A_AUDIO_OBJECT_TYPE_SSC                            = 28, /* ISO/IEC 14496-3 subpart 8 */
-    MP4A_AUDIO_OBJECT_TYPE_ESCAPE                         = 31,
-    MP4A_AUDIO_OBJECT_TYPE_Layer_1                        = 32, /* ISO/IEC 14496-3 subpart 9 */
-    MP4A_AUDIO_OBJECT_TYPE_Layer_2                        = 33, /* ISO/IEC 14496-3 subpart 9 */
-    MP4A_AUDIO_OBJECT_TYPE_Layer_3                        = 34, /* ISO/IEC 14496-3 subpart 9 */
-    MP4A_AUDIO_OBJECT_TYPE_DST                            = 35, /* ISO/IEC 14496-3 subpart 10 */
-} mp4a_AudioObjectType;
-
-/* see ISO/IEC 14496-3 1.6.5 Signaling of SBR, Table 1.22 SBR Signaling and Corresponding Decoder Behavior */
-typedef enum {
-    MP4A_AAC_SBR_NOT_SPECIFIED = 0x0, /* not mention to SBR presence. Implicit signaling. */
-    MP4A_AAC_SBR_NONE,                /* explicitly signals SBR does not present. Useless in general. */
-    MP4A_AAC_SBR_BACKWARD_COMPATIBLE, /* explicitly signals SBR present. Recommended method to signal SBR. */
-    MP4A_AAC_SBR_HIERARCHICAL         /* SBR exists. SBR dedicated method. */
-} mp4a_aac_sbr_mode;
-
-/***************************************************************************
-    importer
-***************************************************************************/
-
-/* L-SMASH's original structure, summary of audio/video stream configuration */
-/* FIXME: I wonder whether this struct should blong to namespace of "isom" or not. */
-/* NOTE: For audio, currently assuming AAC-LC. For video, currently not used. */
-
-#define MP4SYS_BASE_SUMMARY \
-    mp4sys_object_type_indication object_type_indication;\
-    mp4sys_stream_type stream_type;\
-    void* exdata;                /* typically payload of DecoderSpecificInfo (that's called AudioSpecificConfig in mp4a) */\
-    uint32_t exdata_length;      /* length of exdata */\
-    uint32_t max_au_length;      /* buffer length for 1 access unit, typically max size of 1 audio/video frame */
-
-typedef struct {
-    MP4SYS_BASE_SUMMARY
-} mp4sys_summary_t;
-
-typedef struct {
-    MP4SYS_BASE_SUMMARY
-    // mp4sys_audioProfileLevelIndication pli ; /* I wonder we should have this or not. */
-    mp4a_AudioObjectType aot;    /* Detailed codec type. If not mp4a, just ignored. */
-    uint32_t frequency;          /* Even if the stream is HE-AAC v1/SBR, this is base AAC's one. */
-    uint32_t channels;           /* Even if the stream is HE-AAC v2/SBR+PS, this is base AAC's one. */
-    uint32_t bit_depth;          /* If AAC, AAC stream itself does not mention to accuracy (bit_depth of decoded PCM data), we assume 16bit. */
-    uint32_t samples_in_frame;   /* Even if the stream is HE-AAC/aacPlus/SBR(+PS), this is base AAC's one, so 1024. */
-    mp4a_aac_sbr_mode sbr_mode;  /* SBR treatment. Currently we always set this as mp4a_AAC_SBR_NOT_SPECIFIED(Implicit signaling).
-                                    User can set this for treatment in other way. */
-} mp4sys_audio_summary_t;
-
-typedef struct {
-    MP4SYS_BASE_SUMMARY
-    // mp4sys_visualProfileLevelIndication pli ; /* I wonder we should have this or not. */
-    // mp4v_VideoObjectType vot;    /* Detailed codec type. If not mp4v, just ignored. */
-    uint32_t width;
-    uint32_t height;
-    uint32_t display_width;
-    uint32_t display_height;
-    uint32_t bit_depth;          /* If AAC, AAC stream itself does not mention to accuracy (bit_depth of decoded PCM data), we assume 16bit. */
-
-} mp4sys_video_summary_t;
-
-#ifndef MP4SYS_INTERNAL
-
-typedef void mp4sys_importer_t;
-
-/* importing functions */
-mp4sys_importer_t* mp4sys_importer_open( const char* identifier, const char* format );
-void mp4sys_importer_close( mp4sys_importer_t* importer );
-int mp4sys_importer_get_access_unit( mp4sys_importer_t* importer, uint32_t track_number, void* buf, uint32_t* buf_size );
-unsigned int mp4sys_importer_get_track_count( mp4sys_importer_t* importer ); /* currently not supported */
-
-/* to facilitate to make exdata (typically DecoderSpecificInfo or AudioSpecificConfig). */
-int mp4sys_setup_AudioSpecificConfig( mp4sys_audio_summary_t* summary );
-int mp4sys_amr_create_damr( mp4sys_audio_summary_t *summary );
-int mp4sys_create_dac3_from_syncframe( mp4sys_audio_summary_t *summary, uint8_t *data, uint32_t data_length );
-int mp4sys_summary_add_exdata( mp4sys_audio_summary_t* summary, void* exdata, uint32_t exdata_length );
-
-/* profileLevelIndication relative functions. */
-mp4sys_audioProfileLevelIndication mp4sys_get_audioProfileLevelIndication( mp4sys_audio_summary_t* summary );
-mp4sys_audioProfileLevelIndication mp4sys_max_audioProfileLevelIndication(
-    mp4sys_audioProfileLevelIndication a,
-    mp4sys_audioProfileLevelIndication b
-);
-
-/* FIXME: these functions may change in the future.
-   I wonder these functions should be for generic (not limited to audio) summary. */
-void mp4sys_cleanup_audio_summary( mp4sys_audio_summary_t* summary );
-mp4sys_audio_summary_t* mp4sys_duplicate_audio_summary( mp4sys_importer_t* importer, uint32_t track_number );
 
 #endif /* #ifndef MP4SYS_INTERNAL */
 

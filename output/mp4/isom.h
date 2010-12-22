@@ -37,7 +37,7 @@
 #define ftell ftello64
 #endif
 
-#include "isom_util.h"
+#include "utils.h"
 
 #define ISOM_MAX( a, b ) ((a) > (b) ? (a) : (b))
 #define ISOM_MIN( a, b ) ((a) < (b) ? (a) : (b))
@@ -110,6 +110,42 @@ typedef struct
     /* */
 } isom_tkhd_t;
 
+/* Track Clean Aperture Dimensions Box
+ * A presentation mode where clap and pasp are reflected. */
+typedef struct
+{
+    isom_full_header_t full_header;
+    uint32_t width;     /* fixed point 16.16 number */
+    uint32_t height;    /* fixed point 16.16 number */
+} isom_clef_t;
+
+/* Track Production Aperture Dimensions Box
+ * A presentation mode where pasp is reflected. */
+typedef struct
+{
+    isom_full_header_t full_header;
+    uint32_t width;     /* fixed point 16.16 number */
+    uint32_t height;    /* fixed point 16.16 number */
+} isom_prof_t;
+
+/* Track Encoded Pixels Dimensions Box
+ * A presentation mode where clap and pasp are not reflected. */
+typedef struct
+{
+    isom_full_header_t full_header;
+    uint32_t width;     /* fixed point 16.16 number */
+    uint32_t height;    /* fixed point 16.16 number */
+} isom_enof_t;
+
+/* Track Aperture Mode Dimensions Box */
+typedef struct
+{
+    isom_base_header_t base_header;
+    isom_clef_t *clef;      /* Track Clean Aperture Dimensions Box */
+    isom_prof_t *prof;      /* Track Production Aperture Dimensions Box */
+    isom_enof_t *enof;      /* Track Encoded Pixels Dimensions Box */
+} isom_tapt_t;
+
 /* Edit List Box */
 typedef struct
 {
@@ -126,7 +162,7 @@ typedef struct
 typedef struct
 {
     isom_full_header_t full_header;     /* version is either 0 or 1 */
-    isom_entry_list_t *list;
+    lsmash_entry_list_t *list;
 } isom_elst_t;
 
 /* Edit Box */
@@ -135,6 +171,23 @@ typedef struct
     isom_base_header_t base_header;
     isom_elst_t *elst;     /* Edit List Box */
 } isom_edts_t;
+
+/* Track Reference Box */
+typedef struct
+{
+    isom_base_header_t base_header;
+    uint32_t *track_ID;         /* track_IDs of reference tracks / Zero value must not be used */
+
+        uint32_t ref_count;     /* number of reference tracks */
+} isom_tref_type_t;
+
+typedef struct
+{
+    isom_base_header_t base_header;
+    isom_tref_type_t *type;     /* Track Reference Type Box */
+
+        uint32_t type_count;    /* number of reference types */
+} isom_tref_t;
 
 /* Media Header Box */
 typedef struct
@@ -147,8 +200,10 @@ typedef struct
     uint64_t duration;      /* the duration of this media expressed in the time-scale indicated in this box */
     /* */
 #define ISOM_LANG( lang ) ((((lang[0]-0x60)&0x1f)<<10) | (((lang[1]-0x60)&0x1f)<<5) | ((lang[2]-0x60)&0x1f))
-    uint16_t language;      /* ISO-639-2/T language code. The first bit is 0.
-                             * Each character is packed as the difference between its ASCII value and 0x60. */
+    uint16_t language;      /* ISOM: ISO-639-2/T language codes. The first bit is 0.
+                             *       Each character is packed as the difference between its ASCII value and 0x60.
+                             * QTFF: Macintosh language codes is usually used.
+                             *       Mac's value is less than 0x800 while ISO's value is 0x800 or greater. */
     uint16_t pre_defined;
 } isom_mdhd_t;
 
@@ -157,14 +212,13 @@ typedef struct
 {
     /* This box is in Media Box or Meta Box */
     isom_full_header_t full_header;
-    uint32_t pre_defined;
-    uint32_t handler_type;  /* when present in a Media Box
-                             * 'vide': Video track
-                             * 'soun': Audio track
-                             * 'hint': Hint track
-                             * 'meta': Timed Metadata track */
+    uint32_t type;      /* ISOM: pre_difined = 0
+                         * QT: 'mhlr' for Media Handler Reference Box and 'dhlr' for Data Handler Reference Box  */
+    uint32_t subtype;   /* ISOM and QT: when present in Media Handler Reference Box, this field defines the type of media data
+                         * QT: when present in Data Handler Reference Box, this field defines the data reference type */
     uint32_t reserved[3];
-    char     *name;         /* a null-terminated string in UTF-8 characters */
+    uint8_t *name;      /* ISOM: a null-terminated string in UTF-8 characters
+                         * QT: Pascal string */
 
     uint32_t name_length;
 } isom_hdlr_t;
@@ -203,6 +257,31 @@ typedef struct
     /* Streams other than visual and audio may use a Null Media Header Box */
     isom_full_header_t full_header;     /* flags is currently all zero */
 } isom_nmhd_t;
+
+/* Generic Media Information Box */
+typedef struct
+{
+    isom_full_header_t full_header;
+    uint16_t graphicsmode;
+    uint16_t opcolor[3];
+    int16_t balance;        /* This field is nomally set to 0. */
+    uint16_t reserved;      /* Reserved for use by Apple. Set this field to 0. */
+} isom_gmin_t;
+
+typedef struct
+{
+    isom_base_header_t base_header;
+    int32_t matrix[9];      /* Unkown fields. Default values are probably:
+                             * { 0x00010000, 0, 0, 0, 0x00010000, 0, 0, 0, 0x40000000 } */
+} isom_text_t;
+
+/* Generic Media Information Header Box */
+typedef struct
+{
+    isom_base_header_t base_header;
+    isom_gmin_t *gmin;      /* Generic Media Information Box */
+    isom_text_t *text;
+} isom_gmhd_t;
 /** **/
 
 /* Data Reference Box */
@@ -221,7 +300,7 @@ typedef struct
 typedef struct
 {
     isom_full_header_t full_header;
-    isom_entry_list_t *list;
+    lsmash_entry_list_t *list;
 } isom_dref_t;
 
 /* Data Information Box */
@@ -229,7 +308,7 @@ typedef struct
 {
     /* This box is in Media Information Box or Meta Box */
     isom_base_header_t base_header;
-    isom_dref_t *dref;     /* Data Reference Box */
+    isom_dref_t *dref;      /* Data Reference Box */
 } isom_dinf_t;
 
 /** Sample Description **/
@@ -258,11 +337,28 @@ typedef struct
     uint32_t cleanApertureWidthD;
     uint32_t cleanApertureHeightN;
     uint32_t cleanApertureHeightD;
-    uint32_t horizOffN;
+    int32_t  horizOffN;
     uint32_t horizOffD;
-    uint32_t vertOffN;
+    int32_t  vertOffN;
     uint32_t vertOffD;
 } isom_clap_t;
+
+/* Sample Scale Box */
+typedef struct
+{
+#define ISOM_SCALING_METHOD_FILL    1
+#define ISOM_SCALING_METHOD_HIDDEN  2
+#define ISOM_SCALING_METHOD_MEET    3
+#define ISOM_SCALING_METHOD_SLICE_X 4
+#define ISOM_SCALING_METHOD_SLICE_Y 5
+    isom_full_header_t full_header;
+    uint8_t constraint_flag;    /* Upper 7-bits are reserved.
+                                 * If this flag is set, all samples described by this sample entry shall be scaled
+                                 * according to the method specified by the field 'scale_method'. */
+    uint8_t scale_method;       /* The semantics of the values for scale_method are as specified for the 'fit' attribute of regions in SMIL 1.0. */
+    int16_t display_center_x;
+    int16_t display_center_y;
+} isom_stsl_t;
 
 /* Sample Entry */
 #define ISOM_SAMPLE_ENTRY \
@@ -297,7 +393,8 @@ typedef struct
                                  *  0x0020: gray or colour with alpha */ \
     int16_t pre_defined3;       /* template: pre_defined = -1 */ \
     isom_clap_t *clap;          /* Clean Aperture Box / optional */ \
-    isom_pasp_t *pasp;          /* Pixel Aspect Ratio Box / optional */
+    isom_pasp_t *pasp;          /* Pixel Aspect Ratio Box / optional */ \
+    isom_stsl_t *stsl;          /* Sample Scale Box / optional */
 
 typedef struct
 {
@@ -345,7 +442,7 @@ typedef struct
 typedef struct
 {
     isom_full_header_t full_header;
-    isom_entry_list_t *list;
+    lsmash_entry_list_t *list;
 } isom_stsd_t;
 /** **/
 
@@ -359,7 +456,7 @@ typedef struct
 typedef struct
 {
     isom_full_header_t full_header;
-    isom_entry_list_t *list;
+    lsmash_entry_list_t *list;
 } isom_stts_t;
 
 /* Composition Time to Sample Box */
@@ -371,9 +468,22 @@ typedef struct
 
 typedef struct
 {
+    /* ISOM: if version is 1, sample_offset is signed 32bit integer.
+     * QT: sample_offset is always signed 32bit integer. */
     isom_full_header_t full_header;
-    isom_entry_list_t *list;
+    lsmash_entry_list_t *list;
 } isom_ctts_t;
+
+/* Composition to Decode Box (Composition Shift Least Greatest Box) */
+typedef struct
+{
+    isom_full_header_t full_header;
+    int32_t compositionToDTSShift;
+    int32_t leastDecodeToDisplayDelta;      /* the smallest sample_offset */
+    int32_t greatestDecodeToDisplayDelta;   /* the largest sample_offset */
+    int32_t compositionStartTime;           /* the smallest CTS for any sample */
+    int32_t compositionEndTime;             /* the CTS plus the composition duration, of the sample with the largest CTS */
+} isom_cslg_t;
 
 /* Sample Size Box */
 typedef struct
@@ -386,7 +496,7 @@ typedef struct
     isom_full_header_t full_header;
     uint32_t sample_size;       /* If this field is set to 0, then the samples have different sizes. */
     uint32_t sample_count;
-    isom_entry_list_t *list;    /* available if sample_size == 0 */
+    lsmash_entry_list_t *list;  /* available if sample_size == 0 */
 } isom_stsz_t;
 
 /* Sync Sample Box */
@@ -398,7 +508,7 @@ typedef struct
 typedef struct
 {
     isom_full_header_t full_header;
-    isom_entry_list_t *list;
+    lsmash_entry_list_t *list;
 } isom_stss_t;
 
 /* Partial Sync Sample Box */
@@ -410,7 +520,7 @@ typedef struct
 typedef struct
 {
     isom_full_header_t full_header;
-    isom_entry_list_t *list;
+    lsmash_entry_list_t *list;
 } isom_stps_t;
 
 /* Independent and Disposable Samples Box */
@@ -440,7 +550,7 @@ typedef struct
     isom_full_header_t full_header;
     /* According to the specification, the size of the table, sample_count, doesn't exist in this box.
      * Instead of this, it is taken from the sample_count in the stsz or the stz2 box. */
-    isom_entry_list_t *list;
+    lsmash_entry_list_t *list;
 } isom_sdtp_t;
 
 /* Sample To Chunk Box */
@@ -454,7 +564,7 @@ typedef struct
 typedef struct
 {
     isom_full_header_t full_header;
-    isom_entry_list_t *list;
+    lsmash_entry_list_t *list;
 } isom_stsc_t;
 
 /* Chunk Offset Box */
@@ -472,7 +582,7 @@ typedef struct
 typedef struct
 {
     isom_full_header_t full_header;
-    isom_entry_list_t *list;
+    lsmash_entry_list_t *list;
 
     uint8_t large_presentation;
 } isom_stco_t; /* share with co64 box */
@@ -488,22 +598,17 @@ typedef struct
 {
     isom_full_header_t full_header;
     uint32_t grouping_type;     /* Links it to its sample group description table with the same value for grouping type. */
-    isom_entry_list_t *list;
+    lsmash_entry_list_t *list;
 } isom_sbgp_t;
 
 /* Sample Group Description Box */
 /* description_length are available only if version == 1 and default_length == 0. */
 typedef struct
 {
-    uint32_t description_length;
-} isom_sample_group_entry_t;
-
-typedef struct
-{
     /* grouping_type is 'roll' */
-    uint32_t description_length;
+    // uint32_t description_length;
     int16_t roll_distance;  /* the number of samples that must be decoded in order for a sample to be decoded correctly */
-} isom_roll_group_entry_t;  /* Roll Recovery Entry */
+} isom_roll_entry_t;  /* Roll Recovery Entry */
 
 typedef struct
 {
@@ -511,7 +616,7 @@ typedef struct
     uint32_t grouping_type;     /* an integer that identifies the sbgp that is associated with this sample group description */
     uint32_t default_length;    /* the length of every group entry (if the length is constant), or zero (if it is variable)
                                  * This field is available only if version == 1. */
-    isom_entry_list_t *list;
+    lsmash_entry_list_t *list;
 } isom_sgpd_t;
 
 /* Sample Table Box */
@@ -521,9 +626,10 @@ typedef struct
     isom_stsd_t *stsd;      /* Sample Description Box */
     isom_stts_t *stts;      /* Decoding Time to Sample Box */
     isom_ctts_t *ctts;      /* Composition Time to Sample Box */
+    isom_cslg_t *cslg;      /* Composition to Decode Box (Composition Shift Least Greatest Box) / optional */
     isom_stss_t *stss;      /* Sync Sample Box */
     isom_stps_t *stps;      /* Partial Sync Sample Box / This box is defined by QuickTime file format */
-    isom_sdtp_t *sdtp;      /* Independent and Disposable Samples Box */
+    isom_sdtp_t *sdtp;      /* Independent and Disposable Samples Box / optional */
     isom_stsc_t *stsc;      /* Sample To Chunk Box */
     isom_stsz_t *stsz;      /* Sample Size Box */
     isom_stco_t *stco;      /* Chunk Offset Box */
@@ -538,22 +644,26 @@ typedef struct
 {
     isom_base_header_t base_header;
     /* Media Information Header Boxes */
-    isom_vmhd_t *vmhd;     /* Video Media Header Box */
-    isom_smhd_t *smhd;     /* Sound Media Header Box */
-    isom_hmhd_t *hmhd;     /* Hint Media Header Box */
-    isom_nmhd_t *nmhd;     /* Null Media Header Box */
+    isom_vmhd_t *vmhd;      /* Video Media Header Box */
+    isom_smhd_t *smhd;      /* Sound Media Header Box */
+    isom_hmhd_t *hmhd;      /* Hint Media Header Box */
+    isom_nmhd_t *nmhd;      /* Null Media Header Box */
+    isom_gmhd_t *gmhd;      /* Generic Media Information Header Box / This box is defined by QuickTime file format */
     /* */
-    isom_dinf_t *dinf;     /* Data Information Box */
-    isom_stbl_t *stbl;     /* Sample Table Box */
+    isom_hdlr_t *hdlr;      /* Data Handler Reference Box / This box is defined by QuickTime file format
+                             * Note: this box must come before Data Information Box. */
+    isom_dinf_t *dinf;      /* Data Information Box */
+    isom_stbl_t *stbl;      /* Sample Table Box */
 } isom_minf_t;
 
 /* Media Box */
 typedef struct
 {
     isom_base_header_t base_header;
-    isom_mdhd_t *mdhd;     /* Media Header Box */
-    isom_hdlr_t *hdlr;     /* Handler Reference Box */
-    isom_minf_t *minf;     /* Media Information Box */
+    isom_mdhd_t *mdhd;      /* Media Header Box */
+    isom_hdlr_t *hdlr;      /* ISOM: Handler Reference Box / QT: Media Handler Reference Box
+                             * Note: this box must come before Media Information Box. */
+    isom_minf_t *minf;      /* Media Information Box */
 } isom_mdia_t;
 
 /* Movie Header Box */
@@ -579,8 +689,7 @@ typedef struct
 {
     isom_base_header_t base_header;     /* If size is 0, then this box is the last box. */
 
-    uint64_t header_pos;
-    uint8_t large_flag;
+        uint64_t placeholder_pos;       /* placeholder position for largesize */
 } isom_mdat_t;
 
 /* Free Space Box */
@@ -646,15 +755,15 @@ typedef struct
     uint8_t AVCLevelIndication;                     /* level_idc in SPS */
     uint8_t lengthSizeMinusOne;                     /* in bytes of the NALUnitLength field. upper 6-bits are reserved as 111111b */
     uint8_t numOfSequenceParameterSets;             /* upper 3-bits are reserved as 111b */
-    isom_entry_list_t *sequenceParameterSets;       /* SPSs */
+    lsmash_entry_list_t *sequenceParameterSets;     /* SPSs */
     uint8_t numOfPictureParameterSets;
-    isom_entry_list_t *pictureParameterSets;        /* PPSs */
+    lsmash_entry_list_t *pictureParameterSets;      /* PPSs */
     /* if( ISOM_REQUIRES_AVCC_EXTENSION( AVCProfileIndication ) ) */
     uint8_t chroma_format;                          /* chroma_format_idc in SPS / upper 6-bits are reserved as 111111b */
     uint8_t bit_depth_luma_minus8;                  /* shall be in the range of 0 to 4 / upper 5-bits are reserved as 11111b */
     uint8_t bit_depth_chroma_minus8;                /* shall be in the range of 0 to 4 / upper 5-bits are reserved as 11111b */
     uint8_t numOfSequenceParameterSetExt;
-    isom_entry_list_t *sequenceParameterSetExt;     /* SPSExts */
+    lsmash_entry_list_t *sequenceParameterSetExt;   /* SPSExts */
     /* */
 } isom_avcC_t;
 
@@ -668,13 +777,77 @@ typedef struct
 } isom_avc_entry_t;
 /*** ***/
 
+/* Text Sample Entry */
+typedef struct
+{
+    ISOM_SAMPLE_ENTRY;
+    int32_t displayFlags;
+    int32_t textJustification;
+    uint16_t bgColor[3];            /* background RGB color */
+    /* defaultTextBox */
+    int16_t top;
+    int16_t left;
+    int16_t bottom;
+    int16_t right;
+    /* defaultStyle */
+    int32_t scrpStartChar;          /* starting character position */
+    int16_t scrpHeight;
+    int16_t scrpAscent;
+    int16_t scrpFont;
+    uint16_t scrpFace;              /* only first 8-bits are used */
+    int16_t scrpSize;
+    uint16_t scrpColor[3];          /* foreground RGB color */
+    /* defaultFontName is Pascal string */
+    uint8_t font_name_length;
+    char *font_name;
+} isom_text_entry_t;
+
+typedef struct
+{
+    uint16_t font_ID;
+    /* Pascal string */
+    uint8_t font_name_length;
+    char *font_name;
+} isom_font_record_t;
+
+typedef struct
+{
+    isom_base_header_t base_header;
+    /* FontRecord 
+     * entry_count is uint16_t. */
+    lsmash_entry_list_t *list;
+} isom_ftab_t;
+
+typedef struct
+{
+    ISOM_SAMPLE_ENTRY;
+    uint32_t displayFlags;
+    int8_t horizontal_justification;
+    int8_t vertical_justification;
+    uint8_t background_color_rgba[4];
+    /* BoxRecord default_text_box */
+    int16_t top;
+    int16_t left;
+    int16_t bottom;
+    int16_t right;
+    /* StyleRecord default_style */
+    uint16_t startChar;     /* always 0 */
+    uint16_t endChar;       /* always 0 */
+    uint16_t font_ID;
+    uint8_t face_style_flags;
+    uint8_t font_size;
+    uint8_t text_color_rgba[4];
+    /* Font Table Box font_table */
+    isom_ftab_t *ftab;
+} isom_tx3g_entry_t;
+
 /* Chapter List Box
  * This box is NOT defined in the ISO/MPEG-4 specs. */
 typedef struct
 {
     uint64_t start_time;    /* expressed in 100 nanoseconds */
     /* Chapter name is Pascal string */
-    uint8_t name_length;
+    uint8_t chapter_name_length;
     char *chapter_name;
 } isom_chpl_entry_t;
 
@@ -682,7 +855,7 @@ typedef struct
 {
     isom_full_header_t full_header;     /* version is 1 */
     uint8_t reserved;
-    isom_entry_list_t *list;
+    lsmash_entry_list_t *list;
 } isom_chpl_t;
 
 /* User Data Box */
@@ -698,7 +871,7 @@ typedef struct
     isom_base_header_t base_header;
     isom_mvhd_t       *mvhd;        /* Movie Header Box */
     isom_iods_t       *iods;
-    isom_entry_list_t *trak_list;   /* Track Box List */
+    lsmash_entry_list_t *trak_list; /* Track Box List */
     isom_udta_t       *udta;        /* User Data Box */
 } isom_moov_t;
 
@@ -710,9 +883,13 @@ typedef struct
     isom_mdat_t *mdat;      /* Media Data Box */
     isom_free_t *free;      /* Free Space Box */
 
-    isom_bs_t *bs;
-
-    double max_chunk_duration;      /* max duration per chunk in seconds */
+        lsmash_bs_t *bs;                /* bytestream manager */
+        double max_chunk_duration;      /* max duration per chunk in seconds */
+        uint8_t qt_compatible;          /* compatibility with QuickTime file format */
+        uint8_t isom_compatible;        /* compatibility with ISO Base Media file format */
+        uint8_t mp4_version1;           /* compatibility with MP4 ver.1 file format */
+        uint8_t mp4_version2;           /* compatibility with MP4 ver.2 file format */
+        uint8_t max_3gpp_version;       /* maximum 3GPP version */
 } isom_root_t;
 
 /** Track Box **/
@@ -721,7 +898,7 @@ typedef struct
     uint32_t chunk_number;              /* chunk number */
     uint32_t sample_description_index;  /* sample description index */
     uint64_t first_dts;                 /* the first DTS in chunk */
-    isom_entry_list_t *pool;            /* samples pooled to interleave */
+    lsmash_entry_list_t *pool;          /* samples pooled to interleave */
 } isom_chunk_t;
 
 typedef struct
@@ -732,21 +909,42 @@ typedef struct
 
 typedef struct
 {
+    isom_sbgp_entry_t *sample_to_group;     /* the address corresponding to the entry in Sample to Group Box */
+    isom_roll_entry_t *roll_recovery;       /* the address corresponding to the roll recovery entry in Sample Group Description Box */
+    uint32_t first_sample;                  /* number of the first sample of the group */
+    uint32_t recovery_point;
+    uint8_t delimited;                      /* the flag if the sample_count is determined */
+    uint8_t described;                      /* the flag if the group description is determined */
+} isom_roll_group_t;
+
+typedef struct
+{
+    // uint32_t grouping_type;
+    lsmash_entry_list_t *pool;        /* grouping pooled to delimit and describe */
+} isom_grouping_t;
+
+typedef struct
+{
     isom_chunk_t chunk;
     isom_timestamp_t timestamp;
+    isom_grouping_t roll;
 } isom_cache_t;
 
 typedef struct
 {
     isom_base_header_t base_header;
     isom_tkhd_t *tkhd;          /* Track Header Box */
+    isom_tapt_t *tapt;          /* Track Aperture Mode Dimensions Box / This box is defined in QuickTime file format */
     isom_edts_t *edts;          /* Edit Box */
+    isom_tref_t *tref;          /* Track Reference Box */
     isom_mdia_t *mdia;          /* Media Box */
     isom_udta_t *udta;          /* User Data Box */
 
     isom_root_t *root;          /* go to root */
     isom_mdat_t *mdat;          /* go to referenced mdat box */
     isom_cache_t *cache;
+    uint32_t related_track_ID;
+    uint8_t is_chapter;
 } isom_trak_entry_t;
 /** **/
 
@@ -908,32 +1106,56 @@ enum isom_box_code
     ISOM_BOX_TYPE_CLAP = ISOM_4CC( 'c', 'l', 'a', 'p' ),
     ISOM_BOX_TYPE_ESDS = ISOM_4CC( 'e', 's', 'd', 's' ),
     ISOM_BOX_TYPE_PASP = ISOM_4CC( 'p', 'a', 's', 'p' ),
+    ISOM_BOX_TYPE_STSL = ISOM_4CC( 's', 't', 's', 'l' ),
 
     ISOM_BOX_TYPE_CHPL = ISOM_4CC( 'c', 'h', 'p', 'l' ),
 
     ISOM_BOX_TYPE_DAC3 = ISOM_4CC( 'd', 'a', 'c', '3' ),
     ISOM_BOX_TYPE_DAMR = ISOM_4CC( 'd', 'a', 'm', 'r' ),
+
+    ISOM_BOX_TYPE_FTAB = ISOM_4CC( 'f', 't', 'a', 'b' ),
 };
 
 enum qt_box_code
 {
+    QT_BOX_TYPE_CLEF = ISOM_4CC( 'c', 'l', 'e', 'f' ),
     QT_BOX_TYPE_CLIP = ISOM_4CC( 'c', 'l', 'i', 'p' ),
     QT_BOX_TYPE_CRGN = ISOM_4CC( 'c', 'r', 'g', 'n' ),
     QT_BOX_TYPE_CTAB = ISOM_4CC( 'c', 't', 'a', 'b' ),
+    QT_BOX_TYPE_ENOF = ISOM_4CC( 'e', 'n', 'o', 'f' ),
+    QT_BOX_TYPE_GMHD = ISOM_4CC( 'g', 'm', 'h', 'd' ),
+    QT_BOX_TYPE_GMIN = ISOM_4CC( 'g', 'm', 'i', 'n' ),
     QT_BOX_TYPE_IMAP = ISOM_4CC( 'i', 'm', 'a', 'p' ),
     QT_BOX_TYPE_KMAT = ISOM_4CC( 'k', 'm', 'a', 't' ),
     QT_BOX_TYPE_LOAD = ISOM_4CC( 'l', 'o', 'a', 'd' ),
     QT_BOX_TYPE_MATT = ISOM_4CC( 'm', 'a', 't', 't' ),
     QT_BOX_TYPE_PNOT = ISOM_4CC( 'p', 'n', 'o', 't' ),
+    QT_BOX_TYPE_PROF = ISOM_4CC( 'p', 'r', 'o', 'f' ),
     QT_BOX_TYPE_STPS = ISOM_4CC( 's', 't', 'p', 's' ),
+    QT_BOX_TYPE_TAPT = ISOM_4CC( 't', 'a', 'p', 't' ),
+    QT_BOX_TYPE_TEXT = ISOM_4CC( 't', 'e', 'x', 't' ),
 };
 
-enum isom_hdlr_code
+enum isom_handler_type_code
 {
-    ISOM_HDLR_TYPE_AUDIO  = ISOM_4CC( 's', 'o', 'u', 'n' ),
-    ISOM_HDLR_TYPE_VISUAL = ISOM_4CC( 'v', 'i', 'd', 'e' ),
-    ISOM_HDLR_TYPE_HINT   = ISOM_4CC( 'h', 'i', 'n', 't' ),
-    ISOM_HDLR_TYPE_META   = ISOM_4CC( 'm', 'e', 't', 'a' ),
+    ISOM_HANDLER_TYPE_DATA  = ISOM_4CC( 'd', 'h', 'l', 'r' ),
+    ISOM_HANDLER_TYPE_MEDIA = ISOM_4CC( 'm', 'h', 'l', 'r' ),
+};
+
+enum isom_media_type_code
+{
+    ISOM_MEDIA_HANDLER_TYPE_AUDIO = ISOM_4CC( 's', 'o', 'u', 'n' ),
+    ISOM_MEDIA_HANDLER_TYPE_VIDEO = ISOM_4CC( 'v', 'i', 'd', 'e' ),
+    ISOM_MEDIA_HANDLER_TYPE_HINT  = ISOM_4CC( 'h', 'i', 'n', 't' ),
+    ISOM_MEDIA_HANDLER_TYPE_META  = ISOM_4CC( 'm', 'e', 't', 'a' ),
+    ISOM_MEDIA_HANDLER_TYPE_TEXT  = ISOM_4CC( 't', 'e', 'x', 't' ),
+};
+
+enum isom_data_reference_type_code
+{
+    ISOM_REFERENCE_HANDLER_TYPE_ALIAS    = ISOM_4CC( 'a', 'l', 'i', 's' ),
+    ISOM_REFERENCE_HANDLER_TYPE_RESOURCE = ISOM_4CC( 'r', 's', 'r', 'c' ),
+    ISOM_REFERENCE_HANDLER_TYPE_URL      = ISOM_4CC( 'u', 'r', 'l', ' ' ),
 };
 
 enum isom_brand_code
@@ -1117,6 +1339,8 @@ enum qt_codec_code
     QT_CODEC_TYPE_RPZA_VIDEO = ISOM_4CC( 'r', 'p', 'z', 'a' ),
     QT_CODEC_TYPE_TGA_VIDEO  = ISOM_4CC( 't', 'g', 'a', ' ' ),
     QT_CODEC_TYPE_TIFF_VIDEO = ISOM_4CC( 't', 'i', 'f', 'f' ),
+    /* Text Type */
+    QT_CODEC_TYPE_TEXT_TEXT = ISOM_4CC( 't', 'e', 'x', 't' ),
 };
 
 enum isom_track_reference_code
@@ -1155,12 +1379,21 @@ enum isom_grouping_code
 
 typedef struct
 {
+    uint32_t complete;      /* recovery point: the identifier necessary for the recovery from its starting point to be completed */
+    uint32_t identifier;    /* the identifier for samples
+                             * If this identifier equals a certain recovery_point, then this sample is the recovery point. */
+    uint8_t start_point;
+} isom_recovery_t;
+
+typedef struct
+{
     uint8_t sync_point;
     uint8_t partial_sync;
     uint8_t leading;
     uint8_t independent;
     uint8_t disposable;
     uint8_t redundant;
+    isom_recovery_t recovery;
 } isom_sample_property_t;
 
 typedef struct
@@ -1173,6 +1406,12 @@ typedef struct
     isom_sample_property_t prop;
 } isom_sample_t;
 
+typedef int (*isom_adhoc_remux_callback)( void* param, uint64_t done, uint64_t total );
+typedef struct {
+    uint64_t buffer_size;
+    isom_adhoc_remux_callback func;
+    void* param;
+} isom_adhoc_remux_t;
 
 int isom_add_sps_entry( isom_root_t *root, uint32_t track_ID, uint32_t entry_number, uint8_t *sps, uint32_t sps_size );
 int isom_add_pps_entry( isom_root_t *root, uint32_t track_ID, uint32_t entry_number, uint8_t *pps, uint32_t pps_size );
@@ -1187,30 +1426,45 @@ int isom_write_moov( isom_root_t *root );
 int isom_write_free( isom_root_t *root );
 
 uint32_t isom_get_media_timescale( isom_root_t *root, uint32_t track_ID );
+uint64_t isom_get_media_duration( isom_root_t *root, uint32_t track_ID );
+uint64_t isom_get_track_duration( isom_root_t *root, uint32_t track_ID );
+uint32_t isom_get_last_sample_delta( isom_root_t *root, uint32_t track_ID );
+uint32_t isom_get_start_time_offset( isom_root_t *root, uint32_t track_ID );
 uint32_t isom_get_movie_timescale( isom_root_t *root );
 
 int isom_set_brands( isom_root_t *root, uint32_t major_brand, uint32_t minor_version, uint32_t *brands, uint32_t brand_count );
 int isom_set_max_chunk_duration( isom_root_t *root, double max_chunk_duration );
-int isom_set_handler( isom_trak_entry_t *trak, uint32_t handler_type, char *name );
+int isom_set_media_handler( isom_root_t *root, uint32_t track_ID, uint32_t media_type, char *name );
+int isom_set_media_handler_name( isom_root_t *root, uint32_t track_ID, char *handler_name );
+int isom_set_data_handler( isom_root_t *root, uint32_t track_ID, uint32_t reference_type, char *name );
+int isom_set_data_handler_name( isom_root_t *root, uint32_t track_ID, char *handler_name );
 int isom_set_movie_timescale( isom_root_t *root, uint32_t timescale );
 int isom_set_media_timescale( isom_root_t *root, uint32_t track_ID, uint32_t timescale );
 int isom_set_track_mode( isom_root_t *root, uint32_t track_ID, uint32_t mode );
 int isom_set_track_presentation_size( isom_root_t *root, uint32_t track_ID, uint32_t width, uint32_t height );
 int isom_set_track_volume( isom_root_t *root, uint32_t track_ID, int16_t volume );
+int isom_set_track_aperture_modes( isom_root_t *root, uint32_t track_ID, uint32_t entry_number );
 int isom_set_sample_resolution( isom_root_t *root, uint32_t track_ID, uint32_t entry_number, uint16_t width, uint16_t height );
 int isom_set_sample_type( isom_root_t *root, uint32_t track_ID, uint32_t entry_number, uint32_t sample_type );
 int isom_set_sample_aspect_ratio( isom_root_t *root, uint32_t track_ID, uint32_t entry_number, uint32_t hSpacing, uint32_t vSpacing );
+int isom_set_scaling_method( isom_root_t *root, uint32_t track_ID, uint32_t entry_number,
+                             uint8_t scale_method, int16_t display_center_x, int16_t display_center_y );
 int isom_set_avc_config( isom_root_t *root, uint32_t track_ID, uint32_t entry_number,
-    uint8_t configurationVersion, uint8_t AVCProfileIndication, uint8_t profile_compatibility, uint8_t AVCLevelIndication, uint8_t lengthSizeMinusOne,
-    uint8_t chroma_format, uint8_t bit_depth_luma_minus8, uint8_t bit_depth_chroma_minus8 );
+                         uint8_t configurationVersion, uint8_t AVCProfileIndication, uint8_t profile_compatibility,
+                         uint8_t AVCLevelIndication, uint8_t lengthSizeMinusOne,
+                         uint8_t chroma_format, uint8_t bit_depth_luma_minus8, uint8_t bit_depth_chroma_minus8 );
 int isom_set_handler_name( isom_root_t *root, uint32_t track_ID, char *handler_name );
 int isom_set_last_sample_delta( isom_root_t *root, uint32_t track_ID, uint32_t sample_delta );
-int isom_set_language( isom_root_t *root, uint32_t track_ID, char *language );
+int isom_set_media_language( isom_root_t *root, uint32_t track_ID, char *ISO_language, uint16_t Mac_language );
 int isom_set_track_ID( isom_root_t *root, uint32_t track_ID, uint32_t new_track_ID );
 int isom_set_free( isom_root_t *root, uint8_t *data, uint64_t data_length );
 int isom_set_tyrant_chapter( isom_root_t *root, char *file_name );
 
 int isom_create_explicit_timeline_map( isom_root_t *root, uint32_t track_ID, uint64_t segment_duration, int64_t media_time, int32_t media_rate );
+int isom_create_reference_chapter_track( isom_root_t *root, uint32_t track_ID, char *file_name );
+int isom_create_grouping( isom_root_t *root, uint32_t track_ID, uint32_t grouping_type );
+int isom_create_object_descriptor( isom_root_t *root );
+
 int isom_modify_timeline_map( isom_root_t *root, uint32_t track_ID, uint32_t entry_number, uint64_t segment_duration, int64_t media_time, int32_t media_rate );
 
 int isom_update_media_modification_time( isom_root_t *root, uint32_t track_ID );
@@ -1227,7 +1481,7 @@ void isom_delete_sample( isom_sample_t *sample );
 int isom_write_sample( isom_root_t *root, uint32_t track_ID, isom_sample_t *sample );
 int isom_write_mdat_size( isom_root_t *root );
 int isom_flush_pooled_samples( isom_root_t *root, uint32_t track_ID, uint32_t last_sample_delta );
-int isom_finish_movie( isom_root_t *root );
+int isom_finish_movie( isom_root_t *root, isom_adhoc_remux_t* remux );
 void isom_destroy_root( isom_root_t *root );
 
 void isom_delete_track( isom_root_t *root, uint32_t track_ID );

@@ -1412,15 +1412,16 @@ static void help(char *buffer, int longhelp)
         "                                  - superfast:\r\n"
         "                                    --no-mbtree --me dia --no-mixed-refs\r\n"
         "                                    --partitions i8x8,i4x4 --rc-lookahead 0\r\n"
-        "                                    --ref 1 --subme 1 --trellis 0 --weightp 0\r\n"
+        "                                    --ref 1 --subme 1 --trellis 0 --weightp 1\r\n"
         "                                  - veryfast:\r\n"
         "                                    --no-mixed-refs --rc-lookahead 10\r\n"
-        "                                    --ref 1 --subme 2 --trellis 0 --weightp 0\r\n"
+        "                                    --ref 1 --subme 2 --trellis 0 --weightp 1\r\n"
         "                                  - faster:\r\n"
         "                                    --no-mixed-refs --rc-lookahead 20\r\n"
         "                                    --ref 2 --subme 4 --weightp 1\r\n"
         "                                  - fast:\r\n"
         "                                    --rc-lookahead 30 --ref 2 --subme 6\r\n"
+        "                                    --weightp 1\r\n"
         "                                  - medium:\r\n"
         "                                    Default settings apply.\r\n"
         "                                  - slow:\r\n"
@@ -1524,12 +1525,19 @@ static void help(char *buffer, int longhelp)
     H2( "      --fake-interlaced       Flag stream as interlaced but encode progressive.\r\n"
         "                              Makes it possible to encode 25p and 30p Blu-Ray\r\n"
         "                              streams. Ignored in interlaced mode.\r\n" );
+    H2( "      --frame-packing <integer> For stereoscopic videos define frame arrangement\r\n"
+        "                                  - 0: checkerboard - pixels are alternatively from L and R\r\n"
+        "                                  - 1: column alternation - L and R are interlaced by column\r\n"
+        "                                  - 2: row alternation - L and R are interlaced by row\r\n"
+        "                                  - 3: side by side - L is on the left, R on the right\r\n"
+        "                                  - 4: top bottom - L is on top, R on bottom\r\n"
+        "                                  - 5: frame alternation - one view per frame\r\n" );
     H0( "\r\n" );
     H0( "Ratecontrol:\r\n" );
     H0( "\r\n" );
     H1( "  -q, --qp <integer>          Force constant QP (0-51, 0=lossless)\r\n" );
     H0( "  -B, --bitrate <integer>     Set bitrate (kbit/s)\r\n" );
-    H0( "      --crf <float>           Quality-based VBR (0-51, 0=lossless) [%.1f]\r\n", defaults->rc.f_rf_constant );
+    H0( "      --crf <float>           Quality-based VBR (0-51) [%.1f]\r\n", defaults->rc.f_rf_constant );
     H1( "      --rc-lookahead <integer> Number of frames for frametype lookahead [%d]\r\n", defaults->rc.i_lookahead );
     H0( "      --vbv-maxrate <integer> Max local bitrate (kbit/s) [%d]\r\n", defaults->rc.i_vbv_max_bitrate );
     H0( "      --vbv-bufsize <integer> Set size of the VBV buffer (kbit) [%d]\r\n", defaults->rc.i_vbv_buffer_size );
@@ -1578,8 +1586,8 @@ static void help(char *buffer, int longhelp)
     H2( "      --no-weightb            Disable weighted prediction for B-frames\r\n" );
     H1( "      --weightp <integer>     Weighted prediction for P-frames [%d]\r\n"
         "                                  - 0: Disabled\r\n"
-        "                                  - 1: Blind offset\r\n"
-        "                                  - 2: Smart analysis\r\n", defaults->analyse.i_weighted_pred );
+        "                                  - 1: Weighted refs\r\n"
+        "                                  - 2: Weighted refs + Duplicates\r\n", defaults->analyse.i_weighted_pred );
     H1( "      --me <string>           Integer pixel motion estimation method [\"%s\"]\r\n",
                                        strtable_lookup( x264_motion_est_names, defaults->analyse.i_me_method ) );
     H2( "                                  - dia: diamond search, radius 1 (fast)\r\n"
@@ -1666,6 +1674,8 @@ static void help(char *buffer, int longhelp)
     H2( "      --nal-hrd <string>      Signal HRD information (requires vbv-bufsize)\r\n"
         "                                  - none, vbr, cbr (cbr not allowed in .mp4)\r\n" );
     H2( "      --pic-struct            Force pic_struct in Picture Timing SEI\r\n" );
+    H2( "      --crop-rect <string>    Add 'left,top,right,bottom' to the bitstream-level\r\n"
+        "                              cropping rectangle\r\n" );
 
     H0( "\r\n" );
     H0( "Input/Output:\r\n" );

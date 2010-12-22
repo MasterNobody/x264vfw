@@ -1,5 +1,5 @@
 /*****************************************************************************
- * mp4.c: x264 mp4 output module using L-SMASH
+ * mp4.c: mp4 muxer using L-SMASH
  *****************************************************************************
  * Copyright (C) 2003-2010 x264 project
  *
@@ -25,8 +25,8 @@
  *****************************************************************************/
 
 #include "output.h"
-#include "isom.h"
-#include "mp4sys.h"
+#include "mp4/isom.h"
+#include "mp4/importer.h" /* FIXME: will be replaced with summary.h */
 
 /*******************/
 
@@ -72,6 +72,7 @@ typedef struct
 
     isom_root_t *p_root;
     int brand_3gpp;
+    int brand_qt;
     uint32_t i_track;
     uint32_t i_sample_entry;
     uint64_t i_time_inc;
@@ -82,9 +83,8 @@ typedef struct
     int64_t i_init_delta;
     int i_delay_frames;
     int i_dts_compress_multiplier;
-    int no_pasp;
-    int b_use_open_gop;
-    uint64_t i_gop_head_cts;
+    int b_no_pasp;
+    int b_use_recovery;
 } mp4_hnd_t;
 
 /*******************/
@@ -137,9 +137,10 @@ static int close_file( hnd_t handle, int64_t largest_pts, int64_t second_largest
          */
         uint32_t mvhd_timescale = isom_get_movie_timescale( p_mp4->p_root );
         uint32_t mdhd_timescale = isom_get_media_timescale( p_mp4->p_root, p_mp4->i_track );
+        double actual_duration  = 0;
         if( mdhd_timescale != 0 ) /* avoid zero division */
         {
-            uint64_t actual_duration = (uint64_t)( (double)((largest_pts + last_delta) * p_mp4->i_time_inc) * mvhd_timescale / mdhd_timescale );
+            actual_duration = (double)((largest_pts + last_delta) * p_mp4->i_time_inc) * mvhd_timescale / mdhd_timescale;
             MP4_LOG_IF_ERR( isom_create_explicit_timeline_map( p_mp4->p_root, p_mp4->i_track, actual_duration, p_mp4->i_start_offset * p_mp4->i_time_inc, ISOM_NORMAL_EDIT ),
                             "failed to set timeline map for video.\n" );
         }
@@ -149,7 +150,7 @@ static int close_file( hnd_t handle, int64_t largest_pts, int64_t second_largest
         MP4_LOG_IF_ERR( isom_update_bitrate_info( p_mp4->p_root, p_mp4->i_track, p_mp4->i_sample_entry ),
                         "failed to update bitrate information for video.\n" );
 
-        MP4_LOG_IF_ERR( isom_finish_movie( p_mp4->p_root ), "failed to finish movie.\n" );
+        MP4_LOG_IF_ERR( isom_finish_movie( p_mp4->p_root, NULL ), "failed to finish movie.\n" );
 
         /* Write media data size here. */
         MP4_LOG_IF_ERR( isom_write_mdat_size( p_mp4->p_root ), "failed to write mdat size.\n" );
@@ -176,13 +177,11 @@ static int open_file( char *psz_filename, hnd_t *p_handle, cli_output_opt_t *opt
     memset( p_mp4, 0, sizeof(mp4_hnd_t) );
 
     memcpy( &p_mp4->opt, opt, sizeof(cli_output_opt_t) );
-    p_mp4->no_pasp = 0;
+    p_mp4->b_no_pasp = 0;
+    p_mp4->b_use_recovery = 0;
 
     p_mp4->p_root = isom_create_movie( psz_filename );
     MP4_FAIL_IF_ERR_EX2( !p_mp4->p_root, "failed to create root.\n" );
-
-    p_mp4->i_track = isom_create_track( p_mp4->p_root, ISOM_HDLR_TYPE_VISUAL );
-    MP4_FAIL_IF_ERR_EX2( !p_mp4->i_track, "failed to create a video track.\n" );
 
     char* ext = get_filename_extension( psz_filename );
     if( !strcmp( ext, "3gp" ) )
@@ -207,9 +206,35 @@ static int set_param( hnd_t handle, x264_param_t *p_param )
     p_mp4->i_time_inc = p_param->i_timebase_num * p_mp4->i_dts_compress_multiplier;
     MP4_FAIL_IF_ERR( i_media_timescale > UINT32_MAX, "MP4 media timescale %"PRIu64" exceeds maximum\n", i_media_timescale );
 
+    /* Set brands. */
+    uint32_t brands[9] = { ISOM_BRAND_TYPE_ISOM, ISOM_BRAND_TYPE_MP41, ISOM_BRAND_TYPE_MP42, 0, 0, 0, 0, 0, 0 };
+    uint32_t minor_version = 0;
+    uint32_t brand_count = 3;
+    if( p_mp4->brand_3gpp == 1 )
+        brands[brand_count++] = ISOM_BRAND_TYPE_3GP6;
+    else if( p_mp4->brand_3gpp == 2 )
+    {
+        brands[brand_count++] = ISOM_BRAND_TYPE_3GP6;
+        brands[brand_count++] = ISOM_BRAND_TYPE_3G2A;
+        minor_version = 0x00010000;
+    }
+    if( p_mp4->b_use_recovery )
+    {
+        brands[brand_count++] = ISOM_BRAND_TYPE_AVC1;   /* sdtp/sgpd/sbgp */
+        brands[brand_count++] = ISOM_BRAND_TYPE_ISO4;   /* cslg */
+        brands[brand_count++] = ISOM_BRAND_TYPE_QT;     /* tapt/cslg/stps/sdtp */
+        p_mp4->brand_qt = 1;
+    }
+    MP4_FAIL_IF_ERR( isom_set_brands( p_mp4->p_root, brands[2+p_mp4->brand_3gpp], minor_version, brands, brand_count ),
+                     "failed to set brands / ftyp.\n" );
+
     /* Set max duration per chunk. */
     MP4_FAIL_IF_ERR( isom_set_max_chunk_duration( p_mp4->p_root, 0.5 ),
                      "failed to set max duration per chunk.\n" );
+
+    /* Create a video track. */
+    p_mp4->i_track = isom_create_track( p_mp4->p_root, ISOM_MEDIA_HANDLER_TYPE_VIDEO );
+    MP4_FAIL_IF_ERR( !p_mp4->i_track, "failed to create a video track.\n" );
 
     /* Set timescale. */
     MP4_FAIL_IF_ERR( isom_set_movie_timescale( p_mp4->p_root, 600 ),
@@ -218,9 +243,15 @@ static int set_param( hnd_t handle, x264_param_t *p_param )
                      "failed to set media timescale for video.\n" );
 
     /* Set handler name. */
-    char hdlr_name[24] = "X264 ISOM Video Handler";
-    MP4_FAIL_IF_ERR( isom_set_handler_name( p_mp4->p_root, p_mp4->i_track, hdlr_name ),
-                     "failed to set hander name for video.\n" );
+    MP4_FAIL_IF_ERR( isom_set_media_handler_name( p_mp4->p_root, p_mp4->i_track, "X264 Video Media Handler" ),
+                     "failed to set media hander name for video.\n" );
+    if( p_mp4->brand_qt )
+        MP4_FAIL_IF_ERR( isom_set_data_handler_name( p_mp4->p_root, p_mp4->i_track, "X264 URL Data Handler" ),
+                         "failed to set data hander name for video.\n" );
+
+    if( p_mp4->b_use_recovery )
+        MP4_FAIL_IF_ERR( isom_create_grouping( p_mp4->p_root, p_mp4->i_track, ISOM_GROUP_TYPE_ROLL ),
+                         "failed to create roll recovery grouping\n" );
 
     /* Add a sample entry. */
     /* FIXME: I think these sample_entry relative stuff should be more encapsulated, by using video_summary. */
@@ -237,17 +268,22 @@ static int set_param( hnd_t handle, x264_param_t *p_param )
     {
         double sar = (double)p_param->vui.i_sar_width / p_param->vui.i_sar_height;
         if( sar > 1.0 )
-            dw *= sar ;
+            dw *= sar;
         else
             dh /= sar;
-        if( !p_mp4->no_pasp )
+        if( !p_mp4->b_no_pasp )
+        {
             MP4_FAIL_IF_ERR( isom_set_sample_aspect_ratio( p_mp4->p_root, p_mp4->i_track, p_mp4->i_sample_entry, p_param->vui.i_sar_width, p_param->vui.i_sar_height ),
                              "failed to set sample aspect ratio.\n" );
+            MP4_FAIL_IF_ERR( isom_set_scaling_method( p_mp4->p_root, p_mp4->i_track, p_mp4->i_sample_entry, ISOM_SCALING_METHOD_MEET, 0, 0 ),
+                             "failed to set scaling method.\n" );
+        }
     }
     MP4_FAIL_IF_ERR( isom_set_track_presentation_size( p_mp4->p_root, p_mp4->i_track, dw, dh ),
                      "failed to set presentation size.\n" );
-
-    p_mp4->b_use_open_gop = !!p_param->i_open_gop;
+    if( p_mp4->brand_qt && !p_mp4->b_no_pasp )
+        MP4_FAIL_IF_ERR( isom_set_track_aperture_modes( p_mp4->p_root, p_mp4->i_track, p_mp4->i_sample_entry ),
+                         "failed to set track aperture mode.\n" );
 
     return 0;
 }
@@ -264,7 +300,7 @@ static int write_headers( hnd_t handle, x264_nal_t *p_nal )
     uint8_t *pps = p_nal[1].p_payload + 4;
     uint8_t *sei = p_nal[2].p_payload;
 
-    MP4_FAIL_IF_ERR( isom_set_avc_config( p_mp4->p_root, p_mp4->i_track, p_mp4->i_sample_entry, 1, sps[1], sps[2], sps[3], 3, 1, BIT_DEPTH-8, BIT_DEPTH-8 ),
+    MP4_FAIL_IF_ERR( isom_set_avc_config( p_mp4->p_root, p_mp4->i_track, p_mp4->i_sample_entry, 1, sps[1], sps[2], sps[3], 3, 1, X264_BIT_DEPTH-8, X264_BIT_DEPTH-8 ),
                      "failed to set avc config.\n" );
     /* SPS */
     MP4_FAIL_IF_ERR( isom_add_sps_entry( p_mp4->p_root, p_mp4->i_track, p_mp4->i_sample_entry, sps, sps_size ),
@@ -280,24 +316,8 @@ static int write_headers( hnd_t handle, x264_nal_t *p_nal )
     p_mp4->i_sei_size = sei_size;
 
     /* Write ftyp. */
-    uint32_t brands[7] = { ISOM_BRAND_TYPE_ISOM, ISOM_BRAND_TYPE_MP42, 0, 0, 0, 0, 0 };
-    uint32_t minor_version = 0;
-    uint32_t brand_count = 2;
-    if( p_mp4->brand_3gpp == 1 )
-        brands[brand_count++] = ISOM_BRAND_TYPE_3GP6;
-    else if( p_mp4->brand_3gpp == 2 )
-    {
-        brands[brand_count++] = ISOM_BRAND_TYPE_3GP6;
-        brands[brand_count++] = ISOM_BRAND_TYPE_3G2A;
-        minor_version = 0x00010000;
-    }
-    if( p_mp4->b_use_open_gop )
-    {
-        brands[brand_count++] = ISOM_BRAND_TYPE_AVC1;
-        brands[brand_count++] = ISOM_BRAND_TYPE_QT;
-    }
-    MP4_FAIL_IF_ERR( isom_set_brands( p_mp4->p_root, brands[1+p_mp4->brand_3gpp], minor_version, brands, brand_count ) || isom_write_ftyp( p_mp4->p_root ),
-                     "failed to set brands / ftyp.\n" );
+    MP4_FAIL_IF_ERR( isom_write_ftyp( p_mp4->p_root ),
+                     "failed to write brands / ftyp.\n" );
 
     /* Write mdat header. */
     MP4_FAIL_IF_ERR( isom_add_mdat( p_mp4->p_root ), "failed to add mdat.\n" );
@@ -344,19 +364,8 @@ static int write_frame( hnd_t handle, uint8_t *p_nalu, int i_size, x264_picture_
 
     p_sample->dts = dts;
     p_sample->cts = cts;
-    p_sample->index = 1;
-    p_sample->prop.sync_point = p_picture->i_type == X264_TYPE_IDR;
-    if( p_mp4->b_use_open_gop )
-    {
-        p_sample->prop.partial_sync = p_picture->i_type == X264_TYPE_I;
-        p_sample->prop.independent = IS_X264_TYPE_I( p_picture->i_type ) ? ISOM_SAMPLE_IS_INDEPENDENT : ISOM_SAMPLE_IS_NOT_INDEPENDENT;
-        p_sample->prop.disposable = p_picture->i_type == X264_TYPE_B ? ISOM_SAMPLE_IS_DISPOSABLE : ISOM_SAMPLE_IS_NOT_DISPOSABLE;
-        p_sample->prop.redundant = ISOM_SAMPLE_HAS_NO_REDUNDANCY;
-        p_sample->prop.leading = !IS_X264_TYPE_B( p_picture->i_type ) || p_sample->cts >= p_mp4->i_gop_head_cts
-            ? ISOM_SAMPLE_IS_NOT_LEADING : ISOM_SAMPLE_IS_UNDECODABLE_LEADING;
-        if( IS_X264_TYPE_I( p_picture->i_type ) )
-            p_mp4->i_gop_head_cts = p_sample->cts;
-    }
+    p_sample->index = p_mp4->i_sample_entry;
+    p_sample->prop.sync_point = p_picture->b_keyframe;
 
     /* Write data per sample. */
     MP4_FAIL_IF_ERR( isom_write_sample( p_mp4->p_root, p_mp4->i_track, p_sample ),
