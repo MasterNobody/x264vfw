@@ -1,8 +1,7 @@
 /*****************************************************************************
- * codec.c: vfw x264 encoder
+ * codec.c: main encoding/decoding functions
  *****************************************************************************
- * Copyright (C) 2003 Laurent Aimar
- * $Id: codec.c,v 1.1 2004/06/03 19:27:09 fenrir Exp $
+ * Copyright (C) 2003-2011 x264vfw project
  *
  * Authors: Justin Clay
  *          Laurent Aimar <fenrir@via.ecp.fr>

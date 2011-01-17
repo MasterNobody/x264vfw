@@ -1,8 +1,7 @@
 /*****************************************************************************
- * x264vfw.h: vfw x264 encoder
+ * x264vfw.h: x264vfw main header
  *****************************************************************************
- * Copyright (C) 2003 Laurent Aimar
- * $Id: x264vfw.h,v 1.1 2004/06/03 19:27:09 fenrir Exp $
+ * Copyright (C) 2003-2011 x264vfw project
  *
  * Authors: Justin Clay
  *          Laurent Aimar <fenrir@via.ecp.fr>

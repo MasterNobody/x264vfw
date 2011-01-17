@@ -8,7 +8,6 @@
 #            - Peter Ross <pross@xvid.org>
 # Ported to x264 by Laurent Aimar <fenrir@via.ecp.fr>
 #
-# $Id: Makefile,v 1.1 2004/06/03 19:29:33 fenrir Exp $
 ##############################################################################
 
 # Current dir

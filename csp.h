@@ -1,8 +1,7 @@
 /*****************************************************************************
- * csp.h: h264 encoder library
+ * csp.h: colorspace conversion functions
  *****************************************************************************
- * Copyright (C) 2004 Laurent Aimar
- * $Id: csp.h,v 1.1 2004/06/03 19:27:06 fenrir Exp $
+ * Copyright (C) 2004-2011 x264vfw project
  *
  * Authors: Laurent Aimar <fenrir@via.ecp.fr>
  *          Anton Mitrofanov <BugMaster@narod.ru>

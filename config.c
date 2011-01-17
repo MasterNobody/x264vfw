@@ -1,8 +1,7 @@
 /*****************************************************************************
- * config.c: vfw x264 encoder
+ * config.c: configuration dialog
  *****************************************************************************
- * Copyright (C) 2003 Laurent Aimar
- * $Id: config.c,v 1.1 2004/06/03 19:27:09 fenrir Exp $
+ * Copyright (C) 2003-2011 x264vfw project
  *
  * Authors: Justin Clay
  *          Laurent Aimar <fenrir@via.ecp.fr>

@@ -1,7 +1,7 @@
 /*****************************************************************************
- * common.h: vfw x264 encoder
+ * common.h: misc common functions
  *****************************************************************************
- * Copyright (C) 2010 x264vfw project
+ * Copyright (C) 2010-2011 x264vfw project
  *
  * Authors: Anton Mitrofanov <BugMaster@narod.ru>
  *
