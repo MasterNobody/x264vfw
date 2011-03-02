@@ -1078,10 +1078,6 @@ LRESULT compress_begin(CODEC *codec, BITMAPINFO *lpbiInput, BITMAPINFO *lpbiOutp
         param.i_fps_den = codec->i_fps_den;
     }
 
-    /* Colorspace conversion */
-    x264vfw_csp_init(&codec->csp, param.i_csp);
-    x264_picture_alloc(&codec->conv_pic, param.i_csp, param.i_width, param.i_height);
-
     /* Basic */
     param.i_level_idc = config->i_level >= 0 && config->i_level < COUNT_LEVEL
                         ? level_table[config->i_level].value
@@ -1263,6 +1259,14 @@ LRESULT compress_begin(CODEC *codec, BITMAPINFO *lpbiInput, BITMAPINFO *lpbiOutp
 #else
     codec->b_warn_frame_loss = !codec->b_cli_output;
 #endif
+
+    /* Colorspace conversion */
+    x264vfw_csp_init(&codec->csp, param.i_csp, param.vui.i_colmatrix, param.vui.b_fullrange);
+    if (x264_picture_alloc(&codec->conv_pic, param.i_csp, param.i_width, param.i_height) < 0)
+    {
+        x264vfw_log(codec, X264_LOG_ERROR, "x264_picture_alloc failed\n");
+        goto fail;
+    }
 
     return ICERR_OK;
 fail:
@@ -1685,16 +1689,29 @@ LRESULT decompress(CODEC *codec, ICDECOMPRESS *icd)
             uint32_t buf_size = inhdr->biSizeImage;
             uint32_t nal_size = endian_fix32(*(uint32_t *)buf);
             /* Check startcode */
-            if ((nal_size & 0x00ffffff) != 0x00000001)
+            if (nal_size != 0x00000001)
             {
-                /* Convert to Annex B */
-                *(uint32_t *)buf = endian_fix32(0x00000001);
+                /* Check that this is correct size prefixed format */
                 while ((uint64_t)buf_size >= (uint64_t)nal_size + 8)
                 {
                     buf += nal_size + 4;
                     buf_size -= nal_size + 4;
                     nal_size = endian_fix32(*(uint32_t *)buf);
+                }
+                if ((uint64_t)buf_size == (uint64_t)nal_size + 4)
+                {
+                    /* Convert to Annex B */
+                    buf = codec->decoder_buf;
+                    buf_size = inhdr->biSizeImage;
+                    nal_size = endian_fix32(*(uint32_t *)buf);
                     *(uint32_t *)buf = endian_fix32(0x00000001);
+                    while ((uint64_t)buf_size >= (uint64_t)nal_size + 8)
+                    {
+                        buf += nal_size + 4;
+                        buf_size -= nal_size + 4;
+                        nal_size = endian_fix32(*(uint32_t *)buf);
+                        *(uint32_t *)buf = endian_fix32(0x00000001);
+                    }
                 }
             }
         }

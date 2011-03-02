@@ -58,7 +58,7 @@ static int close_file( hnd_t handle, int64_t largest_pts, int64_t second_largest
 
     if( h->mux_fc && h->mux_fc->pb )
     {
-        url_fclose( h->mux_fc->pb );
+        avio_close( h->mux_fc->pb );
         h->mux_fc->pb = NULL;
     }
 
@@ -111,7 +111,7 @@ static int open_file( char *psz_filename, hnd_t *p_handle, cli_output_opt_t *opt
     h->mux_fc->oformat = mux_fmt;
     snprintf( h->mux_fc->filename, sizeof(h->mux_fc->filename), "%s", psz_filename );
 
-    if( url_fopen( &h->mux_fc->pb, psz_filename, URL_WRONLY ) < 0 )
+    if( avio_open( &h->mux_fc->pb, psz_filename, URL_WRONLY ) < 0 )
     {
         close_file( h, 0, 0 );
         return -1;

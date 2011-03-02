@@ -20,13 +20,16 @@
 
 /* This file is available under an ISC license. */
 
-#ifndef ISOM_UTIL_H
-#define ISOM_UTIL_H
+#ifndef LSMASH_UTIL_H
+#define LSMASH_UTIL_H
 
 #include <stdio.h>
 #include <inttypes.h>
 
 #define debug_if(x) if(x)
+
+#define LSMASH_MAX( a, b ) ((a) > (b) ? (a) : (b))
+#define LSMASH_MIN( a, b ) ((a) < (b) ? (a) : (b))
 
 /*---- bytestream ----*/
 
@@ -112,8 +115,8 @@ typedef void (*lsmash_entry_data_eliminator)(void* data); /* very same as free()
 
 lsmash_entry_list_t *lsmash_create_entry_list( void );
 int lsmash_add_entry( lsmash_entry_list_t *list, void *data );
-int lsmash_remove_entry_direct( lsmash_entry_list_t *list, lsmash_entry_t *entry );
-int lsmash_remove_entry( lsmash_entry_list_t *list, uint32_t entry_number );
+int lsmash_remove_entry_direct( lsmash_entry_list_t *list, lsmash_entry_t *entry, void* eliminator );
+int lsmash_remove_entry( lsmash_entry_list_t *list, uint32_t entry_number, void* eliminator );
 void lsmash_remove_entries( lsmash_entry_list_t *list, void* eliminator );
 void lsmash_remove_list( lsmash_entry_list_t *list, void* eliminator );
 

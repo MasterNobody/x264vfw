@@ -314,138 +314,153 @@ static void uyvy_to_i420( x264_image_t *img_dst, x264_image_t *img_src,
     }
 }
 
-#if X264VFW_CSP_BT_709
-//BT.709
-#define Kb 0.0722
-#define Kr 0.2126
-#else
-//BT.601
-#define Kb 0.114
-#define Kr 0.299
-#endif
+#define BITS         22
+#define INT_FIX      (1 << BITS)
+#define INT_ROUND    (INT_FIX >> 1)
+#define FIX(f)       ((uint32_t)((f) * INT_FIX + 0.5))
 
-#define Kg (1.0 - Kb - Kr)
-#define Sb (1.0 - Kb)
-#define Sr (1.0 - Kr)
+#define Kb_601       0.114
+#define Kr_601       0.299
+#define Kb_709       0.0722
+#define Kr_709       0.2126
 
-#if X264VFW_CSP_PC_SCALE
-//PC Scale
-//0 <= Y <= 255
-//0 <= U <= 255
-//0 <= V <= 255
-#define Ky 1.0
-#define Ku (0.5 / Sb)
-#define Kv (0.5 / Sr)
-#define Ay 0.0
-#define Au 127.5
-#define Av 127.5
-#else
-//TV Scale
-//16 <= Y <= 235
-//16 <= U <= 240
-//16 <= V <= 240
-#define Ky (1.0        * 219.0 / 255.0)
-#define Ku ((0.5 / Sb) * 224.0 / 255.0)
-#define Kv ((0.5 / Sr) * 224.0 / 255.0)
-#define Ay 16.0
-#define Au 128.0
-#define Av 128.0
-#endif
+#define Kg( rec )    (1.0 - Kb_##rec - Kr_##rec)
+#define Sb( rec )    (1.0 - Kb_##rec)
+#define Sr( rec )    (1.0 - Kr_##rec)
 
-#define BITS      22
-#define INT_FIX   (1 << BITS)
-#define INT_ROUND (INT_FIX >> 1)
-#define FIX(f)    ((uint32_t)((f) * INT_FIX + 0.5))
+#define Ky_tv        (1.0             * 219.0 / 255.0)
+#define Ku_tv( rec ) ((0.5 / Sb(rec)) * 224.0 / 255.0)
+#define Kv_tv( rec ) ((0.5 / Sr(rec)) * 224.0 / 255.0)
+#define Ay_tv        16.0
+#define Au_tv        128.0
+#define Av_tv        128.0
 
-#define Y_R   FIX(Kr*Ky)
-#define Y_G   FIX(Kg*Ky)
-#define Y_B   FIX(Kb*Ky)
-#define Y_ADD ((uint32_t)(Ay * INT_FIX + INT_ROUND + 0.5))
+#define Ky_pc        1.0
+#define Ku_pc( rec ) (0.5 / Sb(rec))
+#define Kv_pc( rec ) (0.5 / Sr(rec))
+#define Ay_pc        0.0
+#define Au_pc        127.5
+#define Av_pc        127.5
 
-#define U_R   FIX(Kr*Ku)
-#define U_G   FIX(Kg*Ku)
-#define U_B   FIX(Sb*Ku)
-#define U_ADD ((uint32_t)((Au * INT_FIX + INT_ROUND) * 4 + 0.5))
+#define Y_R( rec, scale )   FIX(Kr_##rec * Ky_##scale)
+#define Y_G( rec, scale )   FIX(Kg(rec)  * Ky_##scale)
+#define Y_B( rec, scale )   FIX(Kb_##rec * Ky_##scale)
+#define Y_ADD( scale )      ((uint32_t)(Ay_##scale * INT_FIX + INT_ROUND + 0.5))
 
-#define V_R   FIX(Sr*Kv)
-#define V_G   FIX(Kg*Kv)
-#define V_B   FIX(Kb*Kv)
-#define V_ADD ((uint32_t)((Av * INT_FIX + INT_ROUND) * 4 + 0.5))
+#define U_R( rec, scale )   FIX(Kr_##rec * Ku_##scale(rec))
+#define U_G( rec, scale )   FIX(Kg(rec)  * Ku_##scale(rec))
+#define U_B( rec, scale )   FIX(Sb(rec)  * Ku_##scale(rec))
+#define U_ADD( scale )      ((uint32_t)((Au_##scale * INT_FIX + INT_ROUND) * 4 + 0.5))
 
-#define RGB_TO_I420( name, POS_R, POS_G, POS_B, S_RGB )         \
-static void name( x264_image_t *img_dst, x264_image_t *img_src, \
-                  int i_width, int i_height )                   \
-{                                                               \
-    uint8_t *src = img_src->plane[0];                           \
-    int     i_src= img_src->i_stride[0];                        \
-    int     i_y  = img_dst->i_stride[0];                        \
-    uint8_t *y   = img_dst->plane[0];                           \
-    uint8_t *u   = img_dst->plane[1];                           \
-    uint8_t *v   = img_dst->plane[2];                           \
-                                                                \
-    if( img_src->i_csp & X264VFW_CSP_VFLIP )                    \
-    {                                                           \
-        src += ( i_height - 1 ) * i_src;                        \
-        i_src = -i_src;                                         \
-    }                                                           \
-                                                                \
-    for(  ; i_height > 0; i_height -= 2 )                       \
-    {                                                           \
-        uint8_t *ss = src;                                      \
-        uint8_t *yy = y;                                        \
-        uint8_t *uu = u;                                        \
-        uint8_t *vv = v;                                        \
-        int w;                                                  \
-                                                                \
-        for( w = i_width; w > 0; w -= 2 )                       \
-        {                                                       \
-            uint32_t cr = 0,cg = 0,cb = 0;                      \
-            uint32_t r, g, b;                                   \
-                                                                \
-            /* Luma */                                          \
-            cr = r = ss[POS_R];                                 \
-            cg = g = ss[POS_G];                                 \
-            cb = b = ss[POS_B];                                 \
-                                                                \
-            yy[0] = (Y_ADD + Y_R * r + Y_G * g + Y_B * b) >> BITS; \
-                                                                \
-            cr+= r = ss[POS_R+i_src];                           \
-            cg+= g = ss[POS_G+i_src];                           \
-            cb+= b = ss[POS_B+i_src];                           \
-            yy[i_y] = (Y_ADD + Y_R * r + Y_G * g + Y_B * b) >> BITS; \
-            yy++;                                               \
-            ss += S_RGB;                                        \
-                                                                \
-            cr+= r = ss[POS_R];                                 \
-            cg+= g = ss[POS_G];                                 \
-            cb+= b = ss[POS_B];                                 \
-                                                                \
-            yy[0] = (Y_ADD + Y_R * r + Y_G * g + Y_B * b) >> BITS; \
-                                                                \
-            cr+= r = ss[POS_R+i_src];                           \
-            cg+= g = ss[POS_G+i_src];                           \
-            cb+= b = ss[POS_B+i_src];                           \
-            yy[i_y] = (Y_ADD + Y_R * r + Y_G * g + Y_B * b) >> BITS; \
-            yy++;                                               \
-            ss += S_RGB;                                        \
-                                                                \
-            /* Chroma */                                        \
-            *uu++ = (uint8_t)((U_ADD + U_B * cb - U_R * cr - U_G * cg) >> (BITS+2)); \
-            *vv++ = (uint8_t)((V_ADD + V_R * cr - V_G * cg - V_B * cb) >> (BITS+2)); \
-        }                                                       \
-                                                                \
-        src += 2*i_src;                                         \
-        y += 2*img_dst->i_stride[0];                            \
-        u += img_dst->i_stride[1];                              \
-        v += img_dst->i_stride[2];                              \
-    }                                                           \
+#define V_R( rec, scale )   FIX(Sr(rec)  * Kv_##scale(rec))
+#define V_G( rec, scale )   FIX(Kg(rec)  * Kv_##scale(rec))
+#define V_B( rec, scale )   FIX(Kb_##rec * Kv_##scale(rec))
+#define V_ADD( scale )      ((uint32_t)((Av_##scale * INT_FIX + INT_ROUND) * 4 + 0.5))
+
+#define RGB_TO_I420( name, POS_R, POS_G, POS_B, S_RGB, rec, scale )               \
+static void name##_##rec##_##scale( x264_image_t *img_dst, x264_image_t *img_src, \
+                                    int i_width, int i_height )                   \
+{                                                                                 \
+    uint8_t *src = img_src->plane[0];                                             \
+    int     i_src= img_src->i_stride[0];                                          \
+    int     i_y  = img_dst->i_stride[0];                                          \
+    uint8_t *y   = img_dst->plane[0];                                             \
+    uint8_t *u   = img_dst->plane[1];                                             \
+    uint8_t *v   = img_dst->plane[2];                                             \
+                                                                                  \
+    if( img_src->i_csp & X264VFW_CSP_VFLIP )                                      \
+    {                                                                             \
+        src += ( i_height - 1 ) * i_src;                                          \
+        i_src = -i_src;                                                           \
+    }                                                                             \
+                                                                                  \
+    for(  ; i_height > 0; i_height -= 2 )                                         \
+    {                                                                             \
+        uint8_t *ss = src;                                                        \
+        uint8_t *yy = y;                                                          \
+        uint8_t *uu = u;                                                          \
+        uint8_t *vv = v;                                                          \
+        int w;                                                                    \
+                                                                                  \
+        for( w = i_width; w > 0; w -= 2 )                                         \
+        {                                                                         \
+            uint32_t cr = 0,cg = 0,cb = 0;                                        \
+            uint32_t r, g, b;                                                     \
+                                                                                  \
+            /* Luma */                                                            \
+            cr = r = ss[POS_R];                                                   \
+            cg = g = ss[POS_G];                                                   \
+            cb = b = ss[POS_B];                                                   \
+                                                                                  \
+            yy[0] = (Y_ADD(scale) +                                               \
+                     Y_R(rec, scale) * r +                                        \
+                     Y_G(rec, scale) * g +                                        \
+                     Y_B(rec, scale) * b) >> BITS;                                \
+                                                                                  \
+            cr+= r = ss[POS_R+i_src];                                             \
+            cg+= g = ss[POS_G+i_src];                                             \
+            cb+= b = ss[POS_B+i_src];                                             \
+                                                                                  \
+            yy[i_y] = (Y_ADD(scale) +                                             \
+                       Y_R(rec, scale) * r +                                      \
+                       Y_G(rec, scale) * g +                                      \
+                       Y_B(rec, scale) * b) >> BITS;                              \
+            yy++;                                                                 \
+            ss += S_RGB;                                                          \
+                                                                                  \
+            cr+= r = ss[POS_R];                                                   \
+            cg+= g = ss[POS_G];                                                   \
+            cb+= b = ss[POS_B];                                                   \
+                                                                                  \
+            yy[0] = (Y_ADD(scale) +                                               \
+                     Y_R(rec, scale) * r +                                        \
+                     Y_G(rec, scale) * g +                                        \
+                     Y_B(rec, scale) * b) >> BITS;                                \
+                                                                                  \
+            cr+= r = ss[POS_R+i_src];                                             \
+            cg+= g = ss[POS_G+i_src];                                             \
+            cb+= b = ss[POS_B+i_src];                                             \
+                                                                                  \
+            yy[i_y] = (Y_ADD(scale) +                                             \
+                       Y_R(rec, scale) * r +                                      \
+                       Y_G(rec, scale) * g +                                      \
+                       Y_B(rec, scale) * b) >> BITS;                              \
+            yy++;                                                                 \
+            ss += S_RGB;                                                          \
+                                                                                  \
+            /* Chroma */                                                          \
+            *uu++ = (uint8_t)((U_ADD(scale) +                                     \
+                               U_B(rec, scale) * cb -                             \
+                               U_R(rec, scale) * cr -                             \
+                               U_G(rec, scale) * cg) >> (BITS+2));                \
+                                                                                  \
+            *vv++ = (uint8_t)((V_ADD(scale) +                                     \
+                               V_R(rec, scale) * cr -                             \
+                               V_G(rec, scale) * cg -                             \
+                               V_B(rec, scale) * cb) >> (BITS+2));                \
+        }                                                                         \
+                                                                                  \
+        src += 2*i_src;                                                           \
+        y += 2*img_dst->i_stride[0];                                              \
+        u += img_dst->i_stride[1];                                                \
+        v += img_dst->i_stride[2];                                                \
+    }                                                                             \
 }
 
-RGB_TO_I420( rgb_to_i420,  0, 1, 2, 3 )
-RGB_TO_I420( bgr_to_i420,  2, 1, 0, 3 )
-RGB_TO_I420( bgra_to_i420, 2, 1, 0, 4 )
+RGB_TO_I420(  rgb_to_i420, 0, 1, 2, 3, 601, tv )
+RGB_TO_I420(  bgr_to_i420, 2, 1, 0, 3, 601, tv )
+RGB_TO_I420( bgra_to_i420, 2, 1, 0, 4, 601, tv )
+RGB_TO_I420(  rgb_to_i420, 0, 1, 2, 3, 601, pc )
+RGB_TO_I420(  bgr_to_i420, 2, 1, 0, 3, 601, pc )
+RGB_TO_I420( bgra_to_i420, 2, 1, 0, 4, 601, pc )
+RGB_TO_I420(  rgb_to_i420, 0, 1, 2, 3, 709, tv )
+RGB_TO_I420(  bgr_to_i420, 2, 1, 0, 3, 709, tv )
+RGB_TO_I420( bgra_to_i420, 2, 1, 0, 4, 709, tv )
+RGB_TO_I420(  rgb_to_i420, 0, 1, 2, 3, 709, pc )
+RGB_TO_I420(  bgr_to_i420, 2, 1, 0, 3, 709, pc )
+RGB_TO_I420( bgra_to_i420, 2, 1, 0, 4, 709, pc )
 
-void x264vfw_csp_init( x264vfw_csp_function_t *pf, int i_x264_csp )
+void x264vfw_csp_init( x264vfw_csp_function_t *pf, int i_x264_csp, int i_colmatrix, int b_fullrange )
 {
     switch( i_x264_csp )
     {
@@ -456,9 +471,42 @@ void x264vfw_csp_init( x264vfw_csp_function_t *pf, int i_x264_csp )
             pf->convert[X264VFW_CSP_YV12] = yv12_to_i420;
             pf->convert[X264VFW_CSP_YUYV] = yuyv_to_i420;
             pf->convert[X264VFW_CSP_UYVY] = uyvy_to_i420;
-            pf->convert[X264VFW_CSP_RGB ] =  rgb_to_i420;
-            pf->convert[X264VFW_CSP_BGR ] =  bgr_to_i420;
-            pf->convert[X264VFW_CSP_BGRA] = bgra_to_i420;
+            if( i_colmatrix == 1 )
+            {
+                // BT.709
+                if( b_fullrange )
+                {
+                    // PC Scale
+                    pf->convert[X264VFW_CSP_RGB ] =  rgb_to_i420_709_pc;
+                    pf->convert[X264VFW_CSP_BGR ] =  bgr_to_i420_709_pc;
+                    pf->convert[X264VFW_CSP_BGRA] = bgra_to_i420_709_pc;
+                }
+                else
+                {
+                    // TV Scale
+                    pf->convert[X264VFW_CSP_RGB ] =  rgb_to_i420_709_tv;
+                    pf->convert[X264VFW_CSP_BGR ] =  bgr_to_i420_709_tv;
+                    pf->convert[X264VFW_CSP_BGRA] = bgra_to_i420_709_tv;
+                }
+            }
+            else
+            {
+                // BT.601
+                if( b_fullrange )
+                {
+                    // PC Scale
+                    pf->convert[X264VFW_CSP_RGB ] =  rgb_to_i420_601_pc;
+                    pf->convert[X264VFW_CSP_BGR ] =  bgr_to_i420_601_pc;
+                    pf->convert[X264VFW_CSP_BGRA] = bgra_to_i420_601_pc;
+                }
+                else
+                {
+                    // TV Scale
+                    pf->convert[X264VFW_CSP_RGB ] =  rgb_to_i420_601_tv;
+                    pf->convert[X264VFW_CSP_BGR ] =  bgr_to_i420_601_tv;
+                    pf->convert[X264VFW_CSP_BGRA] = bgra_to_i420_601_tv;
+                }
+            }
             break;
 
         default:

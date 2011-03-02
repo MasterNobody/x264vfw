@@ -308,12 +308,12 @@ static int close_file( hnd_t handle, int64_t largest_pts, int64_t second_largest
 
     double total_duration;
     /* duration algorithm fails with one frame */
-    if( p_flv->i_framenum > 1 )
-        total_duration = (2 * largest_pts - second_largest_pts) * p_flv->d_timebase;
+    if( p_flv->i_framenum == 1 )
+        total_duration = p_flv->i_fps_num ? (double)p_flv->i_fps_den / p_flv->i_fps_num : 0;
     else
-        total_duration = (double)p_flv->i_fps_den / p_flv->i_fps_num;
+        total_duration = (2 * largest_pts - second_largest_pts) * p_flv->d_timebase;
 
-    if( x264_is_regular_file( c->fp ) )
+    if( x264_is_regular_file( c->fp ) && total_duration > 0 )
     {
         double framerate;
         uint64_t filesize = ftell( c->fp );

@@ -4,8 +4,6 @@
 #define X264VFW_USE_DECODER         1
 #define X264VFW_USE_BUGGY_APPS_HACK 1
 #define X264VFW_USE_VIRTUALDUB_HACK 1
-#define X264VFW_CSP_BT_709          0
-#define X264VFW_CSP_PC_SCALE        0
 #define X264VFW_DEBUG_OUTPUT        0
 
 //IDD_LOG size (in dialog units)

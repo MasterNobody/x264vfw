@@ -49,6 +49,6 @@ typedef struct
     x264vfw_csp_t convert[X264VFW_CSP_MAX];
 } x264vfw_csp_function_t;
 
-void x264vfw_csp_init( x264vfw_csp_function_t *pf, int i_csp );
+void x264vfw_csp_init( x264vfw_csp_function_t *pf, int i_x264_csp, int i_colmatrix, int b_fullrange );
 
 #endif
