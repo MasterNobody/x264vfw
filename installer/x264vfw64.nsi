@@ -172,11 +172,14 @@ Section "Uninstall"
   DeleteRegKey HKCU "Software\GNU\x264vfw64"
 keep_settings:
 
-  ReadRegStr $R0 HKLM "Software\Microsoft\Windows NT\CurrentVersion\drivers32" "vidc.x264"
-  DeleteRegValue HKLM "Software\Microsoft\Windows NT\CurrentVersion\drivers.desc" $R0
-  DeleteRegValue HKLM "Software\Microsoft\Windows NT\CurrentVersion\drivers32" "vidc.x264"
-  DeleteINIStr "$WINDIR\system.ini" "drivers32" "vidc.x264"
-  DeleteRegKey HKLM "System\CurrentControlSet\Control\MediaResources\icm\vidc.x264"
+  ${If} ${IsNT}
+    ReadRegStr $R0 HKLM "Software\Microsoft\Windows NT\CurrentVersion\drivers32" "vidc.x264"
+    DeleteRegValue HKLM "Software\Microsoft\Windows NT\CurrentVersion\drivers.desc" $R0
+    DeleteRegValue HKLM "Software\Microsoft\Windows NT\CurrentVersion\drivers32" "vidc.x264"
+  ${Else}
+    DeleteINIStr "$WINDIR\system.ini" "drivers32" "vidc.x264"
+    DeleteRegKey HKLM "System\CurrentControlSet\Control\MediaResources\icm\vidc.x264"
+  ${EndIf}
 
   SetRegView lastused
 

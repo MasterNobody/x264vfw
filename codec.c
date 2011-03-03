@@ -297,11 +297,6 @@ LRESULT compress_query(CODEC *codec, BITMAPINFO *lpbiInput, BITMAPINFO *lpbiOutp
     if (!supported_fourcc(outhdr->biCompression))
         return ICERR_BADFORMAT;
 
-    /* MSDN says that biSizeImage may be set to zero for BI_RGB bitmaps
-       But some buggy applications don't set it also for other bitmap types */
-    if (outhdr->biSizeImage != 0 && outhdr->biSizeImage < compress_get_size(codec, lpbiInput, lpbiOutput))
-        return ICERR_BADFORMAT;
-
     return ICERR_OK;
 }
 
@@ -1426,7 +1421,11 @@ LRESULT compress(CODEC *codec, ICCOMPRESS *icc)
     }
 
 #if X264VFW_USE_VIRTUALDUB_HACK
-    if (codec->b_use_vd_hack && !got_picture)
+#if X264VFW_USE_BUGGY_APPS_HACK
+    if (codec->b_use_vd_hack && !got_picture && (outhdr->biSizeImage > 0 || !codec->b_check_size))
+#else
+    if (codec->b_use_vd_hack && !got_picture && outhdr->biSizeImage > 0)
+#endif
     {
         *icc->lpdwFlags = 0;
         ((uint8_t *)icc->lpOutput)[0] = 0x7f;
