@@ -1,9 +1,9 @@
 /*****************************************************************************
- * summary.h:
+ * internal.h:
  *****************************************************************************
  * Copyright (C) 2010 L-SMASH project
  *
- * Authors: Takashi Hirata <silverfilain@gmail.com>
+ * Authors:  Takashi Hirata <silverfilain@gmail.com>
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -20,21 +20,18 @@
 
 /* This file is available under an ISC license. */
 
-#ifndef LSMASH_SUMMARY_H
-#define LSMASH_SUMMARY_H
+#ifndef INTERNAL_H
+#define INTERNAL_H
+
+#include "common/osdep.h" /* must be placed before stdio.h */
+#include <stdio.h>
+#include <assert.h>
+
+#ifndef lsmash_fseek
+#define lsmash_fseek fseek
+#define lsmash_ftell ftell
+#endif
 
 #include "lsmash.h"
-#include "mp4a.h"
-#include "mp4sys.h"
 
-/* to facilitate to make exdata (typically DecoderSpecificInfo or AudioSpecificConfig). */
-int mp4sys_setup_AudioSpecificConfig( lsmash_audio_summary_t* summary );
-int mp4sys_summary_add_exdata( lsmash_audio_summary_t* summary, void* exdata, uint32_t exdata_length );
-
-/* FIXME: these functions may change in the future.
-   I wonder these functions should be for generic (not limited to audio) summary. */
-void mp4sys_cleanup_audio_summary( lsmash_audio_summary_t* summary );
-
-mp4a_audioProfileLevelIndication mp4sys_get_audioProfileLevelIndication( lsmash_audio_summary_t* summary );
-
-#endif /* #ifndef LSMASH_SUMMARY_H */
+#endif

@@ -10,29 +10,62 @@
 #
 ##############################################################################
 
+-include x264vfw_config.mak
+
 # Current dir
 DIR_CUR = $(shell pwd)
 
 # Path to include files (library and src)
 DIR_SRC = $(DIR_CUR)
+
 ifeq ($(X264_DIR)x,x)
 X264_DIR = $(DIR_CUR)/../x264
 endif
+
 ifeq ($(FFMPEG_DIR)x,x)
+ifeq ($(FFMPEG_NAME)x,x)
+ifneq ($(wildcard $(DIR_CUR)/../ffmpeg/*)x,x)
 FFMPEG_DIR = $(DIR_CUR)/../ffmpeg
+FFMPEG_NAME = ffmpeg
+else
+ifneq ($(wildcard $(DIR_CUR)/../libav/*)x,x)
+FFMPEG_DIR = $(DIR_CUR)/../libav
+FFMPEG_NAME = libav
+endif
+endif
+else
+ifneq ($(wildcard $(DIR_CUR)/../$(FFMPEG_NAME)/*)x,x)
+FFMPEG_DIR = $(DIR_CUR)/../$(FFMPEG_NAME)
+endif
+endif
+endif
+
+ifeq ($(FFMPEG_NAME)x,x)
+FFMPEG_NAME = ffmpeg
+endif
+
+ifeq ($(HAVE_FFMPEG)x,x)
+ifeq ($(FFMPEG_DIR)x,x)
+HAVE_FFMPEG = no
+else
+HAVE_FFMPEG = yes
+endif
 endif
 
 ifeq ($(wildcard config.mak)x,x)
+ifneq ($(wildcard $(X264_DIR)/config.mak)x,x)
 $(info $() Copy config.mak from $(X264_DIR))
-$(shell cp -f "$(X264_DIR)/config.mak" "$(DIR_CUR)/config.mak")
+$(shell cat "$(X264_DIR)/config.mak" | awk '/^ *\w+ *=/' > "$(DIR_CUR)/config.mak")
+endif
 endif
 ifeq ($(wildcard config.h)x,x)
+ifneq ($(wildcard $(X264_DIR)/config.h)x,x)
 $(info $() Copy config.h from $(X264_DIR))
 $(shell cp -f "$(X264_DIR)/config.h" "$(DIR_CUR)/config.h")
 endif
+endif
 
-include config.mak
-include x264vfw_config.mak
+-include config.mak
 
 ifeq ($(ARCH),X86_64)
 # Dll to build
@@ -54,9 +87,14 @@ INST_NSI = x264vfw.nsi
 INST_EXE = x264vfw.exe
 endif
 
+# cross-prefix
+ifeq ($(CROSS_PREFIX)x,x)
+CROSS_PREFIX = $(shell echo "$(RANLIB)" | grep 'ranlib$$' | sed -e 's/ranlib$$//')
+endif
+
 # Alias
 ifeq ($(WINDRES)x,x)
-WINDRES = windres
+WINDRES = $(CROSS_PREFIX)windres
 endif
 
 ##############################################################################
@@ -81,8 +119,9 @@ VFW_LDFLAGS = "-L$(X264_DIR)" -lx264
 
 RESFLAGS =
 ifeq ($(HAVE_FFMPEG),yes)
-RESFLAGS += "-DHAVE_FFMPEG"
-CFLAGS += "-DHAVE_FFMPEG"
+RESFLAGS += -DHAVE_FFMPEG
+RESFLAGS += "-DFFMPEG_LOGO=$(FFMPEG_NAME).bmp"
+CFLAGS += -DHAVE_FFMPEG
 CFLAGS += "-I$(FFMPEG_DIR)"
 VFW_LDFLAGS += "-L$(FFMPEG_DIR)/libavformat" -lavformat
 VFW_LDFLAGS += "-L$(FFMPEG_DIR)/libavcodec" -lavcodec
@@ -96,7 +135,10 @@ SRC_C = codec.c config.c csp.c driverproc.c
 SRC_RES = resource.rc
 
 # Muxers
+CONFIG =
+ifneq ($(wildcard config.h)x,x)
 CONFIG := $(shell cat config.h)
+endif
 
 SRC_C += output/raw.c
 SRC_C += output/matroska.c output/matroska_ebml.c
@@ -125,7 +167,7 @@ VPATH = $(DIR_SRC):$(DIR_BUILD)
 
 all: $(DLL)
 
-ifneq ($(wildcard .depend),)
+ifneq ($(wildcard .depend)x,x)
 include .depend
 endif
 

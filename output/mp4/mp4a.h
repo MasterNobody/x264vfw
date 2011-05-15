@@ -23,14 +23,13 @@
 #ifndef MP4A_H
 #define MP4A_H
 
-#include "lsmash.h"
 #include "utils.h"
 
 /***************************************************************************
     MPEG-4 Systems for MPEG-4 Audio
 ***************************************************************************/
 
-/* 14496-3 1.5.2.4 audioProfileLevelIndication Table 1.12 audioProfileLevelIndication values */
+/* 14496-3 audioProfileLevelIndication */
 typedef enum {
     MP4A_AUDIO_PLI_Reserved                 = 0x00, /* Reserved for ISO use */
     MP4A_AUDIO_PLI_Main_L1                  = 0x01, /* Main Audio Profile L1 */

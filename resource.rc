@@ -11,7 +11,7 @@ LANGUAGE LANG_RUSSIAN, SUBLANG_DEFAULT
 //
 IDB_X264_LOGO           BITMAP                  "x264.bmp"
 #if defined(HAVE_FFMPEG)
-IDB_FFMPEG_LOGO         BITMAP                  "ffmpeg.bmp"
+IDB_FFMPEG_LOGO         BITMAP                  FFMPEG_LOGO
 #endif
 
 

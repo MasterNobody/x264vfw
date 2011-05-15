@@ -221,7 +221,7 @@ static int write_frame( hnd_t handle, uint8_t *p_nalu, int i_size, x264_picture_
 
     av_init_packet(&pkt);
     pkt.stream_index = h->video_stm->index;
-    pkt.flags |= p_picture->b_keyframe ? PKT_FLAG_KEY : 0;
+    pkt.flags |= p_picture->b_keyframe ? AV_PKT_FLAG_KEY : 0;
     if( h->d_cur )
     {
         if( write_buffer( h, p_nalu, i_size ) < 0 )

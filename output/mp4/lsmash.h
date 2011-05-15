@@ -23,31 +23,24 @@
 #ifndef LSMASH_H
 #define LSMASH_H
 
-#ifndef __MINGW32__
-#define _FILE_OFFSET_BITS 64
-#endif
+#include <stdint.h>
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <inttypes.h>
-#include <ctype.h> /* for chapter handling */
-
-#ifdef __MINGW32__
-#define fseek fseeko64
-#define ftell ftello64
-#endif
-
-
-/* public defines */
-#define LSMASH_FILE_MODE_WRITE 0x00000001
-#define LSMASH_FILE_MODE_READ  0x00000002
-#define LSMASH_FILE_MODE_DUMP  0x00000004
+#define PRIVATE     /* If this declaration is placed at a variable, any user shouldn't use it. */
 
 #define LSMASH_4CC( a, b, c, d ) (((a)<<24) | ((b)<<16) | ((c)<<8) | (d))
 
 
 /* public constants */
+typedef enum
+{
+    LSMASH_FILE_MODE_WRITE             = 1,
+    LSMASH_FILE_MODE_READ              = 1<<1,
+    LSMASH_FILE_MODE_DUMP              = 1<<2,
+    LSMASH_FILE_MODE_FRAGMENTED        = 1<<16,
+    LSMASH_FILE_MODE_WRITE_FRAGMENTED  = LSMASH_FILE_MODE_WRITE | LSMASH_FILE_MODE_FRAGMENTED,
+    LSMASH_FILE_MODE_READ_FRAGMENTED   = LSMASH_FILE_MODE_READ  | LSMASH_FILE_MODE_FRAGMENTED,
+} lsmash_file_mode_code;
+
 typedef enum
 {
     ISOM_BOX_TYPE_ID32  = LSMASH_4CC( 'I', 'D', '3', '2' ),
@@ -218,6 +211,7 @@ typedef enum
     QT_BOX_TYPE_COLR    = LSMASH_4CC( 'c', 'o', 'l', 'r' ),
     QT_BOX_TYPE_CRGN    = LSMASH_4CC( 'c', 'r', 'g', 'n' ),
     QT_BOX_TYPE_CTAB    = LSMASH_4CC( 'c', 't', 'a', 'b' ),
+    QT_BOX_TYPE_ENDA    = LSMASH_4CC( 'e', 'n', 'd', 'a' ),
     QT_BOX_TYPE_ENOF    = LSMASH_4CC( 'e', 'n', 'o', 'f' ),
     QT_BOX_TYPE_FRMA    = LSMASH_4CC( 'f', 'r', 'm', 'a' ),
     QT_BOX_TYPE_GMHD    = LSMASH_4CC( 'g', 'm', 'h', 'd' ),
@@ -320,6 +314,8 @@ typedef enum
     ISOM_BRAND_TYPE_ISO2  = LSMASH_4CC( 'i', 's', 'o', '2' ),
     ISOM_BRAND_TYPE_ISO3  = LSMASH_4CC( 'i', 's', 'o', '3' ),
     ISOM_BRAND_TYPE_ISO4  = LSMASH_4CC( 'i', 's', 'o', '4' ),
+    ISOM_BRAND_TYPE_ISO5  = LSMASH_4CC( 'i', 's', 'o', '5' ),
+    ISOM_BRAND_TYPE_ISO6  = LSMASH_4CC( 'i', 's', 'o', '6' ),
     ISOM_BRAND_TYPE_ISOM  = LSMASH_4CC( 'i', 's', 'o', 'm' ),
     ISOM_BRAND_TYPE_JPSI  = LSMASH_4CC( 'j', 'p', 's', 'i' ),
     ISOM_BRAND_TYPE_MJ2S  = LSMASH_4CC( 'm', 'j', '2', 'j' ),
@@ -511,8 +507,9 @@ typedef enum
     ISOM_GROUP_TYPE_AVSS = LSMASH_4CC( 'a', 'v', 's', 's' ),      /* AVC Sub Sequence */
     ISOM_GROUP_TYPE_DTRT = LSMASH_4CC( 'd', 't', 'r', 't' ),      /* Decode re-timing */
     ISOM_GROUP_TYPE_MVIF = LSMASH_4CC( 'm', 'v', 'i', 'f' ),      /* MVC Scalability Information */
+    ISOM_GROUP_TYPE_RAP  = LSMASH_4CC( 'r', 'a', 'p', ' ' ),      /* Random Access Point / This grouping type hasn't been published yet. */
     ISOM_GROUP_TYPE_RASH = LSMASH_4CC( 'r', 'a', 's', 'h' ),      /* Rate Share */
-    ISOM_GROUP_TYPE_ROLL = LSMASH_4CC( 'r', 'o', 'l', 'l' ),      /* Roll Recovery */
+    ISOM_GROUP_TYPE_ROLL = LSMASH_4CC( 'r', 'o', 'l', 'l' ),      /* Random Access Recovery Point */
     ISOM_GROUP_TYPE_SCIF = LSMASH_4CC( 's', 'c', 'i', 'f' ),      /* SVC Scalability Information */
     ISOM_GROUP_TYPE_SCNM = LSMASH_4CC( 's', 'c', 'n', 'm' ),      /* AVC/SVC/MVC map groups */
     ISOM_GROUP_TYPE_VIPR = LSMASH_4CC( 'v', 'i', 'p', 'r' ),      /* View priority */
@@ -522,46 +519,108 @@ typedef enum
 
 typedef enum
 {
-    ISOM_LANGUAGE_CODE_ENGLISH    = ISOM_LANG_T( 'e', 'n', 'g' ),
-    ISOM_LANGUAGE_CODE_FRENCH     = ISOM_LANG_T( 'f', 'r', 'a' ),
-    ISOM_LANGUAGE_CODE_GERMAN     = ISOM_LANG_T( 'd', 'e', 'u' ),
-    ISOM_LANGUAGE_CODE_ITALIAN    = ISOM_LANG_T( 'i', 't', 'a' ),
-    ISOM_LANGUAGE_CODE_DUTCH_M    = ISOM_LANG_T( 'd', 'u', 'm' ),
-    ISOM_LANGUAGE_CODE_SWEDISH    = ISOM_LANG_T( 's', 'w', 'e' ),
-    ISOM_LANGUAGE_CODE_SPANISH    = ISOM_LANG_T( 's', 'p', 'a' ),
-    ISOM_LANGUAGE_CODE_DANISH     = ISOM_LANG_T( 'd', 'a', 'n' ),
-    ISOM_LANGUAGE_CODE_PORTUGUESE = ISOM_LANG_T( 'p', 'o', 'r' ),
-    ISOM_LANGUAGE_CODE_NORWEGIAN  = ISOM_LANG_T( 'n', 'o', 'r' ),
-    ISOM_LANGUAGE_CODE_HEBREW     = ISOM_LANG_T( 'h', 'e', 'b' ),
-    ISOM_LANGUAGE_CODE_JAPANESE   = ISOM_LANG_T( 'j', 'p', 'n' ),
-    ISOM_LANGUAGE_CODE_ARABIC     = ISOM_LANG_T( 'a', 'r', 'a' ),
-    ISOM_LANGUAGE_CODE_FINNISH    = ISOM_LANG_T( 'f', 'i', 'n' ),
-    ISOM_LANGUAGE_CODE_GREEK      = ISOM_LANG_T( 'e', 'l', 'l' ),
-    ISOM_LANGUAGE_CODE_ICELANDIC  = ISOM_LANG_T( 'i', 's', 'l' ),
-    ISOM_LANGUAGE_CODE_MALTESE    = ISOM_LANG_T( 'm', 'l', 't' ),
-    ISOM_LANGUAGE_CODE_TURKISH    = ISOM_LANG_T( 't', 'u', 'r' ),
-    ISOM_LANGUAGE_CODE_CROATIAN   = ISOM_LANG_T( 'h', 'r', 'v' ),
-    ISOM_LANGUAGE_CODE_CHINESE    = ISOM_LANG_T( 'z', 'h', 'o' ),
-    ISOM_LANGUAGE_CODE_URDU       = ISOM_LANG_T( 'u', 'r', 'd' ),
-    ISOM_LANGUAGE_CODE_HINDI      = ISOM_LANG_T( 'h', 'i', 'n' ),
-    ISOM_LANGUAGE_CODE_THAI       = ISOM_LANG_T( 't', 'h', 'a' ),
-    ISOM_LANGUAGE_CODE_KOREAN     = ISOM_LANG_T( 'k', 'o', 'r' ),
-    ISOM_LANGUAGE_CODE_LITHUANIAN = ISOM_LANG_T( 'l', 'i', 't' ),
-    ISOM_LANGUAGE_CODE_POLISH     = ISOM_LANG_T( 'p', 'o', 'l' ),
-    ISOM_LANGUAGE_CODE_HUNGARIAN  = ISOM_LANG_T( 'h', 'u', 'n' ),
-    ISOM_LANGUAGE_CODE_ESTONIAN   = ISOM_LANG_T( 'e', 's', 't' ),
-    ISOM_LANGUAGE_CODE_LATVIAN    = ISOM_LANG_T( 'l', 'a', 'v' ),
-    ISOM_LANGUAGE_CODE_SAMI       = ISOM_LANG_T( 's', 'm', 'i' ),
-    ISOM_LANGUAGE_CODE_FAROESE    = ISOM_LANG_T( 'f', 'a', 'o' ),
-    ISOM_LANGUAGE_CODE_RUSSIAN    = ISOM_LANG_T( 'r', 'u', 's' ),
-    ISOM_LANGUAGE_CODE_DUTCH      = ISOM_LANG_T( 'n', 'l', 'd' ),
-    ISOM_LANGUAGE_CODE_IRISH      = ISOM_LANG_T( 'g', 'l', 'e' ),
-    ISOM_LANGUAGE_CODE_ALBANIAN   = ISOM_LANG_T( 's', 'q', 'i' ),
-    ISOM_LANGUAGE_CODE_ROMANIAN   = ISOM_LANG_T( 'r', 'o', 'n' ),
-    ISOM_LANGUAGE_CODE_CZECH      = ISOM_LANG_T( 'c', 'e', 's' ),
-    ISOM_LANGUAGE_CODE_SLOVAK     = ISOM_LANG_T( 's', 'l', 'k' ),
-    ISOM_LANGUAGE_CODE_SLOVENIA   = ISOM_LANG_T( 's', 'l', 'v' ),
-    ISOM_LANGUAGE_CODE_UNDEFINED  = ISOM_LANG_T( 'u', 'n', 'd' ),
+    ISOM_LANGUAGE_CODE_ENGLISH          = ISOM_LANG_T( 'e', 'n', 'g' ),
+    ISOM_LANGUAGE_CODE_FRENCH           = ISOM_LANG_T( 'f', 'r', 'a' ),
+    ISOM_LANGUAGE_CODE_GERMAN           = ISOM_LANG_T( 'd', 'e', 'u' ),
+    ISOM_LANGUAGE_CODE_ITALIAN          = ISOM_LANG_T( 'i', 't', 'a' ),
+    ISOM_LANGUAGE_CODE_DUTCH_M          = ISOM_LANG_T( 'd', 'u', 'm' ),
+    ISOM_LANGUAGE_CODE_SWEDISH          = ISOM_LANG_T( 's', 'w', 'e' ),
+    ISOM_LANGUAGE_CODE_SPANISH          = ISOM_LANG_T( 's', 'p', 'a' ),
+    ISOM_LANGUAGE_CODE_DANISH           = ISOM_LANG_T( 'd', 'a', 'n' ),
+    ISOM_LANGUAGE_CODE_PORTUGUESE       = ISOM_LANG_T( 'p', 'o', 'r' ),
+    ISOM_LANGUAGE_CODE_NORWEGIAN        = ISOM_LANG_T( 'n', 'o', 'r' ),
+    ISOM_LANGUAGE_CODE_HEBREW           = ISOM_LANG_T( 'h', 'e', 'b' ),
+    ISOM_LANGUAGE_CODE_JAPANESE         = ISOM_LANG_T( 'j', 'p', 'n' ),
+    ISOM_LANGUAGE_CODE_ARABIC           = ISOM_LANG_T( 'a', 'r', 'a' ),
+    ISOM_LANGUAGE_CODE_FINNISH          = ISOM_LANG_T( 'f', 'i', 'n' ),
+    ISOM_LANGUAGE_CODE_GREEK            = ISOM_LANG_T( 'e', 'l', 'l' ),
+    ISOM_LANGUAGE_CODE_ICELANDIC        = ISOM_LANG_T( 'i', 's', 'l' ),
+    ISOM_LANGUAGE_CODE_MALTESE          = ISOM_LANG_T( 'm', 'l', 't' ),
+    ISOM_LANGUAGE_CODE_TURKISH          = ISOM_LANG_T( 't', 'u', 'r' ),
+    ISOM_LANGUAGE_CODE_CROATIAN         = ISOM_LANG_T( 'h', 'r', 'v' ),
+    ISOM_LANGUAGE_CODE_CHINESE          = ISOM_LANG_T( 'z', 'h', 'o' ),
+    ISOM_LANGUAGE_CODE_URDU             = ISOM_LANG_T( 'u', 'r', 'd' ),
+    ISOM_LANGUAGE_CODE_HINDI            = ISOM_LANG_T( 'h', 'i', 'n' ),
+    ISOM_LANGUAGE_CODE_THAI             = ISOM_LANG_T( 't', 'h', 'a' ),
+    ISOM_LANGUAGE_CODE_KOREAN           = ISOM_LANG_T( 'k', 'o', 'r' ),
+    ISOM_LANGUAGE_CODE_LITHUANIAN       = ISOM_LANG_T( 'l', 'i', 't' ),
+    ISOM_LANGUAGE_CODE_POLISH           = ISOM_LANG_T( 'p', 'o', 'l' ),
+    ISOM_LANGUAGE_CODE_HUNGARIAN        = ISOM_LANG_T( 'h', 'u', 'n' ),
+    ISOM_LANGUAGE_CODE_ESTONIAN         = ISOM_LANG_T( 'e', 's', 't' ),
+    ISOM_LANGUAGE_CODE_LATVIAN          = ISOM_LANG_T( 'l', 'a', 'v' ),
+    ISOM_LANGUAGE_CODE_SAMI             = ISOM_LANG_T( 's', 'm', 'i' ),
+    ISOM_LANGUAGE_CODE_FAROESE          = ISOM_LANG_T( 'f', 'a', 'o' ),
+    ISOM_LANGUAGE_CODE_RUSSIAN          = ISOM_LANG_T( 'r', 'u', 's' ),
+    ISOM_LANGUAGE_CODE_DUTCH            = ISOM_LANG_T( 'n', 'l', 'd' ),
+    ISOM_LANGUAGE_CODE_IRISH            = ISOM_LANG_T( 'g', 'l', 'e' ),
+    ISOM_LANGUAGE_CODE_ALBANIAN         = ISOM_LANG_T( 's', 'q', 'i' ),
+    ISOM_LANGUAGE_CODE_ROMANIAN         = ISOM_LANG_T( 'r', 'o', 'n' ),
+    ISOM_LANGUAGE_CODE_CZECH            = ISOM_LANG_T( 'c', 'e', 's' ),
+    ISOM_LANGUAGE_CODE_SLOVAK           = ISOM_LANG_T( 's', 'l', 'k' ),
+    ISOM_LANGUAGE_CODE_SLOVENIA         = ISOM_LANG_T( 's', 'l', 'v' ),
+    ISOM_LANGUAGE_CODE_YIDDISH          = ISOM_LANG_T( 'y', 'i', 'd' ),
+    ISOM_LANGUAGE_CODE_SERBIAN          = ISOM_LANG_T( 's', 'r', 'p' ),
+    ISOM_LANGUAGE_CODE_MACEDONIAN       = ISOM_LANG_T( 'm', 'k', 'd' ),
+    ISOM_LANGUAGE_CODE_BULGARIAN        = ISOM_LANG_T( 'b', 'u', 'l' ),
+    ISOM_LANGUAGE_CODE_UKRAINIAN        = ISOM_LANG_T( 'u', 'k', 'r' ),
+    ISOM_LANGUAGE_CODE_BELARUSIAN       = ISOM_LANG_T( 'b', 'e', 'l' ),
+    ISOM_LANGUAGE_CODE_UZBEK            = ISOM_LANG_T( 'u', 'z', 'b' ),
+    ISOM_LANGUAGE_CODE_KAZAKH           = ISOM_LANG_T( 'k', 'a', 'z' ),
+    ISOM_LANGUAGE_CODE_AZERBAIJANI      = ISOM_LANG_T( 'a', 'z', 'e' ),
+    ISOM_LANGUAGE_CODE_ARMENIAN         = ISOM_LANG_T( 'h', 'y', 'e' ),
+    ISOM_LANGUAGE_CODE_GEORGIAN         = ISOM_LANG_T( 'k', 'a', 't' ),
+    ISOM_LANGUAGE_CODE_MOLDAVIAN        = ISOM_LANG_T( 'r', 'o', 'n' ),
+    ISOM_LANGUAGE_CODE_KIRGHIZ          = ISOM_LANG_T( 'k', 'i', 'r' ),
+    ISOM_LANGUAGE_CODE_TAJIK            = ISOM_LANG_T( 't', 'g', 'k' ),
+    ISOM_LANGUAGE_CODE_TURKMEN          = ISOM_LANG_T( 't', 'u', 'k' ),
+    ISOM_LANGUAGE_CODE_MONGOLIAN        = ISOM_LANG_T( 'm', 'o', 'n' ),
+    ISOM_LANGUAGE_CODE_PASHTO           = ISOM_LANG_T( 'p', 'u', 's' ),
+    ISOM_LANGUAGE_CODE_KURDISH          = ISOM_LANG_T( 'k', 'u', 'r' ),
+    ISOM_LANGUAGE_CODE_KASHMIRI         = ISOM_LANG_T( 'k', 'a', 's' ),
+    ISOM_LANGUAGE_CODE_SINDHI           = ISOM_LANG_T( 's', 'n', 'd' ),
+    ISOM_LANGUAGE_CODE_TIBETAN          = ISOM_LANG_T( 'b', 'o', 'd' ),
+    ISOM_LANGUAGE_CODE_NEPALI           = ISOM_LANG_T( 'n', 'e', 'p' ),
+    ISOM_LANGUAGE_CODE_SANSKRIT         = ISOM_LANG_T( 's', 'a', 'n' ),
+    ISOM_LANGUAGE_CODE_MARATHI          = ISOM_LANG_T( 'm', 'a', 'r' ),
+    ISOM_LANGUAGE_CODE_BENGALI          = ISOM_LANG_T( 'b', 'e', 'n' ),
+    ISOM_LANGUAGE_CODE_ASSAMESE         = ISOM_LANG_T( 'a', 's', 'm' ),
+    ISOM_LANGUAGE_CODE_GUJARATI         = ISOM_LANG_T( 'g', 'u', 'j' ),
+    ISOM_LANGUAGE_CODE_PUNJABI          = ISOM_LANG_T( 'p', 'a', 'n' ),
+    ISOM_LANGUAGE_CODE_ORIYA            = ISOM_LANG_T( 'o', 'r', 'i' ),
+    ISOM_LANGUAGE_CODE_MALAYALAM        = ISOM_LANG_T( 'm', 'a', 'l' ),
+    ISOM_LANGUAGE_CODE_KANNADA          = ISOM_LANG_T( 'k', 'a', 'n' ),
+    ISOM_LANGUAGE_CODE_TAMIL            = ISOM_LANG_T( 't', 'a', 'm' ),
+    ISOM_LANGUAGE_CODE_TELUGU           = ISOM_LANG_T( 't', 'e', 'l' ),
+    ISOM_LANGUAGE_CODE_SINHALESE        = ISOM_LANG_T( 's', 'i', 'n' ),
+    ISOM_LANGUAGE_CODE_BURMESE          = ISOM_LANG_T( 'm', 'y', 'a' ),
+    ISOM_LANGUAGE_CODE_KHMER            = ISOM_LANG_T( 'k', 'h', 'm' ),
+    ISOM_LANGUAGE_CODE_LAO              = ISOM_LANG_T( 'l', 'a', 'o' ),
+    ISOM_LANGUAGE_CODE_VIETNAMESE       = ISOM_LANG_T( 'v', 'i', 'e' ),
+    ISOM_LANGUAGE_CODE_INDONESIAN       = ISOM_LANG_T( 'i', 'n', 'd' ),
+    ISOM_LANGUAGE_CODE_TAGALOG          = ISOM_LANG_T( 't', 'g', 'l' ),
+    ISOM_LANGUAGE_CODE_MALAY_ROMAN      = ISOM_LANG_T( 'm', 's', 'a' ),
+    ISOM_LANGUAGE_CODE_MAYAY_ARABIC     = ISOM_LANG_T( 'm', 's', 'a' ),
+    ISOM_LANGUAGE_CODE_AMHARIC          = ISOM_LANG_T( 'a', 'm', 'h' ),
+    ISOM_LANGUAGE_CODE_OROMO            = ISOM_LANG_T( 'o', 'r', 'm' ),
+    ISOM_LANGUAGE_CODE_SOMALI           = ISOM_LANG_T( 's', 'o', 'm' ),
+    ISOM_LANGUAGE_CODE_SWAHILI          = ISOM_LANG_T( 's', 'w', 'a' ),
+    ISOM_LANGUAGE_CODE_KINYARWANDA      = ISOM_LANG_T( 'k', 'i', 'n' ),
+    ISOM_LANGUAGE_CODE_RUNDI            = ISOM_LANG_T( 'r', 'u', 'n' ),
+    ISOM_LANGUAGE_CODE_CHEWA            = ISOM_LANG_T( 'n', 'y', 'a' ),
+    ISOM_LANGUAGE_CODE_MALAGASY         = ISOM_LANG_T( 'm', 'l', 'g' ),
+    ISOM_LANGUAGE_CODE_ESPERANTO        = ISOM_LANG_T( 'e', 'p', 'o' ),
+    ISOM_LANGUAGE_CODE_WELSH            = ISOM_LANG_T( 'c', 'y', 'm' ),
+    ISOM_LANGUAGE_CODE_BASQUE           = ISOM_LANG_T( 'e', 'u', 's' ),
+    ISOM_LANGUAGE_CODE_CATALAN          = ISOM_LANG_T( 'c', 'a', 't' ),
+    ISOM_LANGUAGE_CODE_LATIN            = ISOM_LANG_T( 'l', 'a', 't' ),
+    ISOM_LANGUAGE_CODE_QUECHUA          = ISOM_LANG_T( 'q', 'u', 'e' ),
+    ISOM_LANGUAGE_CODE_GUARANI          = ISOM_LANG_T( 'g', 'r', 'n' ),
+    ISOM_LANGUAGE_CODE_AYMARA           = ISOM_LANG_T( 'a', 'y', 'm' ),
+    ISOM_LANGUAGE_CODE_TATAR            = ISOM_LANG_T( 'c', 'r', 'h' ),
+    ISOM_LANGUAGE_CODE_UIGHUR           = ISOM_LANG_T( 'u', 'i', 'g' ),
+    ISOM_LANGUAGE_CODE_DZONGKHA         = ISOM_LANG_T( 'd', 'z', 'o' ),
+    ISOM_LANGUAGE_CODE_JAVANESE         = ISOM_LANG_T( 'j', 'a', 'v' ),
+    ISOM_LANGUAGE_CODE_UNDEFINED        = ISOM_LANG_T( 'u', 'n', 'd' ),
 } lsmash_iso_language_code;
 
 #undef ISOM_LANG_T
@@ -866,11 +925,14 @@ typedef enum
 
 typedef enum
 {
-    ISOM_TRACK_ENABLED      = 0x000001,
-    ISOM_TRACK_IN_MOVIE     = 0x000002,
-    ISOM_TRACK_IN_PREVIEW   = 0x000004,
+    /* In MP4 and/or ISO base media file format, if in a presentation all tracks have neither track_in_movie nor track_in_preview set,
+     * then all tracks shall be treated as if both flags were set on all tracks. */
+    ISOM_TRACK_ENABLED      = 0x000001,     /* Track_enabled: Indicates that the track is enabled.
+                                             * A disabled track is treated as if it were not present. */
+    ISOM_TRACK_IN_MOVIE     = 0x000002,     /* Track_in_movie: Indicates that the track is used in the presentation. */
+    ISOM_TRACK_IN_PREVIEW   = 0x000004,     /* Track_in_preview: Indicates that the track is used when previewing the presentation. */
 
-    QT_TRACK_IN_POSTER      = 0x000008,
+    QT_TRACK_IN_POSTER      = 0x000008,     /* Track_in_poster: Indicates that the track is used in the movie's poster. (only defined in QuickTime file format) */
 } lsmash_track_mode_code;
 
 typedef enum
@@ -894,7 +956,7 @@ typedef enum
     /* allow_ealier */
     QT_SAMPLE_EARLIER_PTS_ALLOWED       = 1,
     /* leading */
-    ISOM_SAMPLE_LEADING_UNKOWN          = 0,
+    ISOM_SAMPLE_LEADING_UNKNOWN         = 0,
     ISOM_SAMPLE_IS_UNDECODABLE_LEADING  = 1,
     ISOM_SAMPLE_IS_NOT_LEADING          = 2,
     ISOM_SAMPLE_IS_DECODABLE_LEADING    = 3,
@@ -912,25 +974,25 @@ typedef enum
     ISOM_SAMPLE_HAS_NO_REDUNDANCY       = 2,
 } lsmash_sample_property_code;
 
-/* 8.6.6.2 Semantics Table 6 - objectTypeIndication Values */
+/* objectTypeIndication */
 typedef enum {
     MP4SYS_OBJECT_TYPE_Forbidden                          = 0x00,   /* Forbidden */
     MP4SYS_OBJECT_TYPE_Systems_ISO_14496_1                = 0x01,   /* Systems ISO/IEC 14496-1 */
     /* For all 14496-1 streams unless specifically indicated to the contrary.
-       Scene Description scenes, which are identified with StreamType=0x03 (see Table 7), using
-       this object type value shall use the BIFSConfig specified in section 9.3.5.2.2 of this
-       specification. */
+       Scene Description scenes, which are identified with StreamType=0x03, using
+       this object type value shall use the BIFSConfig. */
     MP4SYS_OBJECT_TYPE_Systems_ISO_14496_1_BIFSv2         = 0x02,   /* Systems ISO/IEC 14496-1 */
-    /* This object type shall be used, with StreamType=0x03 (see Table 7), for Scene
-       Description streams that use the BIFSv2Config specified in section 9.3.5.3.2 of this
-       specification. Its use with other StreamTypes is reserved. */
+    /* This object type shall be used, with StreamType=0x03, for Scene
+       Description streams that use the BIFSv2Config.
+       Its use with other StreamTypes is reserved. */
 
     MP4SYS_OBJECT_TYPE_Interaction_Stream                 = 0x03,   /* Interaction Stream */
     MP4SYS_OBJECT_TYPE_Extended_BIFS                      = 0x04,   /* Extended BIFS */
     /* Used, with StreamType=0x03, for Scene Description streams that use the BIFSConfigEx; its use with
        other StreamTypes is reserved. (Was previously reserved for MUCommandStream but not used for that purpose.) */
     MP4SYS_OBJECT_TYPE_AFX_Stream                         = 0x05,   /* AFX Stream */
-    /* Used, with StreamType=0x03, for Scene Description streams that use the AFXConfig; its use with other StreamTypes is reserved. */
+    /* Used, with StreamType=0x03, for Scene Description streams that use the AFXConfig;
+       its use with other StreamTypes is reserved. */
     MP4SYS_OBJECT_TYPE_Font_Data_Stream                   = 0x06,   /* Font Data Stream */
     MP4SYS_OBJECT_TYPE_Synthetised_Texture                = 0x07,   /* Synthetised Texture */
     MP4SYS_OBJECT_TYPE_Text_Stream                        = 0x08,   /* Text Stream */
@@ -939,11 +1001,11 @@ typedef enum {
     MP4SYS_OBJECT_TYPE_Visual_H264_ISO_14496_10           = 0x21,   /* Visual ITU-T Recommendation H.264 | ISO/IEC 14496-10 */
     /* The actual object types are within the DecoderSpecificInfo and defined in H.264 | 14496-10. */
     MP4SYS_OBJECT_TYPE_Parameter_Sets_H_264_ISO_14496_10  = 0x22,   /* Parameter Sets for ITU-T Recommendation H.264 | ISO/IEC 14496-10 */
-    /* The actual object types are within the DecoderSpecificInfo and defined in 14496-2, Annex K. */
+    /* The actual object types are within the DecoderSpecificInfo and defined in 14496-2. */
 
     MP4SYS_OBJECT_TYPE_Audio_ISO_14496_3                  = 0x40,   /* Audio ISO/IEC 14496-3 (MPEG-4 Audio) */
     //MP4SYS_OBJECT_TYPE_MP4A_AUDIO = 0x40,
-    /* The actual object types are defined in 14496-3 and are in the DecoderSpecificInfo as specified in 14496-3 subpart 1 subclause 6.2.1. */
+    /* The actual object types are defined in 14496-3 and are in the DecoderSpecificInfo as specified in 14496-3. */
 
     MP4SYS_OBJECT_TYPE_Visual_ISO_13818_2_Simple_Profile  = 0x60,   /* Visual ISO/IEC 13818-2 Simple Profile (MPEG-2 Video) */
     MP4SYS_OBJECT_TYPE_Visual_ISO_13818_2_Main_Profile    = 0x61,   /* Visual ISO/IEC 13818-2 Main Profile */
@@ -987,17 +1049,17 @@ typedef enum {
        shall be treated as if the ObjectTypeIndication had been set to 0x01. */
 } lsmash_mp4sys_object_type_indication;
 
-/* 8.6.6.2 Semantics Table 7 - streamType Values */
+/* streamType */
 typedef enum {
     MP4SYS_STREAM_TYPE_Forbidden               = 0x00,  /* Forbidden */
-    MP4SYS_STREAM_TYPE_ObjectDescriptorStream  = 0x01,  /* ObjectDescriptorStream (see 8.5) */
-    MP4SYS_STREAM_TYPE_ClockReferenceStream    = 0x02,  /* ClockReferenceStream (see 10.2.5) */
-    MP4SYS_STREAM_TYPE_SceneDescriptionStream  = 0x03,  /* SceneDescriptionStream (see 9.2.1) */
+    MP4SYS_STREAM_TYPE_ObjectDescriptorStream  = 0x01,  /* ObjectDescriptorStream */
+    MP4SYS_STREAM_TYPE_ClockReferenceStream    = 0x02,  /* ClockReferenceStream */
+    MP4SYS_STREAM_TYPE_SceneDescriptionStream  = 0x03,  /* SceneDescriptionStream */
     MP4SYS_STREAM_TYPE_VisualStream            = 0x04,  /* VisualStream */
     MP4SYS_STREAM_TYPE_AudioStream             = 0x05,  /* AudioStream */
     MP4SYS_STREAM_TYPE_MPEG7Stream             = 0x06,  /* MPEG7Stream */
-    MP4SYS_STREAM_TYPE_IPMPStream              = 0x07,  /* IPMPStream (see 8.3.2) */
-    MP4SYS_STREAM_TYPE_ObjectContentInfoStream = 0x08,  /* ObjectContentInfoStream (see 8.4.2) */
+    MP4SYS_STREAM_TYPE_IPMPStream              = 0x07,  /* IPMPStream */
+    MP4SYS_STREAM_TYPE_ObjectContentInfoStream = 0x08,  /* ObjectContentInfoStream */
     MP4SYS_STREAM_TYPE_MPEGJStream             = 0x09,  /* MPEGJStream */
     MP4SYS_STREAM_TYPE_InteractionStream       = 0x0A,  /* Interaction Stream */
     MP4SYS_STREAM_TYPE_IPMPToolStream          = 0x0B,  /* IPMPToolStream */
@@ -1005,7 +1067,7 @@ typedef enum {
     MP4SYS_STREAM_TYPE_StreamingText           = 0x0D,  /* StreamingText */
 } lsmash_mp4sys_stream_type;
 
-/* ISO/IEC 14496-3 1.6.2.2 Payloads, Table 1.15 Audio Object Types */
+/* Audio Object Types */
 typedef enum {
     MP4A_AUDIO_OBJECT_TYPE_NULL                           = 0,
     MP4A_AUDIO_OBJECT_TYPE_AAC_MAIN                       = 1,  /* ISO/IEC 14496-3 subpart 4 */
@@ -1049,7 +1111,7 @@ typedef enum {
     MP4A_AUDIO_OBJECT_TYPE_SAOC                           = 43, /* ISO/IEC 23003-2 */
 } lsmash_mp4a_AudioObjectType;
 
-/* see ISO/IEC 14496-3 1.6.5 Signaling of SBR, Table 1.22 SBR Signaling and Corresponding Decoder Behavior */
+/* see ISO/IEC 14496-3 Signaling of SBR, SBR Signaling and Corresponding Decoder Behavior */
 typedef enum {
     MP4A_AAC_SBR_NOT_SPECIFIED = 0x0,   /* not mention to SBR presence. Implicit signaling. */
     MP4A_AAC_SBR_NONE,                  /* explicitly signals SBR does not present. Useless in general. */
@@ -1057,25 +1119,39 @@ typedef enum {
     MP4A_AAC_SBR_HIERARCHICAL           /* SBR exists. SBR dedicated method. */
 } lsmash_mp4a_aac_sbr_mode;
 
+typedef enum
+{
+    ISOM_SAMPLE_RANDOM_ACCESS_TYPE_NONE         = 0,        /* not random access point */
+    ISOM_SAMPLE_RANDOM_ACCESS_TYPE_SYNC         = 1,        /* sync sample */
+    ISOM_SAMPLE_RANDOM_ACCESS_TYPE_CLOSED_RAP   = 1,        /* the first sample of a closed GOP */
+    ISOM_SAMPLE_RANDOM_ACCESS_TYPE_OPEN_RAP     = 2,        /* the first sample of an open GOP  */
+    ISOM_SAMPLE_RANDOM_ACCESS_TYPE_RECOVERY     = 3,        /* starting point of gradual decoder refresh */
+
+    QT_SAMPLE_RANDOM_ACCESS_TYPE_NONE           = 0,        /* not random access point */
+    QT_SAMPLE_RANDOM_ACCESS_TYPE_SYNC           = 1,        /* sync sample */
+    QT_SAMPLE_RANDOM_ACCESS_TYPE_PARTIAL_SYNC   = 2,        /* partial sync sample */
+    QT_SAMPLE_RANDOM_ACCESS_TYPE_CLOSED_RAP     = 1,        /* the first sample of a closed GOP */
+    QT_SAMPLE_RANDOM_ACCESS_TYPE_OPEN_RAP       = 2,        /* the first sample of an open GOP  */
+} lsmash_random_access_type;
+
 
 /* public data types */
 typedef struct
 {
     uint32_t complete;      /* recovery point: the identifier necessary for the recovery from its starting point to be completed */
     uint32_t identifier;    /* the identifier for samples
-                             * If this identifier equals a certain recovery_point, then this sample is the recovery point. */
-    uint8_t start_point;
+                             * If this identifier equals a certain identifier of recovery point,
+                             * then this sample is the recovery point of the earliest group in the pool. */
 } lsmash_recovery_t;
 
 typedef struct
 {
-    uint8_t sync_point;
-    uint8_t partial_sync;
     uint8_t allow_earlier;
     uint8_t leading;
     uint8_t independent;
     uint8_t disposable;
     uint8_t redundant;
+    lsmash_random_access_type random_access_type;
     lsmash_recovery_t recovery;
 } lsmash_sample_property_t;
 
@@ -1097,21 +1173,22 @@ typedef struct {
 } lsmash_adhoc_remux_t;
 
 /* L-SMASH's original structure, summary of audio/video stream configuration */
-/* FIXME: I wonder whether this struct should blong to namespace of "isom" or not. */
 /* NOTE: For audio, currently assuming AAC-LC. */
 
 #define LSMASH_BASE_SUMMARY \
     lsmash_mp4sys_object_type_indication object_type_indication; \
     lsmash_mp4sys_stream_type stream_type; \
-    void* exdata;               /* typically payload of DecoderSpecificInfo (that's called AudioSpecificConfig in mp4a) */ \
+    void *exdata;               /* typically payload of DecoderSpecificInfo (that's called AudioSpecificConfig in mp4a) */ \
     uint32_t exdata_length;     /* length of exdata */ \
     uint32_t max_au_length;     /* buffer length for 1 access unit, typically max size of 1 audio/video frame */
 
-typedef struct {
+typedef struct
+{
     LSMASH_BASE_SUMMARY
 } lsmash_summary_t;
 
-typedef struct {
+typedef struct
+{
     LSMASH_BASE_SUMMARY
     // mp4a_audioProfileLevelIndication pli ; /* I wonder we should have this or not. */
     uint32_t sample_type;               /* Audio codec type. */
@@ -1122,6 +1199,8 @@ typedef struct {
     uint32_t samples_in_frame;          /* Even if the stream is HE-AAC/aacPlus/SBR(+PS), this is base AAC's one, so 1024. */
     lsmash_mp4a_aac_sbr_mode sbr_mode;  /* SBR treatment. Currently we always set this as mp4a_AAC_SBR_NOT_SPECIFIED(Implicit signaling).
                                          * User can set this for treatment in other way. */
+    lsmash_channel_layout_tag_code layout_tag;  /* channel layout */
+    lsmash_channel_bitmap_code bitmap;          /* Only available when layout_tag is set to QT_CHANNEL_LAYOUT_USE_CHANNEL_BITMAP. */
     /* LPCM descriptions */
     uint8_t sample_format;      /* 0: integer, 1: floating point */
     uint8_t endianness;         /* 0: big endian, 1: little endian */
@@ -1131,23 +1210,75 @@ typedef struct {
     uint8_t interleaved;        /* 0: non-interleaved, 1: interleaved i.e. the samples for each channels are stored in one stream */
 } lsmash_audio_summary_t;
 
-typedef struct {
+typedef struct
+{
     LSMASH_BASE_SUMMARY
     // mp4sys_visualProfileLevelIndication pli ; /* I wonder we should have this or not. */
     // lsmash_mp4v_VideoObjectType vot;    /* Detailed codec type. If not mp4v, just ignored. */
-    uint32_t width;         /* pixel counts of width samples have */
-    uint32_t height;        /* pixel counts of height samples have */
+    uint32_t width;                                 /* pixel counts of width samples have */
+    uint32_t height;                                /* pixel counts of height samples have */
     uint32_t crop_top;
     uint32_t crop_left;
     uint32_t crop_bottom;
     uint32_t crop_right;
-    uint32_t par_h;         /* horizontal factor of pixel aspect ratio */
-    uint32_t par_v;         /* vertical factor of pixel aspect ratio */
-    lsmash_scaling_method_code scaling_method;
+    uint32_t par_h;                                 /* horizontal factor of pixel aspect ratio */
+    uint32_t par_v;                                 /* vertical factor of pixel aspect ratio */
+    lsmash_scaling_method_code scaling_method;      /* If not set, video samples are scaled into the visual presentation region to fill it. */
     lsmash_color_parameter primaries;
     lsmash_color_parameter transfer;
     lsmash_color_parameter matrix;
 } lsmash_video_summary_t;
+
+typedef struct
+{
+    uint32_t timescale;             /* media timescale: timescale for this media */
+    uint64_t duration;              /* the duration of this media, expressed in the media timescale
+                                     * You can't set this parameter manually. */
+    /* Use either type of language code. */
+    uint16_t MAC_language;          /* Macintosh language code for this media */
+    char    *ISO_language;          /* ISO 639-2/T language code for this media */
+    /* human-readable name for the track type (for debugging and inspection purposes) */
+    char *media_handler_name;
+    char *data_handler_name;
+    /* Any user shouldn't use the following parameters. */
+    PRIVATE char language_shadow[4];
+    PRIVATE char media_handler_name_shadow[256];
+    PRIVATE char data_handler_name_shadow[256];
+} lsmash_media_parameters_t;
+
+typedef struct
+{
+    lsmash_track_mode_code mode;
+
+    uint32_t track_ID;              /* an integer that uniquely identifies the track
+                                     * Don't set to value already used except for zero value.
+                                     * Zero value don't override established track_ID. */
+    uint64_t duration;              /* the duration of this track expressed in the movie timescale units
+                                     * If there is any edit, your setting is ignored. */
+    int16_t  video_layer;           /* the front-to-back ordering of video tracks; tracks with lower numbers are closer to the viewer. */
+    int16_t  alternate_group;       /* an integer that specifies a group or collection of tracks
+                                     * If this field is not 0, it should be the same for tracks that contain alternate data for one another
+                                     * and different for tracks belonging to different such groups.
+                                     * Only one track within an alternate group should be played or streamed at any one time. */
+    int16_t  audio_volume;          /* fixed point 8.8 number. 0x0100 is full volume. */
+    uint32_t display_width;         /* visual presentation region size of horizontal direction as fixed point 16.16 number.  */
+    uint32_t display_height;        /* visual presentation region size of vertical direction as fixed point 16.16 number. */
+} lsmash_track_parameters_t;
+
+typedef struct
+{
+    double   max_chunk_duration;    /* max duration per chunk in seconds. 0.5 is default value. */
+    double   max_async_tolerance;   /* max tolerance, in seconds, for amount of interleaving asynchronization between tracks.
+                                     * 2.0 is default value. At least twice of max_chunk_duration is used. */
+    uint32_t timescale;             /* movie timescale: timescale for the entire presentation */
+    uint64_t duration;              /* the duration, expressed in movie timescale, of the longest track
+                                     * You can't set this parameter manually. */
+    int32_t  playback_rate;         /* fixed point 16.16 number. 0x00010000 is normal forward playback and default value. */
+    int32_t  playback_volume;       /* fixed point 8.8 number. 0x0100 is full volume and default value. */
+    int32_t  preview_time;          /* the time value in the movie at which the preview begins */
+    int32_t  preview_duration;      /* the duration of the movie preview in movie timescale units */
+    int32_t  poster_time;           /* the time value of the time of the movie poster */
+} lsmash_movie_parameters_t;
 
 typedef struct lsmash_root_tag lsmash_root_t;
 
@@ -1155,10 +1286,10 @@ typedef struct lsmash_root_tag lsmash_root_t;
 /* public functions */
 int lsmash_add_sps_entry( lsmash_root_t *root, uint32_t track_ID, uint32_t entry_number, uint8_t *sps, uint32_t sps_size );
 int lsmash_add_pps_entry( lsmash_root_t *root, uint32_t track_ID, uint32_t entry_number, uint8_t *pps, uint32_t pps_size );
+int lsmash_add_spsext_entry( lsmash_root_t *root, uint32_t track_ID, uint32_t entry_number, uint8_t *spsext, uint32_t spsext_size );
 int lsmash_add_sample_entry( lsmash_root_t *root, uint32_t track_ID, uint32_t sample_type, void* summary );
 
 int lsmash_add_btrt( lsmash_root_t *root, uint32_t track_ID, uint32_t entry_number );
-int lsmash_add_mdat( lsmash_root_t *root );
 int lsmash_add_free( lsmash_root_t *root, uint8_t *data, uint64_t data_length );
 
 int lsmash_write_ftyp( lsmash_root_t *root );
@@ -1172,32 +1303,12 @@ uint32_t lsmash_get_start_time_offset( lsmash_root_t *root, uint32_t track_ID );
 uint32_t lsmash_get_movie_timescale( lsmash_root_t *root );
 
 int lsmash_set_brands( lsmash_root_t *root, lsmash_brand_type_code major_brand, uint32_t minor_version, lsmash_brand_type_code *brands, uint32_t brand_count );
-int lsmash_set_max_chunk_duration( lsmash_root_t *root, double max_chunk_duration );
-int lsmash_set_media_handler( lsmash_root_t *root, uint32_t track_ID, lsmash_media_type_code media_type, char *name );
-int lsmash_set_media_handler_name( lsmash_root_t *root, uint32_t track_ID, char *handler_name );
-int lsmash_set_data_handler( lsmash_root_t *root, uint32_t track_ID, lsmash_data_reference_type_code reference_type, char *name );
-int lsmash_set_data_handler_name( lsmash_root_t *root, uint32_t track_ID, char *handler_name );
-int lsmash_set_movie_timescale( lsmash_root_t *root, uint32_t timescale );
-int lsmash_set_media_timescale( lsmash_root_t *root, uint32_t track_ID, uint32_t timescale );
-int lsmash_set_track_mode( lsmash_root_t *root, uint32_t track_ID, lsmash_track_mode_code mode );
-int lsmash_set_track_presentation_size( lsmash_root_t *root, uint32_t track_ID, uint32_t width, uint32_t height );
-int lsmash_set_track_volume( lsmash_root_t *root, uint32_t track_ID, int16_t volume );
 int lsmash_set_track_aperture_modes( lsmash_root_t *root, uint32_t track_ID, uint32_t entry_number );
-int lsmash_set_sample_resolution( lsmash_root_t *root, uint32_t track_ID, uint32_t entry_number, uint16_t width, uint16_t height );
-int lsmash_set_sample_type( lsmash_root_t *root, uint32_t track_ID, uint32_t entry_number, uint32_t sample_type );
-int lsmash_set_sample_aspect_ratio( lsmash_root_t *root, uint32_t track_ID, uint32_t entry_number, uint32_t hSpacing, uint32_t vSpacing );
-int lsmash_set_color_parameter( lsmash_root_t *root, uint32_t track_ID, uint32_t entry_number,
-                              lsmash_color_parameter primaries, lsmash_color_parameter transfer, lsmash_color_parameter matrix );
-int lsmash_set_scaling_method( lsmash_root_t *root, uint32_t track_ID, uint32_t entry_number,
-                             lsmash_scaling_method_code scale_method, int16_t display_center_x, int16_t display_center_y );
-int lsmash_set_channel_layout( lsmash_root_t *root, uint32_t track_ID, uint32_t entry_number, lsmash_channel_layout_tag_code layout_tag, lsmash_channel_bitmap_code bitmap );
 int lsmash_set_avc_config( lsmash_root_t *root, uint32_t track_ID, uint32_t entry_number,
-                         uint8_t configurationVersion, uint8_t AVCProfileIndication, uint8_t profile_compatibility,
-                         uint8_t AVCLevelIndication, uint8_t lengthSizeMinusOne,
-                         uint8_t chroma_format, uint8_t bit_depth_luma_minus8, uint8_t bit_depth_chroma_minus8 );
+                           uint8_t configurationVersion, uint8_t AVCProfileIndication, uint8_t profile_compatibility,
+                           uint8_t AVCLevelIndication, uint8_t lengthSizeMinusOne,
+                           uint8_t chroma_format, uint8_t bit_depth_luma_minus8, uint8_t bit_depth_chroma_minus8 );
 int lsmash_set_last_sample_delta( lsmash_root_t *root, uint32_t track_ID, uint32_t sample_delta );
-int lsmash_set_media_language( lsmash_root_t *root, uint32_t track_ID, char *ISO_language, uint16_t Mac_language );
-int lsmash_set_track_ID( lsmash_root_t *root, uint32_t track_ID, uint32_t new_track_ID );
 int lsmash_set_free( lsmash_root_t *root, uint8_t *data, uint64_t data_length );
 int lsmash_set_tyrant_chapter( lsmash_root_t *root, char *file_name );
 
@@ -1212,23 +1323,44 @@ int lsmash_update_media_modification_time( lsmash_root_t *root, uint32_t track_I
 int lsmash_update_track_modification_time( lsmash_root_t *root, uint32_t track_ID );
 int lsmash_update_movie_modification_time( lsmash_root_t *root );
 int lsmash_update_track_duration( lsmash_root_t *root, uint32_t track_ID, uint32_t last_sample_delta );
-int lsmash_update_bitrate_info( lsmash_root_t *root, uint32_t track_ID, uint32_t entry_number );
 
 
-lsmash_root_t *lsmash_open_movie( const char *filename, uint32_t mode );
+lsmash_root_t *lsmash_open_movie( const char *filename, lsmash_file_mode_code mode );
+void lsmash_initialize_movie_parameters( lsmash_movie_parameters_t *param );
+int lsmash_set_movie_parameters( lsmash_root_t *root, lsmash_movie_parameters_t *param );
+int lsmash_get_movie_parameters( lsmash_root_t *root, lsmash_movie_parameters_t *param );
 uint32_t lsmash_create_track( lsmash_root_t *root, uint32_t handler_type );
+void lsmash_initialize_track_parameters( lsmash_track_parameters_t *param );
+int lsmash_set_track_parameters( lsmash_root_t *root, uint32_t track_ID, lsmash_track_parameters_t *param );
+int lsmash_get_track_parameters( lsmash_root_t *root, uint32_t track_ID, lsmash_track_parameters_t *param );
+void lsmash_initialize_media_parameters( lsmash_media_parameters_t *param );
+int lsmash_set_media_parameters( lsmash_root_t *root, uint32_t track_ID, lsmash_media_parameters_t *param );
+int lsmash_get_media_parameters( lsmash_root_t *root, uint32_t track_ID, lsmash_media_parameters_t *param );
 lsmash_sample_t *lsmash_create_sample( uint32_t size );
 void lsmash_delete_sample( lsmash_sample_t *sample );
-int lsmash_write_sample( lsmash_root_t *root, uint32_t track_ID, lsmash_sample_t *sample );
-int lsmash_write_mdat_size( lsmash_root_t *root );
+int lsmash_append_sample( lsmash_root_t *root, uint32_t track_ID, lsmash_sample_t *sample );
 int lsmash_flush_pooled_samples( lsmash_root_t *root, uint32_t track_ID, uint32_t last_sample_delta );
 int lsmash_finish_movie( lsmash_root_t *root, lsmash_adhoc_remux_t* remux );
 void lsmash_destroy_root( lsmash_root_t *root );
+
+int lsmash_create_fragment_movie( lsmash_root_t *root );
+int lsmash_create_fragment_empty_duration( lsmash_root_t *root, uint32_t track_ID, uint32_t duration );
 
 void lsmash_delete_track( lsmash_root_t *root, uint32_t track_ID );
 void lsmash_delete_explicit_timeline_map( lsmash_root_t *root, uint32_t track_ID );
 void lsmash_delete_tyrant_chapter( lsmash_root_t *root );
 
 int lsmash_print_movie( lsmash_root_t *root );
+
+/* to facilitate to make exdata (typically DecoderSpecificInfo or AudioSpecificConfig). */
+int lsmash_setup_AudioSpecificConfig( lsmash_audio_summary_t* summary );
+int lsmash_summary_add_exdata( lsmash_audio_summary_t* summary, void* exdata, uint32_t exdata_length );
+
+/* FIXME: these functions may change in the future.
+   I wonder these functions should be for generic (not limited to audio) summary. */
+lsmash_audio_summary_t* lsmash_create_audio_summary();
+void lsmash_cleanup_audio_summary( lsmash_audio_summary_t* summary );
+
+#undef PRIVATE
 
 #endif

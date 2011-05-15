@@ -477,7 +477,8 @@ static struct option long_options[] =
     { "no-b-adapt",        no_argument,       NULL, 0                   },
     { "b-bias",            required_argument, NULL, 0                   },
     { "b-pyramid",         required_argument, NULL, 0                   },
-    { "open-gop",          required_argument, NULL, 0                   },
+    { "open-gop",          no_argument,       NULL, 0                   },
+    { "bluray-compat",     no_argument,       NULL, 0                   },
     { "min-keyint",        required_argument, NULL, 'i'                 },
     { "keyint",            required_argument, NULL, 'I'                 },
     { "intra-refresh",     no_argument,       NULL, 0                   },
@@ -1631,11 +1632,32 @@ LRESULT decompress_begin(CODEC *codec, BITMAPINFO *lpbiInput, BITMAPINFO *lpbiOu
     codec->decoder_context->coded_height = lpbiInput->bmiHeader.biHeight;
     codec->decoder_context->codec_tag = lpbiInput->bmiHeader.biCompression;
 
+    if (lpbiInput->bmiHeader.biSize > sizeof(BITMAPINFOHEADER) + 4 && lpbiInput->bmiHeader.biSize < (1 << 30))
+    {
+        uint8_t *buf = (uint8_t *)&lpbiInput->bmiHeader + sizeof(BITMAPINFOHEADER);
+        uint32_t buf_size = lpbiInput->bmiHeader.biSize - sizeof(BITMAPINFOHEADER);
+        /* Check supported formats of extradata */
+        if ((buf[0] == 0x00 && buf[1] == 0x00 && buf[2] == 0x00 && buf[3] == 0x01) ||
+            (buf_size >= 7 && buf[0] == 0x01 && (buf[4] & 0xfc) == 0xfc && (buf[5] & 0xe0) == 0xe0))
+        {
+            codec->decoder_extradata = av_malloc(buf_size + FF_INPUT_BUFFER_PADDING_SIZE);
+            if (codec->decoder_extradata)
+            {
+                codec->decoder_is_avc = buf[0] == 0x01;
+                memcpy(codec->decoder_extradata, buf, buf_size);
+                memset(codec->decoder_extradata + buf_size, 0, FF_INPUT_BUFFER_PADDING_SIZE);
+                codec->decoder_context->extradata = codec->decoder_extradata;
+                codec->decoder_context->extradata_size = buf_size;
+            }
+        }
+    }
+
     if (avcodec_open(codec->decoder_context, codec->decoder) < 0)
     {
         x264vfw_log(codec, X264_LOG_DEBUG, "avcodec_open failed\n");
         av_freep(&codec->decoder_context);
         av_freep(&codec->decoder_frame);
+        av_freep(&codec->decoder_extradata);
         return ICERR_ERROR;
     }
 
@@ -1682,7 +1704,7 @@ LRESULT decompress(CODEC *codec, ICDECOMPRESS *icd)
         codec->decoder_pkt.data = codec->decoder_buf;
         codec->decoder_pkt.size = inhdr->biSizeImage;
 
-        if (inhdr->biSizeImage >= 4)
+        if (inhdr->biSizeImage >= 4 && !codec->decoder_is_avc)
         {
             uint8_t *buf = codec->decoder_buf;
             uint32_t buf_size = inhdr->biSizeImage;
@@ -1794,12 +1816,29 @@ LRESULT decompress(CODEC *codec, ICDECOMPRESS *icd)
 
     if (!codec->sws)
     {
-        codec->sws = sws_getContext(inhdr->biWidth, inhdr->biHeight, codec->decoder_context->pix_fmt,
+        int cpu_flags = av_get_cpu_flags();
+        int flags = SWS_BICUBIC |
+                    SWS_FULL_CHR_H_INP | SWS_ACCURATE_RND;
+        int width = codec->decoder_context->width;
+        int height = codec->decoder_context->height;
+        if (!width || !height)
+        {
+            width = codec->decoder_context->coded_width;
+            height = codec->decoder_context->coded_height;
+        }
+        /* SWS_FULL_CHR_H_INT is correctly supported only for RGB formats */
+        if (codec->decoder_pix_fmt == PIX_FMT_BGR24 || codec->decoder_pix_fmt == PIX_FMT_BGRA)
+            flags |= SWS_FULL_CHR_H_INT;
+        /* Set flags according to runtime CPU detection */
+        if (cpu_flags & AV_CPU_FLAG_MMX)
+            flags |= SWS_CPU_CAPS_MMX;
+        if (cpu_flags & AV_CPU_FLAG_MMX2)
+            flags |= SWS_CPU_CAPS_MMX2;
+        if (cpu_flags & AV_CPU_FLAG_SSE2)
+            flags |= SWS_CPU_CAPS_SSE2;
+        codec->sws = sws_getContext(width, height, codec->decoder_context->pix_fmt,
                                     inhdr->biWidth, inhdr->biHeight, codec->decoder_pix_fmt,
-                                    SWS_FAST_BILINEAR |
-                                    SWS_FULL_CHR_H_INT | SWS_FULL_CHR_H_INP | SWS_ACCURATE_RND |
-                                    SWS_CPU_CAPS_MMX | SWS_CPU_CAPS_MMX2,
-                                    NULL, NULL, NULL);
+                                    flags, NULL, NULL, NULL);
         if (!codec->sws)
         {
             x264vfw_log(codec, X264_LOG_DEBUG, "sws_getContext failed\n");
@@ -1815,10 +1854,12 @@ LRESULT decompress(CODEC *codec, ICDECOMPRESS *icd)
 
 LRESULT decompress_end(CODEC *codec)
 {
+    codec->decoder_is_avc = 0;
     if (codec->decoder_context)
         avcodec_close(codec->decoder_context);
     av_freep(&codec->decoder_context);
     av_freep(&codec->decoder_frame);
+    av_freep(&codec->decoder_extradata);
     av_freep(&codec->decoder_buf);
     codec->decoder_buf_size = 0;
     sws_freeContext(codec->sws);

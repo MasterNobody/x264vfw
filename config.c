@@ -1386,7 +1386,7 @@ static void help(char *buffer, int longhelp)
     x264_param_default(&defaults_value);
     H0( "Presets:\r\n" );
     H0( "\r\n" );
-    H0( "      --profile               Force the limits of an H.264 profile\r\n"
+    H0( "      --profile <string>      Force the limits of an H.264 profile\r\n"
         "                                  Overrides all settings.\r\n" );
     H2( "                                  - baseline:\r\n"
         "                                    --no-8x8dct --bframes 0 --no-cabac\r\n"
@@ -1399,7 +1399,7 @@ static void help(char *buffer, int longhelp)
         "                                  - high:\r\n"
         "                                    No lossless.\r\n" );
         else H0( "                                  - baseline,main,high\r\n" );
-    H0( "      --preset                Use a preset to select encoding settings [medium]\r\n"
+    H0( "      --preset <string>       Use a preset to select encoding settings [medium]\r\n"
         "                                  Overridden by user settings.\r\n" );
     H2( "                                  - ultrafast:\r\n"
         "                                    --no-8x8dct --aq-mode 0 --b-adapt 0\r\n"
@@ -1442,7 +1442,7 @@ static void help(char *buffer, int longhelp)
         "                                    --ref 16 --subme 10 --trellis 2\r\n" );
     else H0( "                                  - ultrafast,superfast,veryfast,faster,fast\r\n"
              "                                  - medium,slow,slower,veryslow,placebo\r\n" );
-    H0( "      --tune                  Tune the settings for a particular type of source\r\n"
+    H0( "      --tune <string>         Tune the settings for a particular type of source\r\n"
         "                              or situation\r\n"
         "                                  Overridden by user settings.\r\n"
         "                                  Multiple tunings are separated by commas.\r\n"
@@ -1502,11 +1502,7 @@ static void help(char *buffer, int longhelp)
         "                                  - strict: Strictly hierarchical pyramid\r\n"
         "                                  - normal: Non-strict (not Blu-ray compatible)\r\n",
         strtable_lookup( x264_b_pyramid_names, defaults->i_bframe_pyramid ) );
-    H1( "      --open-gop <string>     Use recovery points to close GOPs [none]\r\n"
-        "                                  - none: closed GOPs only\r\n"
-        "                                  - normal: standard open GOPs\r\n"
-        "                                            (not Blu-ray compatible)\r\n"
-        "                                  - bluray: Blu-ray-compatible open GOPs\r\n"
+    H1( "      --open-gop              Use recovery points to close GOPs\r\n"
         "                              Only available with b-frames\r\n" );
     H1( "      --no-cabac              Disable CABAC\r\n" );
     H1( "  -r, --ref <integer>         Number of reference frames [%d]\r\n", defaults->i_frame_reference );
@@ -1609,7 +1605,7 @@ static void help(char *buffer, int longhelp)
         "                                  - 9: RD refinement for all frames\r\n"
         "                                  - 10: QP-RD - requires trellis=2, aq-mode>0\r\n" );
     else H1( "                                  decision quality: 1=fast, 10=best.\r\n"  );
-    H1( "      --psy-rd                Strength of psychovisual optimization [\"%.1f:%.1f\"]\r\n"
+    H1( "      --psy-rd <float:float>  Strength of psychovisual optimization [\"%.1f:%.1f\"]\r\n"
         "                                  #1: RD (requires subme>=6)\r\n"
         "                                  #2: Trellis (requires trellis, experimental)\r\n",
                                        defaults->analyse.f_psy_rd, defaults->analyse.f_psy_trellis );
@@ -1637,9 +1633,9 @@ static void help(char *buffer, int longhelp)
         "                                  Takes a comma-separated list of 16 integers.\r\n" );
     H2( "      --cqm8 <list>           Set all 8x8 quant matrices\r\n"
         "                                  Takes a comma-separated list of 64 integers.\r\n" );
-    H2( "      --cqm4i, --cqm4p, --cqm8i, --cqm8p\r\n"
+    H2( "      --cqm4i, --cqm4p, --cqm8i, --cqm8p <list>\r\n"
         "                              Set both luma and chroma quant matrices\r\n" );
-    H2( "      --cqm4iy, --cqm4ic, --cqm4py, --cqm4pc\r\n"
+    H2( "      --cqm4iy, --cqm4ic, --cqm4py, --cqm4pc <list>\r\n"
         "                              Set individual quant matrices\r\n" );
     H2( "\r\n" );
     H2( "Video Usability Info (Annex E):\r\n" );
@@ -1679,17 +1675,18 @@ static void help(char *buffer, int longhelp)
     H0( "\r\n" );
     H0( "Input/Output:\r\n" );
     H0( "\r\n" );
-    H0( "  -o, --output                Specify output file\r\n" );
+    H0( "  -o, --output <string>       Specify output file\r\n" );
     H1( "      --muxer <string>        Specify output container format [\"%s\"]\r\n"
         "                                  - %s\r\n", muxer_names[0], stringify_names( buf, muxer_names ) );
     H0( "      --sar width:height      Specify Sample Aspect Ratio\r\n" );
     H0( "      --fps <float|rational>  Specify framerate\r\n" );
     H0( "      --level <string>        Specify level (as defined by Annex A)\r\n" );
+    H1( "      --bluray-compat         Enable compatibility hacks for Blu-ray support\r\n" );
     H1( "\r\n" );
     H1( "  -v, --verbose               Print stats for each frame\r\n" );
     H0( "      --quiet                 Quiet Mode\r\n" );
     H1( "      --log-level <string>    Specify the maximum level of logging [\"%s\"]\r\n"
-        "                                  - %s\r\n", strtable_lookup( log_level_names, defaults->i_log_level ),
+        "                                  - %s\r\n", strtable_lookup( log_level_names, defaults->i_log_level - X264_LOG_NONE ),
                                        stringify_names( buf, log_level_names ) );
     H1( "      --psnr                  Enable PSNR computation\r\n" );
     H1( "      --ssim                  Enable SSIM computation\r\n" );
