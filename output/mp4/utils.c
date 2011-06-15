@@ -563,7 +563,15 @@ lsmash_entry_t *lsmash_get_entry( lsmash_entry_list_t *list, uint32_t entry_numb
     if( !list || !entry_number || entry_number > list->entry_count )
         return NULL;
     lsmash_entry_t *entry;
-    for( entry = list->head; entry && --entry_number; entry = entry->next );
+    if( entry_number <= (list->entry_count >> 1) )
+        /* Look for from the head. */
+        for( entry = list->head; entry && --entry_number; entry = entry->next );
+    else
+    {
+        /* Look for from the tail. */
+        entry_number = list->entry_count - entry_number;
+        for( entry = list->tail; entry && entry_number--; entry = entry->prev );
+    }
     return entry;
 }
 
@@ -571,4 +579,34 @@ void *lsmash_get_entry_data( lsmash_entry_list_t *list, uint32_t entry_number )
 {
     lsmash_entry_t *entry = lsmash_get_entry( list, entry_number );
     return entry ? entry->data : NULL;
+}
+/*---- ----*/
+
+/*---- type ----*/
+double lsmash_fixed2double( uint64_t value, int frac_width )
+{
+    return value / (double)(1ULL << frac_width);
+}
+
+float lsmash_int2float32( uint32_t value )
+{
+    return (union {uint32_t i; float f;}){value}.f;
+}
+
+double lsmash_int2float64( uint64_t value )
+{
+    return (union {uint64_t i; double d;}){value}.d;
+}
+/*---- ----*/
+
+/*---- allocator ----*/
+void *lsmash_memdup( void *src, size_t size )
+{
+    if( !size )
+        return NULL;
+    void *dst = malloc( size );
+    if( !dst )
+        return NULL;
+    memcpy( dst, src, size );
+    return dst;
 }

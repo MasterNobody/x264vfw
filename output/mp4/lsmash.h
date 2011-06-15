@@ -1232,6 +1232,8 @@ typedef struct
 typedef struct
 {
     uint32_t timescale;             /* media timescale: timescale for this media */
+    uint32_t handler_type;          /* the nature of the media
+                                     * You can't change handler_type through this parameter manually. */
     uint64_t duration;              /* the duration of this media, expressed in the media timescale
                                      * You can't set this parameter manually. */
     /* Use either type of language code. */
@@ -1278,6 +1280,8 @@ typedef struct
     int32_t  preview_time;          /* the time value in the movie at which the preview begins */
     int32_t  preview_duration;      /* the duration of the movie preview in movie timescale units */
     int32_t  poster_time;           /* the time value of the time of the movie poster */
+    uint32_t number_of_tracks;      /* the number of tracks in the movie
+                                     * You can't set this parameter manually. */
 } lsmash_movie_parameters_t;
 
 typedef struct lsmash_root_tag lsmash_root_t;
@@ -1330,6 +1334,7 @@ void lsmash_initialize_movie_parameters( lsmash_movie_parameters_t *param );
 int lsmash_set_movie_parameters( lsmash_root_t *root, lsmash_movie_parameters_t *param );
 int lsmash_get_movie_parameters( lsmash_root_t *root, lsmash_movie_parameters_t *param );
 uint32_t lsmash_create_track( lsmash_root_t *root, uint32_t handler_type );
+uint32_t lsmash_get_track_ID( lsmash_root_t *root, uint32_t track_number );
 void lsmash_initialize_track_parameters( lsmash_track_parameters_t *param );
 int lsmash_set_track_parameters( lsmash_root_t *root, uint32_t track_ID, lsmash_track_parameters_t *param );
 int lsmash_get_track_parameters( lsmash_root_t *root, uint32_t track_ID, lsmash_track_parameters_t *param );
@@ -1337,6 +1342,7 @@ void lsmash_initialize_media_parameters( lsmash_media_parameters_t *param );
 int lsmash_set_media_parameters( lsmash_root_t *root, uint32_t track_ID, lsmash_media_parameters_t *param );
 int lsmash_get_media_parameters( lsmash_root_t *root, uint32_t track_ID, lsmash_media_parameters_t *param );
 lsmash_sample_t *lsmash_create_sample( uint32_t size );
+int lsmash_sample_alloc( lsmash_sample_t *sample, uint32_t size );
 void lsmash_delete_sample( lsmash_sample_t *sample );
 int lsmash_append_sample( lsmash_root_t *root, uint32_t track_ID, lsmash_sample_t *sample );
 int lsmash_flush_pooled_samples( lsmash_root_t *root, uint32_t track_ID, uint32_t last_sample_delta );
@@ -1350,7 +1356,9 @@ void lsmash_delete_track( lsmash_root_t *root, uint32_t track_ID );
 void lsmash_delete_explicit_timeline_map( lsmash_root_t *root, uint32_t track_ID );
 void lsmash_delete_tyrant_chapter( lsmash_root_t *root );
 
+#ifdef LSMASH_DEMUXER_ENABLED
 int lsmash_print_movie( lsmash_root_t *root );
+#endif
 
 /* to facilitate to make exdata (typically DecoderSpecificInfo or AudioSpecificConfig). */
 int lsmash_setup_AudioSpecificConfig( lsmash_audio_summary_t* summary );

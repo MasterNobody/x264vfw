@@ -356,6 +356,36 @@ typedef struct
     struct mp4sys_ES_Descriptor_t *ES;
 } isom_esds_t;
 
+/* AVCDecoderConfigurationRecord */
+typedef struct
+{
+#define ISOM_REQUIRES_AVCC_EXTENSION( x ) ((x) == 100 || (x) == 110 || (x) == 122 || (x) == 144)
+    ISOM_BASEBOX_COMMON;
+    uint8_t configurationVersion;                   /* 1 */
+    uint8_t AVCProfileIndication;                   /* profile_idc in SPS */
+    uint8_t profile_compatibility;
+    uint8_t AVCLevelIndication;                     /* level_idc in SPS */
+    uint8_t lengthSizeMinusOne;                     /* in bytes of the NALUnitLength field. upper 6-bits are reserved as 111111b */
+    uint8_t numOfSequenceParameterSets;             /* upper 3-bits are reserved as 111b */
+    lsmash_entry_list_t *sequenceParameterSets;     /* SPSs */
+    uint8_t numOfPictureParameterSets;
+    lsmash_entry_list_t *pictureParameterSets;      /* PPSs */
+    /* if( ISOM_REQUIRES_AVCC_EXTENSION( AVCProfileIndication ) ) */
+    uint8_t chroma_format;                          /* chroma_format_idc in SPS / upper 6-bits are reserved as 111111b */
+    uint8_t bit_depth_luma_minus8;                  /* shall be in the range of 0 to 4 / upper 5-bits are reserved as 11111b */
+    uint8_t bit_depth_chroma_minus8;                /* shall be in the range of 0 to 4 / upper 5-bits are reserved as 11111b */
+    uint8_t numOfSequenceParameterSetExt;
+    lsmash_entry_list_t *sequenceParameterSetExt;   /* SPSExts */
+    /* */
+} isom_avcC_t;
+
+/* Parameter Set Entry */
+typedef struct
+{
+    uint16_t parameterSetLength;
+    uint8_t *parameterSetNALUnit;
+} isom_avcC_ps_entry_t;
+
 /* MPEG-4 Bit Rate Box
  * This box signals the bit rate information of the AVC video stream. */
 typedef struct
@@ -448,88 +478,46 @@ typedef struct
 } isom_mp4s_entry_t;
 
 /* ISOM: Visual Sample Entry / QTFF: Image Description */
-#define ISOM_VISUAL_SAMPLE_ENTRY \
-    ISOM_SAMPLE_ENTRY; \
-    int16_t  version;           /* ISOM: pre_defined / QTFF: sample description version */ \
-    int16_t  revision_level;    /* ISOM: reserved / QTFF: version of the CODEC */ \
-    int32_t  vendor;            /* ISOM: pre_defined / QTFF: whose CODEC */ \
-    uint32_t temporalQuality;   /* ISOM: pre_defined / QTFF: the temporal quality factor */ \
-    uint32_t spatialQuality;    /* ISOM: pre_defined / QTFF: the spatial quality factor */ \
-    /* The width and height are the maximum pixel counts that the codec will deliver. \
-     * Since these are counts they do not take into account pixel aspect ratio. */ \
-    uint16_t width; \
-    uint16_t height; \
-    /* */ \
-    uint32_t horizresolution;   /* 16.16 fixed-point / template: horizresolution = 0x00480000 / 72 dpi */ \
-    uint32_t vertresolution;    /* 16.16 fixed-point / template: vertresolution = 0x00480000 / 72 dpi */ \
-    uint32_t dataSize;          /* ISOM: reserved / QTFF: if known, the size of data for this descriptor */ \
-    uint16_t frame_count;       /* frame per sample / template: frame_count = 1 */ \
-    char compressorname[33];    /* a fixed 32-byte field, with the first byte set to the number of bytes to be displayed */ \
-    uint16_t depth;             /* ISOM: template: depth = 0x0018 \
-                                 * AVC : 0x0018: colour with no alpha \
-                                 *       0x0028: grayscale with no alpha \
-                                 *       0x0020: gray or colour with alpha \
-                                 * QTFF: depth of this data (1-32) or (33-40 grayscale) */ \
-    int16_t color_table_ID;     /* ISOM: template: pre_defined = -1 \
-                                 * QTFF: color table ID \
-                                 *       If this field is set to 0, the default color table should be used for the specified depth \
-                                 *       If the color table ID is set to 0, a color table is contained within the sample description itself. \
-                                 *       The color table immediately follows the color table ID field. */ \
-    isom_clap_t *clap;          /* Clean Aperture Box @ optional */ \
-    isom_pasp_t *pasp;          /* Pixel Aspect Ratio Box @ optional */ \
-    isom_colr_t *colr;          /* ISOM: null / QTFF: Color Parameter Box @ optional */ \
-    isom_stsl_t *stsl;          /* ISOM: Sample Scale Box @ optional / QTFF: null */
-
 typedef struct
 {
-    ISOM_VISUAL_SAMPLE_ENTRY;
-} isom_visual_entry_t;
-
-/* MP4 Visual Sample Entry */
-typedef struct
-{
-    ISOM_VISUAL_SAMPLE_ENTRY;
-    isom_esds_t *esds;      /* ES Descriptor Box */
-} isom_mp4v_entry_t;
-
-/* Parameter Set Entry */
-typedef struct
-{
-    uint16_t parameterSetLength;
-    uint8_t *parameterSetNALUnit;
-} isom_avcC_ps_entry_t;
-
-/* AVCDecoderConfigurationRecord */
-typedef struct
-{
-#define ISOM_REQUIRES_AVCC_EXTENSION( x ) ((x) == 100 || (x) == 110 || (x) == 122 || (x) == 144)
-    ISOM_BASEBOX_COMMON;
-    uint8_t configurationVersion;                   /* 1 */
-    uint8_t AVCProfileIndication;                   /* profile_idc in SPS */
-    uint8_t profile_compatibility;
-    uint8_t AVCLevelIndication;                     /* level_idc in SPS */
-    uint8_t lengthSizeMinusOne;                     /* in bytes of the NALUnitLength field. upper 6-bits are reserved as 111111b */
-    uint8_t numOfSequenceParameterSets;             /* upper 3-bits are reserved as 111b */
-    lsmash_entry_list_t *sequenceParameterSets;     /* SPSs */
-    uint8_t numOfPictureParameterSets;
-    lsmash_entry_list_t *pictureParameterSets;      /* PPSs */
-    /* if( ISOM_REQUIRES_AVCC_EXTENSION( AVCProfileIndication ) ) */
-    uint8_t chroma_format;                          /* chroma_format_idc in SPS / upper 6-bits are reserved as 111111b */
-    uint8_t bit_depth_luma_minus8;                  /* shall be in the range of 0 to 4 / upper 5-bits are reserved as 11111b */
-    uint8_t bit_depth_chroma_minus8;                /* shall be in the range of 0 to 4 / upper 5-bits are reserved as 11111b */
-    uint8_t numOfSequenceParameterSetExt;
-    lsmash_entry_list_t *sequenceParameterSetExt;   /* SPSExts */
+    ISOM_SAMPLE_ENTRY;
+    int16_t  version;           /* ISOM: pre_defined / QTFF: sample description version */
+    int16_t  revision_level;    /* ISOM: reserved / QTFF: version of the CODEC */
+    int32_t  vendor;            /* ISOM: pre_defined / QTFF: whose CODEC */
+    uint32_t temporalQuality;   /* ISOM: pre_defined / QTFF: the temporal quality factor */
+    uint32_t spatialQuality;    /* ISOM: pre_defined / QTFF: the spatial quality factor */
+    /* The width and height are the maximum pixel counts that the codec will deliver.
+     * Since these are counts they do not take into account pixel aspect ratio. */
+    uint16_t width;
+    uint16_t height;
     /* */
-} isom_avcC_t;
-
-/* AVC Sample Entry */
-typedef struct
-{
-    ISOM_VISUAL_SAMPLE_ENTRY;
-    isom_avcC_t *avcC;         /* AVCDecoderConfigurationRecord */
-    isom_btrt_t *btrt;         /* MPEG-4 Bit Rate Box @ optional */
-    // isom_m4ds_t *m4ds;        /* MPEG4ExtensionDescriptorsBox @ optional */
-} isom_avc_entry_t;
+    uint32_t horizresolution;   /* 16.16 fixed-point / template: horizresolution = 0x00480000 / 72 dpi */
+    uint32_t vertresolution;    /* 16.16 fixed-point / template: vertresolution = 0x00480000 / 72 dpi */
+    uint32_t dataSize;          /* ISOM: reserved / QTFF: if known, the size of data for this descriptor */
+    uint16_t frame_count;       /* frame per sample / template: frame_count = 1 */
+    char compressorname[33];    /* a fixed 32-byte field, with the first byte set to the number of bytes to be displayed */
+    uint16_t depth;             /* ISOM: template: depth = 0x0018
+                                 * AVC : 0x0018: colour with no alpha
+                                 *       0x0028: grayscale with no alpha
+                                 *       0x0020: gray or colour with alpha
+                                 * QTFF: depth of this data (1-32) or (33-40 grayscale) */
+    int16_t color_table_ID;     /* ISOM: template: pre_defined = -1
+                                 * QTFF: color table ID
+                                 *       If this field is set to 0, the default color table should be used for the specified depth
+                                 *       If the color table ID is set to 0, a color table is contained within the sample description itself.
+                                 *       The color table immediately follows the color table ID field. */
+    /* common extensions */
+    isom_clap_t *clap;          /* Clean Aperture Box @ optional */
+    isom_pasp_t *pasp;          /* Pixel Aspect Ratio Box @ optional */
+    isom_colr_t *colr;          /* ISOM: null / QTFF: Color Parameter Box @ optional */
+    isom_stsl_t *stsl;          /* ISOM: Sample Scale Box @ optional / QTFF: null */
+    /* MP4 specific extension */
+    isom_esds_t *esds;          /* ES Descriptor Box */
+    /* AVC specific extensions */
+    isom_avcC_t *avcC;          /* AVCDecoderConfigurationRecord */
+    isom_btrt_t *btrt;          /* MPEG-4 Bit Rate Box @ optional */
+    // isom_m4ds_t *m4ds;       /* MPEG4ExtensionDescriptorsBox @ optional */
+} isom_visual_entry_t;
 
 /* Format Box
  * This box shows the data format of the stored sound media.
@@ -803,7 +791,9 @@ typedef struct
 
 /* Sample Size Box
  * This box contains the sample count and a table giving the size in bytes of each sample.
- * The total number of samples in the media is always indicated in the sample_count. */
+ * The total number of samples in the media is always indicated in the sample_count.
+ * Note: a sample size of zero is not prohibited in general, but it must be valid and defined for the coding system,
+ *       as defined by the sample entry, that the sample belongs to. */
 typedef struct
 {
     uint32_t entry_size;        /* the size of a sample */
@@ -1175,15 +1165,15 @@ typedef enum
 /* Sample Flags */
 typedef struct
 {
-    unsigned reserved                    : 4;
+    unsigned reserved                  : 4;
     /* The definition of the following fields is quite the same as Independent and Disposable Samples Box. */
-    unsigned is_leading                  : 2;
-    unsigned sample_depends_on           : 2;
-    unsigned sample_is_depended_on       : 2;
-    unsigned sample_has_redundancy       : 2;
+    unsigned is_leading                : 2;
+    unsigned sample_depends_on         : 2;
+    unsigned sample_is_depended_on     : 2;
+    unsigned sample_has_redundancy     : 2;
     /* */
-    unsigned sample_padding_value        : 3;       /* the number of bits at the end of this sample */
-    unsigned sample_is_difference_sample : 1;       /* 0 value means this sample is sync sample. */
+    unsigned sample_padding_value      : 3;     /* the number of bits at the end of this sample */
+    unsigned sample_is_non_sync_sample : 1;     /* 0 value means this sample is sync sample. */
     uint16_t sample_degradation_priority;
 } isom_sample_flags_t;
 
@@ -1401,15 +1391,6 @@ struct lsmash_root_tag
         lsmash_entry_list_t *print;
 };
 
-typedef int (*isom_print_box_t)( lsmash_root_t *, isom_box_t *, int );
-
-typedef struct
-{
-    int level;
-    isom_box_t *box;
-    isom_print_box_t func;
-} isom_print_entry_t;
-
 /* Track Box */
 typedef struct
 {
@@ -1605,5 +1586,29 @@ enum qt_audio_format_flags_code
     QT_ALAC_FORMAT_FLAG_24BIT_SOURCE_DATA = 3,
     QT_ALAC_FORMAT_FLAG_32BIT_SOURCE_DATA = 4,
 };
+
+int isom_is_fullbox( void *box );
+int isom_is_lpcm_audio( uint32_t type );
+void isom_init_box_common( void *box, void *parent, uint32_t type );
+void isom_remove_avcC_ps( isom_avcC_ps_entry_t *ps );
+int isom_check_compatibility( lsmash_root_t *root );
+char *isom_4cc2str( uint32_t fourcc );
+char *isom_unpack_iso_language( uint16_t language );
+
+#define isom_create_box( box_name, parent_name, box_4cc ) \
+    isom_##box_name##_t *(box_name) = malloc( sizeof(isom_##box_name##_t) ); \
+    if( !box_name ) \
+        return -1; \
+    memset( box_name, 0, sizeof(isom_##box_name##_t) ); \
+    isom_init_box_common( box_name, parent_name, box_4cc )
+
+#define isom_create_list_box( box_name, parent_name, box_4cc ) \
+    isom_create_box( box_name, parent_name, box_4cc ); \
+    box_name->list = lsmash_create_entry_list(); \
+    if( !box_name->list ) \
+    { \
+        free( box_name ); \
+        return -1; \
+    }
 
 #endif
