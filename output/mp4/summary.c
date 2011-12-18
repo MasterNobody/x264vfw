@@ -1,7 +1,7 @@
 /*****************************************************************************
  * summary.c:
  *****************************************************************************
- * Copyright (C) 2010 L-SMASH project
+ * Copyright (C) 2010-2011 L-SMASH project
  *
  * Authors: Takashi Hirata <silverfilain@gmail.com>
  *
@@ -25,6 +25,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "importer.h"
 #include "mp4a.h"
 
 /***************************************************************************
@@ -39,20 +40,24 @@ int lsmash_setup_AudioSpecificConfig( lsmash_audio_summary_t* summary )
     lsmash_bs_t* bs = lsmash_bs_create( NULL ); /* no file writing */
     if( !bs )
         return -1;
-    mp4a_AudioSpecificConfig_t* asc = mp4a_create_AudioSpecificConfig( summary->aot, summary->frequency, summary->channels, summary->sbr_mode );
+    mp4a_AudioSpecificConfig_t *asc =
+        mp4a_create_AudioSpecificConfig( summary->aot,
+                                         summary->frequency,
+                                         summary->channels,
+                                         summary->sbr_mode,
+                                         summary->exdata,
+                                         summary->exdata_length );
     if( !asc )
     {
         lsmash_bs_cleanup( bs );
         return -1;
     }
-
     mp4a_put_AudioSpecificConfig( bs, asc );
     void* new_asc;
     uint32_t new_length;
     new_asc = lsmash_bs_export_data( bs, &new_length );
     mp4a_remove_AudioSpecificConfig( asc );
     lsmash_bs_cleanup( bs );
-
     if( !new_asc )
         return -1;
     if( summary->exdata )
@@ -63,7 +68,7 @@ int lsmash_setup_AudioSpecificConfig( lsmash_audio_summary_t* summary )
 }
 
 /* Copy exdata into summary from memory block */
-int lsmash_summary_add_exdata( lsmash_audio_summary_t* summary, void* exdata, uint32_t exdata_length )
+int lsmash_summary_add_exdata( lsmash_summary_t *summary, void* exdata, uint32_t exdata_length )
 {
     if( !summary )
         return -1;
@@ -71,10 +76,9 @@ int lsmash_summary_add_exdata( lsmash_audio_summary_t* summary, void* exdata, ui
     void* new_exdata = NULL;
     if( exdata && exdata_length != 0 )
     {
-        new_exdata = malloc( exdata_length );
+        new_exdata = lsmash_memdup( exdata, exdata_length );
         if( !new_exdata )
             return -1;
-        memcpy( new_exdata, exdata, exdata_length );
         summary->exdata_length = exdata_length;
     }
     else
@@ -86,16 +90,28 @@ int lsmash_summary_add_exdata( lsmash_audio_summary_t* summary, void* exdata, ui
     return 0;
 }
 
-lsmash_audio_summary_t* lsmash_create_audio_summary()
+lsmash_summary_t *lsmash_create_summary( lsmash_mp4sys_stream_type stream_type )
 {
-    lsmash_audio_summary_t* summary = (lsmash_audio_summary_t*)malloc( sizeof(lsmash_audio_summary_t) );
+    size_t summary_size;
+    switch( stream_type )
+    {
+        case MP4SYS_STREAM_TYPE_VisualStream :
+            summary_size = sizeof(lsmash_video_summary_t);
+            break;
+        case MP4SYS_STREAM_TYPE_AudioStream :
+            summary_size = sizeof(lsmash_audio_summary_t);
+            break;
+        default :
+            return NULL;
+    }
+    lsmash_summary_t *summary = (lsmash_summary_t *)lsmash_malloc_zero( summary_size );
     if( !summary )
         return NULL;
-    memset( summary, 0, sizeof(lsmash_audio_summary_t) );
+    summary->stream_type = stream_type;
     return summary;
 }
 
-void lsmash_cleanup_audio_summary( lsmash_audio_summary_t* summary )
+void lsmash_cleanup_summary( lsmash_summary_t *summary )
 {
     if( !summary )
         return;

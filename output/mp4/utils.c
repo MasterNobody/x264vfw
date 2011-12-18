@@ -1,7 +1,7 @@
 /*****************************************************************************
  * utils.c:
  *****************************************************************************
- * Copyright (C) 2010 L-SMASH project
+ * Copyright (C) 2010-2011 L-SMASH project
  *
  * Authors: Yusuke Nakamura <muken.the.vfrmaniac@gmail.com>
  *
@@ -24,6 +24,7 @@
 
 #include <stdlib.h>
 #include <string.h>
+#include <stdarg.h>
 
 #include "utils.h"
 
@@ -53,16 +54,14 @@ void lsmash_bs_free( lsmash_bs_t *bs )
 
 void lsmash_bs_alloc( lsmash_bs_t *bs, uint64_t size )
 {
-    if( bs->error )
+    if( (bs->alloc >= size) || bs->error )
         return;
     uint64_t alloc = size + (1<<16);
     uint8_t *data;
     if( !bs->data )
         data = malloc( alloc );
-    else if( bs->alloc < size )
-        data = realloc( bs->data, alloc );
     else
-        return;
+        data = realloc( bs->data, alloc );
     if( !data )
     {
         lsmash_bs_free( bs );
@@ -84,7 +83,7 @@ void lsmash_bs_put_byte( lsmash_bs_t *bs, uint8_t value )
 
 void lsmash_bs_put_bytes( lsmash_bs_t *bs, void *value, uint32_t size )
 {
-    if( !size )
+    if( !size || !value )
         return;
     lsmash_bs_alloc( bs, bs->store + size );
     if( bs->error )
@@ -141,7 +140,7 @@ int lsmash_bs_write_data( lsmash_bs_t *bs )
 {
     if( !bs )
         return -1;
-    if( !bs->data )
+    if( !bs->store || !bs->data )
         return 0;
     if( bs->error || !bs->stream || fwrite( bs->data, 1, bs->store, bs->stream ) != bs->store )
     {
@@ -156,10 +155,9 @@ int lsmash_bs_write_data( lsmash_bs_t *bs )
 
 lsmash_bs_t* lsmash_bs_create( char* filename )
 {
-    lsmash_bs_t* bs = malloc( sizeof(lsmash_bs_t) );
+    lsmash_bs_t* bs = lsmash_malloc_zero( sizeof(lsmash_bs_t) );
     if( !bs )
         return NULL;
-    memset( bs, 0, sizeof(lsmash_bs_t) );
     if( filename && (bs->stream = fopen( filename, "wb" )) == NULL )
     {
         free( bs );
@@ -182,10 +180,9 @@ void* lsmash_bs_export_data( lsmash_bs_t *bs, uint32_t* length )
 {
     if( !bs || !bs->data || bs->store == 0 || bs->error )
         return NULL;
-    void* buf = malloc( bs->store );
+    void *buf = lsmash_memdup( bs->data, bs->store );
     if( !buf )
         return NULL;
-    memcpy( buf, bs->data, bs->store );
     if( length )
         *length = bs->store;
     return buf;
@@ -210,14 +207,19 @@ uint8_t *lsmash_bs_get_bytes( lsmash_bs_t *bs, uint32_t size )
 {
     if( bs->error || !size )
         return NULL;
-    uint8_t *value = malloc( size );
-    if( !value || bs->pos + size > bs->store )
+    if( bs->pos + size > bs->store )
     {
         lsmash_bs_free( bs );
         bs->error = 1;
         return NULL;
     }
-    memcpy( value, bs->data + bs->pos, size );
+    uint8_t *value = lsmash_memdup( bs->data + bs->pos, size );
+    if( !value )
+    {
+        lsmash_bs_free( bs );
+        bs->error = 1;
+        return NULL;
+    }
     bs->pos += size;
     return value;
 }
@@ -306,7 +308,7 @@ int lsmash_bs_import_data( lsmash_bs_t *bs, void* data, uint32_t length )
 /*---- ----*/
 
 /*---- bitstream ----*/
-void lsmash_bits_init( lsmash_bits_t* bits, lsmash_bs_t *bs )
+void lsmash_bits_init( lsmash_bits_t *bits, lsmash_bs_t *bs )
 {
     debug_if( !bits || !bs )
         return;
@@ -315,15 +317,24 @@ void lsmash_bits_init( lsmash_bits_t* bits, lsmash_bs_t *bs )
     bits->cache = 0;
 }
 
-lsmash_bits_t* lsmash_bits_create( lsmash_bs_t *bs )
+lsmash_bits_t *lsmash_bits_create( lsmash_bs_t *bs )
 {
     debug_if( !bs )
         return NULL;
-    lsmash_bits_t* bits = (lsmash_bits_t*)malloc( sizeof(lsmash_bits_t) );
+    lsmash_bits_t *bits = (lsmash_bits_t *)malloc( sizeof(lsmash_bits_t) );
     if( !bits )
         return NULL;
     lsmash_bits_init( bits, bs );
     return bits;
+}
+
+void lsmash_bits_empty( lsmash_bits_t *bits )
+{
+    debug_if( !bits )
+        return;
+    lsmash_bs_empty( bits->bs );
+    bits->store = 0;
+    bits->cache = 0;
 }
 
 #define BITS_IN_BYTE 8
@@ -472,14 +483,21 @@ int lsmash_bits_import_data( lsmash_bits_t* bits, void* data, uint32_t length )
 /*---- ----*/
 
 /*---- list ----*/
+void lsmash_init_entry_list( lsmash_entry_list_t *list )
+{
+    list->head = NULL;
+    list->tail = NULL;
+    list->last_accessed_entry = NULL;
+    list->last_accessed_number = 0;
+    list->entry_count = 0;
+}
+
 lsmash_entry_list_t *lsmash_create_entry_list( void )
 {
     lsmash_entry_list_t *list = malloc( sizeof(lsmash_entry_list_t) );
     if( !list )
         return NULL;
-    list->entry_count = 0;
-    list->head = NULL;
-    list->tail = NULL;
+    lsmash_init_entry_list( list );
     return list;
 }
 
@@ -520,6 +538,28 @@ int lsmash_remove_entry_direct( lsmash_entry_list_t *list, lsmash_entry_t *entry
         next->prev = prev;
     if( entry->data )
         ((lsmash_entry_data_eliminator)eliminator)( entry->data );
+    if( entry == list->last_accessed_entry )
+    {
+        if( next )
+            list->last_accessed_entry = next;
+        else if( prev )
+        {
+            list->last_accessed_entry = prev;
+            list->last_accessed_number -= 1;
+        }
+        else
+        {
+            list->last_accessed_entry = NULL;
+            list->last_accessed_number = 0;
+        }
+    }
+    else
+    {
+        /* We can't know the current entry number immediately,
+         * so discard the last accessed entry info because time is wasted to know it. */
+        list->last_accessed_entry = NULL;
+        list->last_accessed_number = 0;
+    }
     free( entry );
     list->entry_count -= 1;
     return 0;
@@ -545,9 +585,7 @@ void lsmash_remove_entries( lsmash_entry_list_t *list, void* eliminator )
         free( entry );
         entry = next;
     }
-    list->entry_count = 0;
-    list->head = NULL;
-    list->tail = NULL;
+    lsmash_init_entry_list( list );
 }
 
 void lsmash_remove_list( lsmash_entry_list_t *list, void* eliminator )
@@ -562,15 +600,40 @@ lsmash_entry_t *lsmash_get_entry( lsmash_entry_list_t *list, uint32_t entry_numb
 {
     if( !list || !entry_number || entry_number > list->entry_count )
         return NULL;
-    lsmash_entry_t *entry;
-    if( entry_number <= (list->entry_count >> 1) )
-        /* Look for from the head. */
-        for( entry = list->head; entry && --entry_number; entry = entry->next );
-    else
+    int shortcut = 1;
+    lsmash_entry_t *entry = NULL;
+    if( list->last_accessed_entry )
     {
-        /* Look for from the tail. */
-        entry_number = list->entry_count - entry_number;
-        for( entry = list->tail; entry && entry_number--; entry = entry->prev );
+        if( entry_number == list->last_accessed_number )
+            entry = list->last_accessed_entry;
+        else if( entry_number == list->last_accessed_number + 1 )
+            entry = list->last_accessed_entry->next;
+        else if( entry_number == list->last_accessed_number - 1 )
+            entry = list->last_accessed_entry->prev;
+        else
+            shortcut = 0;
+    }
+    else
+        shortcut = 0;
+    if( !shortcut )
+    {
+        if( entry_number <= (list->entry_count >> 1) )
+        {
+            /* Look for from the head. */
+            uint32_t distance_plus_one = entry_number;
+            for( entry = list->head; entry && --distance_plus_one; entry = entry->next );
+        }
+        else
+        {
+            /* Look for from the tail. */
+            uint32_t distance = list->entry_count - entry_number;
+            for( entry = list->tail; entry && distance--; entry = entry->prev );
+        }
+    }
+    if( entry )
+    {
+        list->last_accessed_entry = entry;
+        list->last_accessed_number = entry_number;
     }
     return entry;
 }
@@ -600,6 +663,17 @@ double lsmash_int2float64( uint64_t value )
 /*---- ----*/
 
 /*---- allocator ----*/
+void *lsmash_malloc_zero( size_t size )
+{
+    if( !size )
+        return NULL;
+    void *p = malloc( size );
+    if( !p )
+        return NULL;
+    memset( p, 0, size );
+    return p;
+}
+
 void *lsmash_memdup( void *src, size_t size )
 {
     if( !size )
@@ -609,4 +683,110 @@ void *lsmash_memdup( void *src, size_t size )
         return NULL;
     memcpy( dst, src, size );
     return dst;
+}
+
+lsmash_multiple_buffers_t *lsmash_create_multiple_buffers( uint32_t number_of_buffers, uint32_t buffer_size )
+{
+    if( (uint64_t)number_of_buffers * buffer_size > UINT32_MAX )
+        return NULL;
+    lsmash_multiple_buffers_t *multiple_buffer = malloc( sizeof(lsmash_multiple_buffers_t) );
+    if( !multiple_buffer )
+        return NULL;
+    multiple_buffer->buffers = malloc( number_of_buffers * buffer_size );
+    if( !multiple_buffer->buffers )
+    {
+        free( multiple_buffer );
+        return NULL;
+    }
+    multiple_buffer->number_of_buffers = number_of_buffers;
+    multiple_buffer->buffer_size = buffer_size;
+    return multiple_buffer;
+}
+
+void *lsmash_withdraw_buffer( lsmash_multiple_buffers_t *multiple_buffer, uint32_t buffer_number )
+{
+    if( !multiple_buffer || !buffer_number || buffer_number > multiple_buffer->number_of_buffers )
+        return NULL;
+    return multiple_buffer->buffers + (buffer_number - 1) * multiple_buffer->buffer_size;
+}
+
+lsmash_multiple_buffers_t *lsmash_resize_multiple_buffers( lsmash_multiple_buffers_t *multiple_buffer, uint32_t buffer_size )
+{
+    if( !multiple_buffer )
+        return NULL;
+    if( buffer_size == multiple_buffer->buffer_size )
+        return multiple_buffer;
+    if( (uint64_t)multiple_buffer->number_of_buffers * buffer_size > UINT32_MAX )
+        return NULL;
+    void *temp;
+    if( buffer_size > multiple_buffer->buffer_size )
+    {
+        temp = realloc( multiple_buffer->buffers, multiple_buffer->number_of_buffers * buffer_size );
+        if( !temp )
+            return NULL;
+        for( uint32_t i = multiple_buffer->number_of_buffers - 1; i ; i-- )
+            memmove( temp + buffer_size, temp + i * multiple_buffer->buffer_size, multiple_buffer->buffer_size );
+    }
+    else
+    {
+        for( uint32_t i = 1; i < multiple_buffer->number_of_buffers; i++ )
+            memmove( multiple_buffer->buffers + buffer_size, multiple_buffer->buffers + i * multiple_buffer->buffer_size, multiple_buffer->buffer_size );
+        temp = realloc( multiple_buffer->buffers, multiple_buffer->number_of_buffers * buffer_size );
+        if( !temp )
+            return NULL;
+    }
+    multiple_buffer->buffers = temp;
+    multiple_buffer->buffer_size = buffer_size;
+    return multiple_buffer;
+}
+
+void lsmash_destroy_multiple_buffers( lsmash_multiple_buffers_t *multiple_buffer )
+{
+    if( !multiple_buffer )
+        return;
+    if( multiple_buffer->buffers )
+        free( multiple_buffer->buffers );
+    free( multiple_buffer );
+}
+/*---- ----*/
+
+/*---- others ----*/
+void lsmash_log( lsmash_log_level level, const char* message, ... )
+{
+    char *prefix;
+    va_list args;
+
+    va_start( args, message );
+    switch( level )
+    {
+        case LSMASH_LOG_ERROR:
+            prefix = "Error";
+            break;
+        case LSMASH_LOG_WARNING:
+            prefix = "Warning";
+            break;
+        case LSMASH_LOG_INFO:
+            prefix = "Info";
+            break;
+        default:
+            prefix = "Unknown";
+            break;
+    }
+
+    fprintf( stderr, "[%s]: ", prefix );
+    vfprintf( stderr, message, args );
+    va_end( args );
+}
+
+/* for qsort function */
+int lsmash_compare_dts( const lsmash_media_ts_t *a, const lsmash_media_ts_t *b )
+{
+    int64_t diff = (int64_t)(a->dts - b->dts);
+    return diff > 0 ? 1 : (diff == 0 ? 0 : -1);
+}
+
+int lsmash_compare_cts( const lsmash_media_ts_t *a, const lsmash_media_ts_t *b )
+{
+    int64_t diff = (int64_t)(a->cts - b->cts);
+    return diff > 0 ? 1 : (diff == 0 ? 0 : -1);
 }

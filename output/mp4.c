@@ -71,7 +71,7 @@ typedef struct
     cli_output_opt_t opt;
 
     lsmash_root_t *p_root;
-    lsmash_brand_type_code major_brand;
+    lsmash_brand_type major_brand;
     int i_brand_3gpp;
     int b_brand_qt;
     int b_stdout;
@@ -156,7 +156,7 @@ static int close_file( hnd_t handle, int64_t largest_pts, int64_t second_largest
                                 "failed to set timeline map for video.\n" );
             }
             else if( !p_mp4->b_stdout )
-                MP4_LOG_IF_ERR( lsmash_modify_timeline_map( p_mp4->p_root, p_mp4->i_track, 1, actual_duration, p_mp4->i_first_cts, ISOM_EDIT_MODE_NORMAL ),
+                MP4_LOG_IF_ERR( lsmash_modify_explicit_timeline_map( p_mp4->p_root, p_mp4->i_track, 1, actual_duration, p_mp4->i_first_cts, ISOM_EDIT_MODE_NORMAL ),
                                 "failed to update timeline map for video.\n" );
         }
 
@@ -233,8 +233,8 @@ static int set_param( hnd_t handle, x264_param_t *p_param )
     p_mp4->i_time_inc = p_param->i_timebase_num * p_mp4->i_dts_compress_multiplier;
     MP4_FAIL_IF_ERR( i_media_timescale > UINT32_MAX, "MP4 media timescale %"PRIu64" exceeds maximum\n", i_media_timescale );
 
-    /* Set brands. */
-    lsmash_brand_type_code brands[10] = { 0 };
+    /* Select brands. */
+    lsmash_brand_type brands[11] = { 0 };
     uint32_t minor_version = 0;
     uint32_t brand_count = 0;
     if( p_mp4->b_brand_qt )
@@ -257,21 +257,23 @@ static int set_param( hnd_t handle, x264_param_t *p_param )
         brands[brand_count++] = ISOM_BRAND_TYPE_ISOM;
         if( p_mp4->b_use_recovery )
         {
-            brands[brand_count++] = ISOM_BRAND_TYPE_AVC1;   /* sdtp/sgpd/sbgp/random access recovery point grouping */
+            brands[brand_count++] = ISOM_BRAND_TYPE_AVC1;   /* sdtp, sgpd, sbgp and visual roll recovery grouping */
             if( p_param->b_open_gop )
             {
-                brands[brand_count++] = ISOM_BRAND_TYPE_ISO6;   /* cslg/random access point grouping */
-                brands[brand_count++] = ISOM_BRAND_TYPE_QT;     /* tapt/cslg/stps/sdtp */
+                brands[brand_count++] = ISOM_BRAND_TYPE_ISO6;   /* cslg and visual random access grouping */
+                brands[brand_count++] = ISOM_BRAND_TYPE_QT;     /* tapt, cslg, stps and sdtp */
                 p_mp4->b_brand_qt = 1;
             }
         }
     }
-    MP4_FAIL_IF_ERR( lsmash_set_brands( p_mp4->p_root, p_mp4->major_brand, minor_version, brands, brand_count ),
-                     "failed to set brands / ftyp.\n" );
 
     /* Set movie parameters. */
     lsmash_movie_parameters_t movie_param;
     lsmash_initialize_movie_parameters( &movie_param );
+    movie_param.major_brand = p_mp4->major_brand;
+    movie_param.brands = brands;
+    movie_param.number_of_brands = brand_count;
+    movie_param.minor_version = minor_version;
     MP4_FAIL_IF_ERR( lsmash_set_movie_parameters( p_mp4->p_root, &movie_param ),
                      "failed to set movie parameters.\n" );
     p_mp4->i_movie_timescale = lsmash_get_movie_timescale( p_mp4->p_root );
@@ -312,12 +314,13 @@ static int set_param( hnd_t handle, x264_param_t *p_param )
     /* Set video track parameters. */
     lsmash_track_parameters_t track_param;
     lsmash_initialize_track_parameters( &track_param );
-    lsmash_track_mode_code track_mode = ISOM_TRACK_ENABLED | ISOM_TRACK_IN_MOVIE | ISOM_TRACK_IN_PREVIEW;
+    lsmash_track_mode track_mode = ISOM_TRACK_ENABLED | ISOM_TRACK_IN_MOVIE | ISOM_TRACK_IN_PREVIEW;
     if( p_mp4->b_brand_qt )
         track_mode |= QT_TRACK_IN_POSTER;
     track_param.mode = track_mode;
     track_param.display_width = i_display_width;
     track_param.display_height = i_display_height;
+    track_param.aperture_modes = p_mp4->b_brand_qt && !p_mp4->b_no_pasp;
     MP4_FAIL_IF_ERR( lsmash_set_track_parameters( p_mp4->p_root, p_mp4->i_track, &track_param ),
                      "failed to set track parameters for video.\n" );
 
@@ -325,9 +328,14 @@ static int set_param( hnd_t handle, x264_param_t *p_param )
     lsmash_media_parameters_t media_param;
     lsmash_initialize_media_parameters( &media_param );
     media_param.timescale = i_media_timescale;
-    media_param.media_handler_name = "X264 Video Media Handler";
+    media_param.media_handler_name = "L-SMASH Video Media Handler";
     if( p_mp4->b_brand_qt )
-        media_param.data_handler_name = "X264 URL Data Handler";
+        media_param.data_handler_name = "L-SMASH URL Data Handler";
+    if( p_mp4->b_use_recovery )
+    {
+        media_param.roll_grouping = p_param->b_intra_refresh;
+        media_param.rap_grouping = p_param->b_open_gop;
+    }
     MP4_FAIL_IF_ERR( lsmash_set_media_parameters( p_mp4->p_root, p_mp4->i_track, &media_param ),
                      "failed to set media parameters for video.\n" );
     p_mp4->i_video_timescale = lsmash_get_media_timescale( p_mp4->p_root, p_mp4->i_track );
@@ -341,18 +349,6 @@ static int set_param( hnd_t handle, x264_param_t *p_param )
     if( p_mp4->major_brand != ISOM_BRAND_TYPE_QT )
         MP4_FAIL_IF_ERR( lsmash_add_btrt( p_mp4->p_root, p_mp4->i_track, p_mp4->i_sample_entry ),
                          "failed to add btrt.\n" );
-    if( p_mp4->b_brand_qt && !p_mp4->b_no_pasp )
-        MP4_FAIL_IF_ERR( lsmash_set_track_aperture_modes( p_mp4->p_root, p_mp4->i_track, p_mp4->i_sample_entry ),
-                         "failed to set track aperture mode.\n" );
-    if( p_mp4->b_use_recovery )
-    {
-        if( p_param->b_intra_refresh )
-            MP4_FAIL_IF_ERR( lsmash_create_grouping( p_mp4->p_root, p_mp4->i_track, ISOM_GROUP_TYPE_ROLL ),
-                             "failed to create random access recovery point sample grouping\n" );
-        if( p_param->b_open_gop )
-            MP4_FAIL_IF_ERR( lsmash_create_grouping( p_mp4->p_root, p_mp4->i_track, ISOM_GROUP_TYPE_RAP ),
-                             "failed to create random access point sample grouping\n" );
-    }
 
     return 0;
 }
@@ -383,10 +379,6 @@ static int write_headers( hnd_t handle, x264_nal_t *p_nal )
                      "failed to allocate sei transition buffer.\n" );
     memcpy( p_mp4->p_sei_buffer, sei, sei_size );
     p_mp4->i_sei_size = sei_size;
-
-    /* Write ftyp. */
-    MP4_FAIL_IF_ERR( lsmash_write_ftyp( p_mp4->p_root ),
-                     "failed to write brands / ftyp.\n" );
 
     return sei_size + sps_size + pps_size;
 }

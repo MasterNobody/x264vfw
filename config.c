@@ -86,6 +86,8 @@ extern const char * const muxer_names[];
 
 extern const char * const log_level_names[];
 
+extern const char * const range_names[];
+
 static const reg_named_str_t reg_named_str_table[] =
 {
     /* Basic */
@@ -1374,6 +1376,14 @@ static char *stringify_names(char *buf, const char * const names[])
     return buf;
 }
 
+#ifndef X264_CHROMA_FORMAT
+#define X264_CHROMA_FORMAT 0
+#endif
+
+#ifndef X264_BIT_DEPTH
+#define X264_BIT_DEPTH 8
+#endif
+
 static void help(char *buffer, int longhelp)
 {
 #define H0(...) do { sprintf(buffer, __VA_ARGS__); buffer += strlen(buffer); } while (0)
@@ -1384,11 +1394,17 @@ static void help(char *buffer, int longhelp)
     x264_param_t *defaults = &defaults_value;
 
     x264_param_default(&defaults_value);
+    /* Set VFW defaults for colorspace options */
+    defaults->vui.b_fullrange = 0; /* tv range */
+    defaults->vui.i_colmatrix = 2; /* undef */
     H0( "Presets:\r\n" );
     H0( "\r\n" );
     H0( "      --profile <string>      Force the limits of an H.264 profile\r\n"
         "                                  Overrides all settings.\r\n" );
-    H2( "                                  - baseline:\r\n"
+    H2(
+#if X264_CHROMA_FORMAT <= X264_CSP_I420
+#if X264_BIT_DEPTH==8
+        "                                  - baseline:\r\n"
         "                                    --no-8x8dct --bframes 0 --no-cabac\r\n"
         "                                    --cqm flat --weightp 0\r\n"
         "                                    No interlaced.\r\n"
@@ -1397,8 +1413,34 @@ static void help(char *buffer, int longhelp)
         "                                    --no-8x8dct --cqm flat\r\n"
         "                                    No lossless.\r\n"
         "                                  - high:\r\n"
-        "                                    No lossless.\r\n" );
-        else H0( "                                  - baseline,main,high\r\n" );
+        "                                    No lossless.\r\n"
+#endif
+        "                                  - high10:\r\n"
+        "                                    No lossless.\r\n"
+        "                                    Support for bit depth 8-10.\r\n"
+#endif
+#if X264_CHROMA_FORMAT <= X264_CSP_I422
+        "                                  - high422:\r\n"
+        "                                    No lossless.\r\n"
+        "                                    Support for bit depth 8-10.\r\n"
+        "                                    Support for 4:2:0/4:2:2 chroma subsampling.\r\n"
+#endif
+        "                                  - high444:\r\n"
+        "                                    Support for bit depth 8-10.\r\n"
+        "                                    Support for 4:2:0/4:2:2/4:4:4 chroma subsampling.\r\n" );
+        else H0(
+        "                                  - "
+#if X264_CHROMA_FORMAT <= X264_CSP_I420
+#if X264_BIT_DEPTH==8
+        "baseline,main,high,"
+#endif
+        "high10,"
+#endif
+#if X264_CHROMA_FORMAT <= X264_CSP_I422
+        "high422,"
+#endif
+        "high444\r\n"
+               );
     H0( "      --preset <string>       Use a preset to select encoding settings [medium]\r\n"
         "                                  Overridden by user settings.\r\n" );
     H2( "                                  - ultrafast:\r\n"
@@ -1439,7 +1481,7 @@ static void help(char *buffer, int longhelp)
         "                                    --bframes 16 --b-adapt 2 --direct auto\r\n"
         "                                    --no-fast-pskip --me tesa --merange 24\r\n"
         "                                    --partitions all --rc-lookahead 60\r\n"
-        "                                    --ref 16 --subme 10 --trellis 2\r\n" );
+        "                                    --ref 16 --subme 11 --trellis 2\r\n" );
     else H0( "                                  - ultrafast,superfast,veryfast,faster,fast\r\n"
              "                                  - medium,slow,slower,veryslow,placebo\r\n" );
     H0( "      --tune <string>         Tune the settings for a particular type of source\r\n"
@@ -1549,7 +1591,8 @@ static void help(char *buffer, int longhelp)
     H2( "      --aq-mode <integer>     AQ method [%d]\r\n"
         "                                  - 0: Disabled\r\n"
         "                                  - 1: Variance AQ (complexity mask)\r\n"
-        "                                  - 2: Auto-variance AQ (experimental)\r\n", defaults->rc.i_aq_mode );
+        "                                  - 2: Auto-variance AQ (experimental)\r\n"
+        "                                  - 3: Auto-variance AQ modification\r\n", defaults->rc.i_aq_mode );
     H1( "      --aq-strength <float>   Reduces blocking and blurring in flat and\r\n"
         "                              textured areas. [%.1f]\r\n", defaults->rc.f_aq_strength );
     H1( "\r\n" );
@@ -1603,8 +1646,9 @@ static void help(char *buffer, int longhelp)
         "                                  - 7: RD mode decision for all frames\r\n"
         "                                  - 8: RD refinement for I/P-frames\r\n"
         "                                  - 9: RD refinement for all frames\r\n"
-        "                                  - 10: QP-RD - requires trellis=2, aq-mode>0\r\n" );
-    else H1( "                                  decision quality: 1=fast, 10=best.\r\n"  );
+        "                                  - 10: QP-RD - requires trellis=2, aq-mode>0\r\n"
+        "                                  - 11: Full RD: disable all early terminations\r\n" );
+    else H1( "                                  decision quality: 1=fast, 11=best\r\n" );
     H1( "      --psy-rd <float:float>  Strength of psychovisual optimization [\"%.1f:%.1f\"]\r\n"
         "                                  #1: RD (requires subme>=6)\r\n"
         "                                  #2: Trellis (requires trellis, experimental)\r\n",
@@ -1648,9 +1692,8 @@ static void help(char *buffer, int longhelp)
     H2( "      --videoformat <string>  Specify video format [\"%s\"]\r\n"
         "                                  - component, pal, ntsc, secam, mac, undef\r\n",
                                        strtable_lookup( x264_vidformat_names, defaults->vui.i_vidformat ) );
-    H2( "      --fullrange <string>    Specify full range samples setting [\"%s\"]\r\n"
-        "                                  - off, on\r\n",
-                                       strtable_lookup( x264_fullrange_names, defaults->vui.b_fullrange ) );
+    H2( "      --range <string>        Specify color range [\"%s\"]\r\n"
+        "                                  - %s\r\n", range_names[0], stringify_names( buf, range_names ) );
     H2( "      --colorprim <string>    Specify color primaries [\"%s\"]\r\n"
         "                                  - undef, bt709, bt470m, bt470bg\r\n"
         "                                    smpte170m, smpte240m, film\r\n",
@@ -1694,6 +1737,8 @@ static void help(char *buffer, int longhelp)
     H2( "      --sliced-threads        Low-latency but lower-efficiency threading\r\n" );
     H2( "      --sync-lookahead <integer> Number of buffer frames for threaded lookahead\r\n" );
     H2( "      --non-deterministic     Slightly improve quality of SMP, at the cost of repeatability\r\n" );
+    H2( "      --cpu-independent       Ensure exact reproducibility across different cpus,\r\n"
+        "                                  as opposed to letting them select different algorithms\r\n" );
     H2( "      --asm <integer>         Override CPU detection\r\n" );
     H2( "      --no-asm                Disable all CPU optimizations\r\n" );
     H2( "      --dump-yuv <string>     Save reconstructed frames\r\n" );

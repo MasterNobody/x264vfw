@@ -1,7 +1,7 @@
 /*****************************************************************************
  * mp4a.c:
  *****************************************************************************
- * Copyright (C) 2010 L-SMASH project
+ * Copyright (C) 2010-2011 L-SMASH project
  *
  * Authors: Takashi Hirata <silverfilain@gmail.com>
  *
@@ -34,21 +34,21 @@
 
 /* ISO/IEC 14496-3 samplingFrequencyIndex */
 /* ISO/IEC 14496-3 Sampling frequency mapping */
-const uint32_t mp4a_AAC_frequency_table[13][4] = {
-    /* threshold, exact, idx, idx_for_sbr */
-    {      92017, 96000, 0x0,         0xF }, /* SBR is not allowed */
-    {      75132, 88200, 0x1,         0xF }, /* SBR is not allowed */
-    {      55426, 64000, 0x2,         0xF }, /* SBR is not allowed */
-    {      46009, 48000, 0x3,         0x0 },
-    {      37566, 44100, 0x4,         0x1 },
-    {      27713, 32000, 0x5,         0x2 },
-    {      23004, 24000, 0x6,         0x3 },
-    {      18783, 22050, 0x7,         0x4 },
-    {      13856, 16000, 0x8,         0x5 },
-    {      11502, 12000, 0x9,         0x6 },
-    {       9391, 11025, 0xA,         0x7 },
-    {       8000,  8000, 0xB,         0x8 },
-    {          0,  7350, 0xB,         0xF } /* samplingFrequencyIndex for GASpecificConfig is 0xB (same as 8000Hz). */
+const uint32_t mp4a_sampling_frequency_table[13][5] = {
+    /* threshold, exact, idx_for_ga, idx_for_sbr, idx */
+    {      92017, 96000,        0x0,         0xF, 0x0 }, /* SBR is not allowed */
+    {      75132, 88200,        0x1,         0xF, 0x1 }, /* SBR is not allowed */
+    {      55426, 64000,        0x2,         0xF, 0x2 }, /* SBR is not allowed */
+    {      46009, 48000,        0x3,         0x0, 0x3 },
+    {      37566, 44100,        0x4,         0x1, 0x4 },
+    {      27713, 32000,        0x5,         0x2, 0x5 },
+    {      23004, 24000,        0x6,         0x3, 0x6 },
+    {      18783, 22050,        0x7,         0x4, 0x7 },
+    {      13856, 16000,        0x8,         0x5, 0x8 },
+    {      11502, 12000,        0x9,         0x6, 0x9 },
+    {       9391, 11025,        0xA,         0x7, 0xA },
+    {       8000,  8000,        0xB,         0x8, 0xB },
+    {          0,  7350,        0xB,         0xF, 0xC } /* samplingFrequencyIndex for GASpecificConfig is 0xB (same as 8000Hz). */
 };
 
 /* ISO/IEC 14496-3 Interface to ISO/IEC 14496-1 (MPEG-4 Systems), Syntax of AudioSpecificConfig(). */
@@ -142,6 +142,22 @@ typedef struct {
     uint8_t extension; /* shall be 0. */
 } mp4a_MPEG_1_2_SpecificConfig_t;
 
+/* ISO/IEC 14496-3 ALSSpecificConfig */
+typedef struct
+{
+    uint32_t size;
+    uint8_t *data;
+    uint32_t samp_freq;
+    uint16_t channels;
+    uint8_t  resolution;
+    uint8_t  floating;
+    uint16_t frame_length;
+    uint16_t max_order;
+    uint8_t  block_switching;
+    uint8_t  bgmc_mode;
+    uint8_t  RLSLMS;
+} mp4a_ALSSpecificConfig_t;
+
 static inline void mp4a_remove_GASpecificConfig( mp4a_GASpecificConfig_t* gasc )
 {
     debug_if( !gasc )
@@ -200,10 +216,9 @@ static mp4a_GASpecificConfig_t* mp4a_create_GASpecificConfig( uint8_t samplingFr
         return NULL;
     if( samplingFrequencyIndex > 0xB || channelConfig == 0 || channelConfig == 7 )
         return NULL;
-    mp4a_GASpecificConfig_t* gasc = (mp4a_GASpecificConfig_t*)malloc( sizeof(mp4a_GASpecificConfig_t) );
+    mp4a_GASpecificConfig_t *gasc = (mp4a_GASpecificConfig_t *)lsmash_malloc_zero( sizeof(mp4a_GASpecificConfig_t) );
     if( !gasc )
         return NULL;
-    memset( gasc, 0, sizeof(mp4a_GASpecificConfig_t) );
     gasc->frameLengthFlag = 0; /* FIXME: AAC_SSR: shall be 0, Others: depends, but noramally 0. */
     gasc->dependsOnCoreCoder = 0; /* FIXME: used if scalable AAC. */
     switch( aot ){
@@ -233,12 +248,23 @@ static mp4a_GASpecificConfig_t* mp4a_create_GASpecificConfig( uint8_t samplingFr
 
 static mp4a_MPEG_1_2_SpecificConfig_t* mp4a_create_MPEG_1_2_SpecificConfig()
 {
-    mp4a_MPEG_1_2_SpecificConfig_t* mpeg_1_2_sc = (mp4a_MPEG_1_2_SpecificConfig_t*)malloc( sizeof(mp4a_MPEG_1_2_SpecificConfig_t) );
+    mp4a_MPEG_1_2_SpecificConfig_t *mpeg_1_2_sc = (mp4a_MPEG_1_2_SpecificConfig_t *)lsmash_malloc_zero( sizeof(mp4a_MPEG_1_2_SpecificConfig_t) );
     if( !mpeg_1_2_sc )
         return NULL;
-    memset( mpeg_1_2_sc, 0, sizeof(mp4a_MPEG_1_2_SpecificConfig_t) );
     mpeg_1_2_sc->extension = 0; /* shall be 0. */
     return mpeg_1_2_sc;
+}
+
+static mp4a_ALSSpecificConfig_t *mp4a_create_ALSSpecificConfig( uint8_t *exdata, uint32_t exdata_length )
+{
+    mp4a_ALSSpecificConfig_t *alssc = (mp4a_ALSSpecificConfig_t *)lsmash_malloc_zero( sizeof(mp4a_ALSSpecificConfig_t) );
+    if( !alssc )
+        return NULL;
+    alssc->data = lsmash_memdup( exdata, exdata_length );
+    if( !alssc->data )
+        return NULL;
+    alssc->size = exdata_length;
+    return alssc;
 }
 
 /* Currently, only normal AAC, MPEG_1_2 are supported.
@@ -247,100 +273,127 @@ static mp4a_MPEG_1_2_SpecificConfig_t* mp4a_create_MPEG_1_2_SpecificConfig()
    aot shall not be MP4A_AUDIO_OBJECT_TYPE_SBR even if you wish to signal SBR explicitly, use sbr_mode instead.
    Frequency/channels shall be base AAC's one, even if SBR/PS.
    If other than AAC with SBR, sbr_mode shall be MP4A_AAC_SBR_NOT_SPECIFIED. */
-mp4a_AudioSpecificConfig_t* mp4a_create_AudioSpecificConfig( lsmash_mp4a_AudioObjectType aot, uint32_t frequency, uint32_t channels, lsmash_mp4a_aac_sbr_mode sbr_mode )
+mp4a_AudioSpecificConfig_t *mp4a_create_AudioSpecificConfig(
+    lsmash_mp4a_AudioObjectType aot,
+    uint32_t frequency,
+    uint32_t channels,
+    lsmash_mp4a_aac_sbr_mode sbr_mode,
+    uint8_t *exdata,
+    uint32_t exdata_length
+)
 {
     if( aot != MP4A_AUDIO_OBJECT_TYPE_AAC_MAIN && aot != MP4A_AUDIO_OBJECT_TYPE_AAC_LC
         && aot != MP4A_AUDIO_OBJECT_TYPE_AAC_SSR && aot != MP4A_AUDIO_OBJECT_TYPE_AAC_LTP
-        && aot != MP4A_AUDIO_OBJECT_TYPE_TwinVQ )
+        && aot != MP4A_AUDIO_OBJECT_TYPE_TwinVQ && aot != MP4A_AUDIO_OBJECT_TYPE_ALS )
         return NULL;
     if( frequency == 0 )
         return NULL;
 
     uint8_t channelConfig;
     switch( channels ){
-    case 1:
-    case 2:
-    case 3:
-    case 4:
-    case 5:
-    case 6:
-        channelConfig = channels;
-        break;
-    case 8:
-        channelConfig = 7;
-        break;
-    default:
-        return NULL;
+        case 1:
+        case 2:
+        case 3:
+        case 4:
+        case 5:
+        case 6:
+            channelConfig = channels;
+            break;
+        case 8:
+            channelConfig = 7;
+            break;
+        default:
+            return NULL;
     }
 
-    mp4a_AudioSpecificConfig_t* asc = (mp4a_AudioSpecificConfig_t*)malloc( sizeof(mp4a_AudioSpecificConfig_t) );
+    mp4a_AudioSpecificConfig_t *asc = (mp4a_AudioSpecificConfig_t *)lsmash_malloc_zero( sizeof(mp4a_AudioSpecificConfig_t) );
     if( !asc )
         return NULL;
-    memset( asc, 0, sizeof(mp4a_AudioSpecificConfig_t) );
 
     asc->sbr_mode = sbr_mode;
     asc->audioObjectType = aot;
     asc->channelConfiguration = channelConfig;
 
-    uint8_t samplingFrequencyIndex;
+    uint8_t samplingFrequencyIndex = 0xF;
     uint8_t i = 0x0;
-    while( frequency < mp4a_AAC_frequency_table[i][0] )
-        i++;
-    asc->samplingFrequencyIndex = frequency == mp4a_AAC_frequency_table[i][1] ? i : 0xF;
-    asc->samplingFrequency = frequency;
-    samplingFrequencyIndex = mp4a_AAC_frequency_table[i][2];
-
-    /* SBR settings */
-    if( sbr_mode != MP4A_AAC_SBR_NOT_SPECIFIED )
+    if( sbr_mode != MP4A_AAC_SBR_NOT_SPECIFIED
+     || aot == MP4A_AUDIO_OBJECT_TYPE_AAC_MAIN
+     || aot == MP4A_AUDIO_OBJECT_TYPE_AAC_LC
+     || aot == MP4A_AUDIO_OBJECT_TYPE_AAC_SSR
+     || aot == MP4A_AUDIO_OBJECT_TYPE_AAC_LTP
+     || aot == MP4A_AUDIO_OBJECT_TYPE_SBR )
     {
-        /* SBR limitation */
-        /* see ISO/IEC 14496-3 Levels within the profiles / Levels for the High Efficiency AAC Profile */
-        if( i < 0x3 )
+        while( frequency < mp4a_sampling_frequency_table[i][0] )
+            i++;
+        asc->samplingFrequencyIndex = frequency == mp4a_sampling_frequency_table[i][1] ? i : 0xF;
+        asc->samplingFrequency = frequency;
+        samplingFrequencyIndex = mp4a_sampling_frequency_table[i][2];
+        /* SBR settings */
+        if( sbr_mode != MP4A_AAC_SBR_NOT_SPECIFIED )
         {
-            free( asc );
-            return NULL;
+            /* SBR limitation */
+            /* see ISO/IEC 14496-3 Levels within the profiles / Levels for the High Efficiency AAC Profile */
+            if( i < 0x3 )
+            {
+                free( asc );
+                return NULL;
+            }
+            asc->extensionAudioObjectType = MP4A_AUDIO_OBJECT_TYPE_SBR;
         }
-        asc->extensionAudioObjectType = MP4A_AUDIO_OBJECT_TYPE_SBR;
-    }
-    else
-        asc->extensionAudioObjectType = MP4A_AUDIO_OBJECT_TYPE_NULL;
+        else
+            asc->extensionAudioObjectType = MP4A_AUDIO_OBJECT_TYPE_NULL;
 
-    if( sbr_mode == MP4A_AAC_SBR_BACKWARD_COMPATIBLE || sbr_mode == MP4A_AAC_SBR_BACKWARD_COMPATIBLE )
-    {
-        asc->extensionSamplingFrequency = frequency * 2;
-        asc->extensionSamplingFrequencyIndex = i == 0xC ? 0xF : mp4a_AAC_frequency_table[i][3];
+        if( sbr_mode == MP4A_AAC_SBR_BACKWARD_COMPATIBLE || sbr_mode == MP4A_AAC_SBR_BACKWARD_COMPATIBLE )
+        {
+            asc->extensionSamplingFrequency = frequency * 2;
+            asc->extensionSamplingFrequencyIndex = i == 0xC ? 0xF : mp4a_sampling_frequency_table[i][3];
+        }
+        else
+        {
+            asc->extensionSamplingFrequencyIndex = asc->samplingFrequencyIndex;
+            asc->extensionSamplingFrequency = asc->samplingFrequency;
+        }
     }
     else
     {
+        while( i < 0xD && frequency != mp4a_sampling_frequency_table[i][1] )
+            i++;
+        asc->samplingFrequencyIndex          = i != 0xD ? i : 0xF;
+        asc->samplingFrequency               = frequency;
+        asc->extensionAudioObjectType        = MP4A_AUDIO_OBJECT_TYPE_NULL;
         asc->extensionSamplingFrequencyIndex = asc->samplingFrequencyIndex;
-        asc->extensionSamplingFrequency = asc->samplingFrequency;
+        asc->extensionSamplingFrequency      = asc->samplingFrequency;
     }
 
-    switch( aot ){
-    case MP4A_AUDIO_OBJECT_TYPE_AAC_MAIN:
-    case MP4A_AUDIO_OBJECT_TYPE_AAC_LC:
-    case MP4A_AUDIO_OBJECT_TYPE_AAC_SSR:
-    case MP4A_AUDIO_OBJECT_TYPE_AAC_LTP:
-    case MP4A_AUDIO_OBJECT_TYPE_SBR:
+    switch( aot )
+    {
+        case MP4A_AUDIO_OBJECT_TYPE_AAC_MAIN:
+        case MP4A_AUDIO_OBJECT_TYPE_AAC_LC:
+        case MP4A_AUDIO_OBJECT_TYPE_AAC_SSR:
+        case MP4A_AUDIO_OBJECT_TYPE_AAC_LTP:
+        case MP4A_AUDIO_OBJECT_TYPE_SBR:
 #if 0 /* FIXME: here, stop currently unsupported codecs. */
-    case MP4A_AUDIO_OBJECT_TYPE_AAC_scalable:
-    case MP4A_AUDIO_OBJECT_TYPE_TwinVQ: /* NOTE: I think we already have a support for TwinVQ, but how to test this? */
-    case MP4A_AUDIO_OBJECT_TYPE_ER_AAC_LC:
-    case MP4A_AUDIO_OBJECT_TYPE_ER_AAC_LTP:
-    case MP4A_AUDIO_OBJECT_TYPE_ER_AAC_scalable:
-    case MP4A_AUDIO_OBJECT_TYPE_ER_Twin_VQ:
-    case MP4A_AUDIO_OBJECT_TYPE_ER_BSAC:
-    case MP4A_AUDIO_OBJECT_TYPE_ER_AAC_LD:
+        case MP4A_AUDIO_OBJECT_TYPE_AAC_scalable:
+        case MP4A_AUDIO_OBJECT_TYPE_TwinVQ: /* NOTE: I think we already have a support for TwinVQ, but how to test this? */
+        case MP4A_AUDIO_OBJECT_TYPE_ER_AAC_LC:
+        case MP4A_AUDIO_OBJECT_TYPE_ER_AAC_LTP:
+        case MP4A_AUDIO_OBJECT_TYPE_ER_AAC_scalable:
+        case MP4A_AUDIO_OBJECT_TYPE_ER_Twin_VQ:
+        case MP4A_AUDIO_OBJECT_TYPE_ER_BSAC:
+        case MP4A_AUDIO_OBJECT_TYPE_ER_AAC_LD:
 #endif
-        asc->deepAudioSpecificConfig = mp4a_create_GASpecificConfig( samplingFrequencyIndex, channelConfig, aot );
-        break;
-    case MP4A_AUDIO_OBJECT_TYPE_Layer_1:
-    case MP4A_AUDIO_OBJECT_TYPE_Layer_2:
-    case MP4A_AUDIO_OBJECT_TYPE_Layer_3:
-        asc->deepAudioSpecificConfig = mp4a_create_MPEG_1_2_SpecificConfig();
-        break;
-    default:
-        break; /* this case is trapped below. */
+            asc->deepAudioSpecificConfig = mp4a_create_GASpecificConfig( samplingFrequencyIndex, channelConfig, aot );
+            break;
+        case MP4A_AUDIO_OBJECT_TYPE_Layer_1:
+        case MP4A_AUDIO_OBJECT_TYPE_Layer_2:
+        case MP4A_AUDIO_OBJECT_TYPE_Layer_3:
+            asc->deepAudioSpecificConfig = mp4a_create_MPEG_1_2_SpecificConfig();
+            break;
+        case MP4A_AUDIO_OBJECT_TYPE_ALS:
+            asc->deepAudioSpecificConfig = mp4a_create_ALSSpecificConfig( exdata, exdata_length );
+            break;
+        default:
+            break; /* this case is trapped below. */
     }
     if( !asc->deepAudioSpecificConfig ){
         free( asc );
@@ -354,34 +407,42 @@ static void mp4a_put_GASpecificConfig( lsmash_bits_t* bits, mp4a_GASpecificConfi
 {
     debug_if( !bits || !gasc )
         return;
-    lsmash_bits_put( bits, gasc->frameLengthFlag, 1);
-    lsmash_bits_put( bits, gasc->dependsOnCoreCoder, 1);
-    lsmash_bits_put( bits, gasc->extensionFlag, 1);
+    lsmash_bits_put( bits, gasc->frameLengthFlag, 1 );
+    lsmash_bits_put( bits, gasc->dependsOnCoreCoder, 1 );
+    lsmash_bits_put( bits, gasc->extensionFlag, 1 );
 }
 
 static void mp4a_put_MPEG_1_2_SpecificConfig( lsmash_bits_t* bits, mp4a_MPEG_1_2_SpecificConfig_t* mpeg_1_2_sc )
 {
     debug_if( !bits || !mpeg_1_2_sc )
         return;
-    lsmash_bits_put( bits, mpeg_1_2_sc->extension, 1); /* shall be 0 */
+    lsmash_bits_put( bits, mpeg_1_2_sc->extension, 1 ); /* shall be 0 */
+}
+
+static void mp4a_put_ALSSpecificConfig( lsmash_bits_t *bits, mp4a_ALSSpecificConfig_t *alssc )
+{
+    debug_if( !bits || !alssc )
+        return;
+    lsmash_bits_put( bits, 0, 5 );      /* fillBits for byte alignment */
+    lsmash_bits_import_data( bits, alssc->data, alssc->size );
 }
 
 static inline void mp4a_put_AudioObjectType( lsmash_bits_t* bits, lsmash_mp4a_AudioObjectType aot )
 {
     if( aot > MP4A_AUDIO_OBJECT_TYPE_ESCAPE )
     {
-        lsmash_bits_put( bits, MP4A_AUDIO_OBJECT_TYPE_ESCAPE, 5);
-        lsmash_bits_put( bits, aot - MP4A_AUDIO_OBJECT_TYPE_ESCAPE - 1, 6);
+        lsmash_bits_put( bits, MP4A_AUDIO_OBJECT_TYPE_ESCAPE, 5 );
+        lsmash_bits_put( bits, aot - MP4A_AUDIO_OBJECT_TYPE_ESCAPE - 1, 6 );
     }
     else
-        lsmash_bits_put( bits, aot, 5);
+        lsmash_bits_put( bits, aot, 5 );
 }
 
 static inline void mp4a_put_SamplingFrequencyIndex( lsmash_bits_t* bits, uint8_t samplingFrequencyIndex, uint32_t samplingFrequency )
 {
-    lsmash_bits_put( bits, samplingFrequencyIndex, 4);
+    lsmash_bits_put( bits, samplingFrequencyIndex, 4 );
     if( samplingFrequencyIndex == 0xF )
-        lsmash_bits_put( bits, samplingFrequency, 24);
+        lsmash_bits_put( bits, samplingFrequency, 24 );
 }
 
 /* Currently, only normal AAC, MPEG_1_2 are supported.
@@ -428,6 +489,9 @@ void mp4a_put_AudioSpecificConfig( lsmash_bs_t* bs, mp4a_AudioSpecificConfig_t* 
     case MP4A_AUDIO_OBJECT_TYPE_Layer_3:
         mp4a_put_MPEG_1_2_SpecificConfig( &bits, (mp4a_MPEG_1_2_SpecificConfig_t*)asc->deepAudioSpecificConfig );
         break;
+    case MP4A_AUDIO_OBJECT_TYPE_ALS:
+        mp4a_put_ALSSpecificConfig( &bits, (mp4a_ALSSpecificConfig_t *)asc->deepAudioSpecificConfig );
+        break;
     default:
         break; /* FIXME: do we have to return error? */
     }
@@ -451,6 +515,196 @@ void mp4a_put_AudioSpecificConfig( lsmash_bs_t* bs, mp4a_AudioSpecificConfig_t* 
         }
     }
     lsmash_bits_put_align( &bits );
+}
+
+static int mp4a_get_GASpecificConfig( lsmash_bits_t *bits, mp4a_AudioSpecificConfig_t *asc )
+{
+    mp4a_GASpecificConfig_t *gasc = (mp4a_GASpecificConfig_t *)lsmash_malloc_zero( sizeof(mp4a_GASpecificConfig_t) );
+    if( !gasc )
+        return -1;
+    asc->deepAudioSpecificConfig = gasc;
+    gasc->frameLengthFlag = lsmash_bits_get( bits, 1 );
+    gasc->dependsOnCoreCoder = lsmash_bits_get( bits, 1 );
+    if( gasc->dependsOnCoreCoder )
+        lsmash_bits_get( bits, 14 );    /* coreCoderDelay */
+    gasc->extensionFlag = lsmash_bits_get( bits, 1 );
+    return 0;
+}
+
+static int mp4a_get_MPEG_1_2_SpecificConfig( lsmash_bits_t *bits, mp4a_AudioSpecificConfig_t *asc )
+{
+    lsmash_bits_get( bits, 1 );
+    return 0;
+}
+
+static int mp4a_get_ALSSpecificConfig( lsmash_bits_t *bits, mp4a_AudioSpecificConfig_t *asc )
+{
+    mp4a_ALSSpecificConfig_t *alssc = (mp4a_ALSSpecificConfig_t *)lsmash_malloc_zero( sizeof(mp4a_ALSSpecificConfig_t) );
+    if( !alssc )
+        return -1;
+    asc->deepAudioSpecificConfig = alssc;
+    lsmash_bits_get( bits, 32 );    /* als_id */
+    alssc->samp_freq = lsmash_bits_get( bits, 32 );
+    lsmash_bits_get( bits, 32 );    /* samples */
+    alssc->channels = lsmash_bits_get( bits, 16 );
+    lsmash_bits_get( bits, 3 );     /* file_type */
+    alssc->resolution = lsmash_bits_get( bits, 3 );
+    alssc->floating = lsmash_bits_get( bits, 1 );
+    lsmash_bits_get( bits, 1 );     /* msb_first */
+    alssc->frame_length = lsmash_bits_get( bits, 16 );
+    lsmash_bits_get( bits, 8 );     /* random_access */
+    lsmash_bits_get( bits, 2 );     /* ra_flag */
+    lsmash_bits_get( bits, 1 );     /* adapt_order */
+    lsmash_bits_get( bits, 2 );     /* coef_table */
+    lsmash_bits_get( bits, 1 );     /* long_term_prediction */
+    alssc->max_order = lsmash_bits_get( bits, 10 );
+    alssc->block_switching = lsmash_bits_get( bits, 2 );
+    alssc->bgmc_mode = lsmash_bits_get( bits, 1 );
+    lsmash_bits_get( bits, 1 );     /* sb_part */
+    lsmash_bits_get( bits, 1 );     /* joint_stereo */
+    lsmash_bits_get( bits, 1 );     /* mc_coding */
+    lsmash_bits_get( bits, 1 );     /* chan_config */
+    lsmash_bits_get( bits, 1 );     /* chan_sort */
+    lsmash_bits_get( bits, 1 );     /* crc_enabled */
+    alssc->RLSLMS = lsmash_bits_get( bits, 1 );
+    return 0;
+}
+
+static mp4a_AudioSpecificConfig_t * mp4a_get_AudioSpecificConfig( lsmash_bits_t *bits, uint8_t *dsi_payload, uint32_t dsi_payload_length )
+{
+    if( lsmash_bits_import_data( bits, dsi_payload, dsi_payload_length ) )
+        return NULL;
+    mp4a_AudioSpecificConfig_t *asc = (mp4a_AudioSpecificConfig_t *)lsmash_malloc_zero( sizeof(mp4a_AudioSpecificConfig_t) );
+    if( !asc )
+        return NULL;
+    asc->audioObjectType = lsmash_bits_get( bits, 5 );
+    if( asc->audioObjectType == 31 )
+        asc->extensionAudioObjectType = asc->audioObjectType += 1 + lsmash_bits_get( bits, 6 );
+    asc->samplingFrequencyIndex = lsmash_bits_get( bits, 4 );
+    if( asc->samplingFrequencyIndex == 0xf )
+        asc->samplingFrequency = lsmash_bits_get( bits, 24 );
+    asc->channelConfiguration = lsmash_bits_get( bits, 4 );
+    int ret = 0;
+    switch( asc->audioObjectType )
+    {
+        case MP4A_AUDIO_OBJECT_TYPE_AAC_MAIN :
+        case MP4A_AUDIO_OBJECT_TYPE_AAC_LC :
+        case MP4A_AUDIO_OBJECT_TYPE_AAC_SSR :
+        case MP4A_AUDIO_OBJECT_TYPE_AAC_LTP :
+        case MP4A_AUDIO_OBJECT_TYPE_AAC_scalable :
+        case MP4A_AUDIO_OBJECT_TYPE_TwinVQ :
+        case MP4A_AUDIO_OBJECT_TYPE_ER_AAC_LC :
+        case MP4A_AUDIO_OBJECT_TYPE_ER_AAC_LTP :
+        case MP4A_AUDIO_OBJECT_TYPE_ER_AAC_scalable :
+        case MP4A_AUDIO_OBJECT_TYPE_ER_Twin_VQ :
+        case MP4A_AUDIO_OBJECT_TYPE_ER_BSAC :
+        case MP4A_AUDIO_OBJECT_TYPE_ER_AAC_LD :
+            ret = mp4a_get_GASpecificConfig( bits, asc );
+            break;
+        case MP4A_AUDIO_OBJECT_TYPE_Layer_1 :
+        case MP4A_AUDIO_OBJECT_TYPE_Layer_2 :
+        case MP4A_AUDIO_OBJECT_TYPE_Layer_3 :
+            ret = mp4a_get_MPEG_1_2_SpecificConfig( bits, asc );
+            break;
+        case MP4A_AUDIO_OBJECT_TYPE_ALS :
+            lsmash_bits_get( bits, 5 );
+            ret = mp4a_get_ALSSpecificConfig( bits, asc );
+            break;
+        default :
+            break;
+    }
+    return ret ? NULL : asc;
+}
+
+int mp4a_setup_summary_from_AudioSpecificConfig( lsmash_audio_summary_t *summary, uint8_t *dsi_payload, uint32_t dsi_payload_length )
+{
+    lsmash_bits_t *bits = lsmash_bits_adhoc_create();
+    if( !bits )
+        return -1;
+    mp4a_AudioSpecificConfig_t *asc = mp4a_get_AudioSpecificConfig( bits, dsi_payload, dsi_payload_length );
+    if( !asc )
+        goto fail;
+    summary->sample_type            = ISOM_CODEC_TYPE_MP4A_AUDIO;
+    summary->object_type_indication = MP4SYS_OBJECT_TYPE_Audio_ISO_14496_3;
+    summary->stream_type            = MP4SYS_STREAM_TYPE_AudioStream;
+    summary->exdata                 = NULL;
+    summary->exdata_length          = 0;
+    summary->aot                    = asc->audioObjectType;
+    switch( asc->audioObjectType )
+    {
+        case MP4A_AUDIO_OBJECT_TYPE_AAC_MAIN :
+        case MP4A_AUDIO_OBJECT_TYPE_AAC_LC :
+        case MP4A_AUDIO_OBJECT_TYPE_AAC_SSR :
+        case MP4A_AUDIO_OBJECT_TYPE_AAC_LTP :
+        case MP4A_AUDIO_OBJECT_TYPE_AAC_scalable :
+        case MP4A_AUDIO_OBJECT_TYPE_TwinVQ :
+        case MP4A_AUDIO_OBJECT_TYPE_ER_AAC_LC :
+        case MP4A_AUDIO_OBJECT_TYPE_ER_AAC_LTP :
+        case MP4A_AUDIO_OBJECT_TYPE_ER_AAC_scalable :
+        case MP4A_AUDIO_OBJECT_TYPE_ER_Twin_VQ :
+        case MP4A_AUDIO_OBJECT_TYPE_ER_BSAC :
+        case MP4A_AUDIO_OBJECT_TYPE_ER_AAC_LD :
+        case MP4A_AUDIO_OBJECT_TYPE_Layer_1 :
+        case MP4A_AUDIO_OBJECT_TYPE_Layer_2 :
+        case MP4A_AUDIO_OBJECT_TYPE_Layer_3 :
+            if( asc->samplingFrequencyIndex == 0xf )
+                summary->frequency = asc->samplingFrequency;
+            else
+            {
+                uint8_t i = 0x0;
+                while( i != 0xc )
+                {
+                    if( mp4a_sampling_frequency_table[i][2] == asc->samplingFrequencyIndex )
+                    {
+                        summary->frequency = mp4a_sampling_frequency_table[i][1];
+                        break;
+                    }
+                    ++i;
+                }
+                if( i == 0xc )
+                    goto fail;
+            }
+            if( asc->channelConfiguration < 8 )
+                summary->channels = asc->channelConfiguration != 7 ? asc->channelConfiguration : 8;
+            else
+                summary->channels = 0;      /* reserved */
+            summary->bit_depth = 16;
+            switch( asc->audioObjectType )
+            {
+                case MP4A_AUDIO_OBJECT_TYPE_AAC_SSR :
+                    summary->samples_in_frame = 1024;
+                    break;
+                case MP4A_AUDIO_OBJECT_TYPE_Layer_1 :
+                    summary->samples_in_frame = 384;
+                    break;
+                case MP4A_AUDIO_OBJECT_TYPE_Layer_2 :
+                case MP4A_AUDIO_OBJECT_TYPE_Layer_3 :
+                    summary->samples_in_frame = 1152;
+                    break;
+                default :
+                    summary->samples_in_frame = !((mp4a_GASpecificConfig_t *)asc->deepAudioSpecificConfig)->frameLengthFlag ? 1024 : 960;
+                    break;
+            }
+            break;
+        case MP4A_AUDIO_OBJECT_TYPE_ALS :
+        {
+            mp4a_ALSSpecificConfig_t *alssc = (mp4a_ALSSpecificConfig_t *)asc->deepAudioSpecificConfig;
+            summary->frequency        = alssc->samp_freq;
+            summary->channels         = alssc->channels + 1;
+            summary->bit_depth        = (alssc->resolution + 1) * 8;
+            summary->samples_in_frame = alssc->frame_length + 1;
+            break;
+        }
+        default :
+            break;
+    }
+    mp4a_remove_AudioSpecificConfig( asc );
+    lsmash_bits_adhoc_cleanup( bits );
+    return 0;
+fail:
+    mp4a_remove_AudioSpecificConfig( asc );
+    lsmash_bits_adhoc_cleanup( bits );
+    return -1;
 }
 
 /***************************************************************************
@@ -496,6 +750,7 @@ mp4a_audioProfileLevelIndication mp4a_get_audioProfileLevelIndication( lsmash_au
             pli = mp4sys_aac_pli_table[i][2];
         break;
     case MP4A_AUDIO_OBJECT_TYPE_ALS:
+        /* FIXME: this is not stricly. Summary shall carry max_order, block_switching, bgmc_mode and RLSLMS. */
         if( summary->channels <= 2 && summary->frequency <= 48000 && summary->bit_depth <= 16 && summary->samples_in_frame <= 4096 )
             pli = MP4A_AUDIO_PLI_ALS_Simple_L1;
         else

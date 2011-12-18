@@ -1,9 +1,9 @@
 /*****************************************************************************
- * internal.h:
+ * isom.h:
  *****************************************************************************
- * Copyright (C) 2010-2011 L-SMASH project
+ * Copyright (C) 2011 L-SMASH project
  *
- * Authors:  Takashi Hirata <silverfilain@gmail.com>
+ * Authors: Hiroki Taniura <boiled.sugar@gmail.com>
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -20,18 +20,16 @@
 
 /* This file is available under an ISC license. */
 
-#ifndef INTERNAL_H
-#define INTERNAL_H
+#ifndef LSMASH_ISOM_H
+#define LSMASH_ISOM_H
 
-#include "common/osdep.h" /* must be placed before stdio.h */
-#include <stdio.h>
-#include <assert.h>
-
-#ifndef lsmash_fseek
-#define lsmash_fseek fseek
-#define lsmash_ftell ftell
-#endif
-
-#include "lsmash.h"
+isom_tref_type_t *isom_add_track_reference_type( isom_tref_t *tref, isom_track_reference_type type, uint32_t ref_count, uint32_t *track_ID );
+int isom_add_chpl_entry( isom_chpl_t *chpl, isom_chapter_entry_t *chap_data );
+int isom_add_tref( isom_trak_entry_t *trak );
+int isom_add_chpl( isom_moov_t *moov );
+int isom_add_udta( lsmash_root_t *root, uint32_t track_ID );
+void isom_remove_track_reference_type( isom_tref_type_t *ref );
+void isom_remove_tref( isom_tref_t *tref );
+void isom_remove_trak( isom_trak_entry_t *trak );
 
 #endif

@@ -1,7 +1,7 @@
 /*****************************************************************************
  * utils.h:
  *****************************************************************************
- * Copyright (C) 2010 L-SMASH project
+ * Copyright (C) 2010-2011 L-SMASH project
  *
  * Authors: Yusuke Nakamura <muken.the.vfrmaniac@gmail.com>
  *
@@ -86,6 +86,7 @@ typedef struct {
 
 void lsmash_bits_init( lsmash_bits_t* bits, lsmash_bs_t *bs );
 lsmash_bits_t* lsmash_bits_create( lsmash_bs_t *bs );
+void lsmash_bits_empty( lsmash_bits_t *bits );
 void lsmash_bits_put_align( lsmash_bits_t *bits );
 void lsmash_bits_get_align( lsmash_bits_t *bits );
 void lsmash_bits_cleanup( lsmash_bits_t *bits );
@@ -111,13 +112,16 @@ struct lsmash_entry_tag
 
 typedef struct
 {
-    uint32_t entry_count;
     lsmash_entry_t *head;
     lsmash_entry_t *tail;
+    lsmash_entry_t *last_accessed_entry;
+    uint32_t last_accessed_number;
+    uint32_t entry_count;
 } lsmash_entry_list_t;
 
 typedef void (*lsmash_entry_data_eliminator)(void* data); /* very same as free() of standard c lib; void free(void *); */
 
+void lsmash_init_entry_list( lsmash_entry_list_t *list );
 lsmash_entry_list_t *lsmash_create_entry_list( void );
 int lsmash_add_entry( lsmash_entry_list_t *list, void *data );
 int lsmash_remove_entry_direct( lsmash_entry_list_t *list, lsmash_entry_t *entry, void* eliminator );
@@ -134,6 +138,52 @@ float lsmash_int2float32( uint32_t value );
 double lsmash_int2float64( uint64_t value );
 
 /*---- allocator ----*/
+void *lsmash_malloc_zero( size_t size );
 void *lsmash_memdup( void *src, size_t size );
+
+typedef struct
+{
+    uint32_t number_of_buffers;
+    uint32_t buffer_size;
+    void    *buffers;
+} lsmash_multiple_buffers_t;
+
+lsmash_multiple_buffers_t *lsmash_create_multiple_buffers( uint32_t number_of_buffers, uint32_t buffer_size );
+void *lsmash_withdraw_buffer( lsmash_multiple_buffers_t *multiple_buffer, uint32_t buffer_number );
+lsmash_multiple_buffers_t *lsmash_resize_multiple_buffers( lsmash_multiple_buffers_t *multiple_buffer, uint32_t buffer_size );
+void lsmash_destroy_multiple_buffers( lsmash_multiple_buffers_t *multiple_buffer );
+
+/*---- others ----*/
+typedef enum
+{
+    LSMASH_LOG_ERROR,
+    LSMASH_LOG_WARNING,
+    LSMASH_LOG_INFO,
+} lsmash_log_level;
+
+void lsmash_log( lsmash_log_level level, const char* message, ... );
+int lsmash_compare_dts( const lsmash_media_ts_t *a, const lsmash_media_ts_t *b );
+int lsmash_compare_cts( const lsmash_media_ts_t *a, const lsmash_media_ts_t *b );
+
+static inline uint64_t lsmash_get_gcd( uint64_t a, uint64_t b )
+{
+    if( !b )
+        return a;
+    while( 1 )
+    {
+        uint64_t c = a % b;
+        if( !c )
+            return b;
+        a = b;
+        b = c;
+    }
+}
+
+static inline uint64_t lsmash_get_lcm( uint64_t a, uint64_t b )
+{
+    if( !a )
+        return 0;
+    return (a / lsmash_get_gcd( a, b )) * b;
+}
 
 #endif

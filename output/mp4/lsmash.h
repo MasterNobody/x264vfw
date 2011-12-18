@@ -1,7 +1,7 @@
 /*****************************************************************************
  * lsmash.h:
  *****************************************************************************
- * Copyright (C) 2010 L-SMASH project
+ * Copyright (C) 2010-2011 L-SMASH project
  *
  * Authors: Yusuke Nakamura <muken.the.vfrmaniac@gmail.com>
  *
@@ -28,7 +28,7 @@
 #define PRIVATE     /* If this declaration is placed at a variable, any user shouldn't use it. */
 
 #define LSMASH_4CC( a, b, c, d ) (((a)<<24) | ((b)<<16) | ((c)<<8) | (d))
-
+#define LSMASH_PACK_ISO_LANGUAGE( a, b, c ) ((((a-0x60)&0x1f)<<10) | (((b-0x60)&0x1f)<<5) | ((c-0x60)&0x1f))
 
 /* public constants */
 typedef enum
@@ -39,203 +39,7 @@ typedef enum
     LSMASH_FILE_MODE_FRAGMENTED        = 1<<16,
     LSMASH_FILE_MODE_WRITE_FRAGMENTED  = LSMASH_FILE_MODE_WRITE | LSMASH_FILE_MODE_FRAGMENTED,
     LSMASH_FILE_MODE_READ_FRAGMENTED   = LSMASH_FILE_MODE_READ  | LSMASH_FILE_MODE_FRAGMENTED,
-} lsmash_file_mode_code;
-
-typedef enum
-{
-    ISOM_BOX_TYPE_ID32  = LSMASH_4CC( 'I', 'D', '3', '2' ),
-    ISOM_BOX_TYPE_ALBM  = LSMASH_4CC( 'a', 'l', 'b', 'm' ),
-    ISOM_BOX_TYPE_AUTH  = LSMASH_4CC( 'a', 'u', 't', 'h' ),
-    ISOM_BOX_TYPE_BPCC  = LSMASH_4CC( 'b', 'p', 'c', 'c' ),
-    ISOM_BOX_TYPE_BUFF  = LSMASH_4CC( 'b', 'u', 'f', 'f' ),
-    ISOM_BOX_TYPE_BXML  = LSMASH_4CC( 'b', 'x', 'm', 'l' ),
-    ISOM_BOX_TYPE_CCID  = LSMASH_4CC( 'c', 'c', 'i', 'd' ),
-    ISOM_BOX_TYPE_CDEF  = LSMASH_4CC( 'c', 'd', 'e', 'f' ),
-    ISOM_BOX_TYPE_CLSF  = LSMASH_4CC( 'c', 'l', 's', 'f' ),
-    ISOM_BOX_TYPE_CMAP  = LSMASH_4CC( 'c', 'm', 'a', 'p' ),
-    ISOM_BOX_TYPE_CO64  = LSMASH_4CC( 'c', 'o', '6', '4' ),
-    ISOM_BOX_TYPE_COLR  = LSMASH_4CC( 'c', 'o', 'l', 'r' ),
-    ISOM_BOX_TYPE_CPRT  = LSMASH_4CC( 'c', 'p', 'r', 't' ),
-    ISOM_BOX_TYPE_CSLG  = LSMASH_4CC( 'c', 's', 'l', 'g' ),
-    ISOM_BOX_TYPE_CTTS  = LSMASH_4CC( 'c', 't', 't', 's' ),
-    ISOM_BOX_TYPE_CVRU  = LSMASH_4CC( 'c', 'v', 'r', 'u' ),
-    ISOM_BOX_TYPE_DCFD  = LSMASH_4CC( 'd', 'c', 'f', 'D' ),
-    ISOM_BOX_TYPE_DINF  = LSMASH_4CC( 'd', 'i', 'n', 'f' ),
-    ISOM_BOX_TYPE_DREF  = LSMASH_4CC( 'd', 'r', 'e', 'f' ),
-    ISOM_BOX_TYPE_DSCP  = LSMASH_4CC( 'd', 's', 'c', 'p' ),
-    ISOM_BOX_TYPE_DSGD  = LSMASH_4CC( 'd', 's', 'g', 'd' ),
-    ISOM_BOX_TYPE_DSTG  = LSMASH_4CC( 'd', 's', 't', 'g' ),
-    ISOM_BOX_TYPE_EDTS  = LSMASH_4CC( 'e', 'd', 't', 's' ),
-    ISOM_BOX_TYPE_ELST  = LSMASH_4CC( 'e', 'l', 's', 't' ),
-    ISOM_BOX_TYPE_FECI  = LSMASH_4CC( 'f', 'e', 'c', 'i' ),
-    ISOM_BOX_TYPE_FECR  = LSMASH_4CC( 'f', 'e', 'c', 'r' ),
-    ISOM_BOX_TYPE_FIIN  = LSMASH_4CC( 'f', 'i', 'i', 'n' ),
-    ISOM_BOX_TYPE_FIRE  = LSMASH_4CC( 'f', 'i', 'r', 'e' ),
-    ISOM_BOX_TYPE_FPAR  = LSMASH_4CC( 'f', 'p', 'a', 'r' ),
-    ISOM_BOX_TYPE_FREE  = LSMASH_4CC( 'f', 'r', 'e', 'e' ),
-    ISOM_BOX_TYPE_FRMA  = LSMASH_4CC( 'f', 'r', 'm', 'a' ),
-    ISOM_BOX_TYPE_FTYP  = LSMASH_4CC( 'f', 't', 'y', 'p' ),
-    ISOM_BOX_TYPE_GITN  = LSMASH_4CC( 'g', 'i', 't', 'n' ),
-    ISOM_BOX_TYPE_GNRE  = LSMASH_4CC( 'g', 'n', 'r', 'e' ),
-    ISOM_BOX_TYPE_GRPI  = LSMASH_4CC( 'g', 'r', 'p', 'i' ),
-    ISOM_BOX_TYPE_HDLR  = LSMASH_4CC( 'h', 'd', 'l', 'r' ),
-    ISOM_BOX_TYPE_HMHD  = LSMASH_4CC( 'h', 'm', 'h', 'd' ),
-    ISOM_BOX_TYPE_ICNU  = LSMASH_4CC( 'i', 'c', 'n', 'u' ),
-    ISOM_BOX_TYPE_IDAT  = LSMASH_4CC( 'i', 'd', 'a', 't' ),
-    ISOM_BOX_TYPE_IHDR  = LSMASH_4CC( 'i', 'h', 'd', 'r' ),
-    ISOM_BOX_TYPE_IINF  = LSMASH_4CC( 'i', 'i', 'n', 'f' ),
-    ISOM_BOX_TYPE_ILOC  = LSMASH_4CC( 'i', 'l', 'o', 'c' ),
-    ISOM_BOX_TYPE_IMIF  = LSMASH_4CC( 'i', 'm', 'i', 'f' ),
-    ISOM_BOX_TYPE_INFU  = LSMASH_4CC( 'i', 'n', 'f', 'u' ),
-    ISOM_BOX_TYPE_IODS  = LSMASH_4CC( 'i', 'o', 'd', 's' ),
-    ISOM_BOX_TYPE_IPHD  = LSMASH_4CC( 'i', 'p', 'h', 'd' ),
-    ISOM_BOX_TYPE_IPMC  = LSMASH_4CC( 'i', 'p', 'm', 'c' ),
-    ISOM_BOX_TYPE_IPRO  = LSMASH_4CC( 'i', 'p', 'r', 'o' ),
-    ISOM_BOX_TYPE_IREF  = LSMASH_4CC( 'i', 'r', 'e', 'f' ),
-    ISOM_BOX_TYPE_JP    = LSMASH_4CC( 'j', 'p', ' ', ' ' ),
-    ISOM_BOX_TYPE_JP2C  = LSMASH_4CC( 'j', 'p', '2', 'c' ),
-    ISOM_BOX_TYPE_JP2H  = LSMASH_4CC( 'j', 'p', '2', 'h' ),
-    ISOM_BOX_TYPE_JP2I  = LSMASH_4CC( 'j', 'p', '2', 'i' ),
-    ISOM_BOX_TYPE_KYWD  = LSMASH_4CC( 'k', 'y', 'w', 'd' ),
-    ISOM_BOX_TYPE_LOCI  = LSMASH_4CC( 'l', 'o', 'c', 'i' ),
-    ISOM_BOX_TYPE_LRCU  = LSMASH_4CC( 'l', 'r', 'c', 'u' ),
-    ISOM_BOX_TYPE_MDAT  = LSMASH_4CC( 'm', 'd', 'a', 't' ),
-    ISOM_BOX_TYPE_MDHD  = LSMASH_4CC( 'm', 'd', 'h', 'd' ),
-    ISOM_BOX_TYPE_MDIA  = LSMASH_4CC( 'm', 'd', 'i', 'a' ),
-    ISOM_BOX_TYPE_MDRI  = LSMASH_4CC( 'm', 'd', 'r', 'i' ),
-    ISOM_BOX_TYPE_MECO  = LSMASH_4CC( 'm', 'e', 'c', 'o' ),
-    ISOM_BOX_TYPE_MEHD  = LSMASH_4CC( 'm', 'e', 'h', 'd' ),
-    ISOM_BOX_TYPE_M7HD  = LSMASH_4CC( 'm', '7', 'h', 'd' ),
-    ISOM_BOX_TYPE_MERE  = LSMASH_4CC( 'm', 'e', 'r', 'e' ),
-    ISOM_BOX_TYPE_META  = LSMASH_4CC( 'm', 'e', 't', 'a' ),
-    ISOM_BOX_TYPE_MFHD  = LSMASH_4CC( 'm', 'f', 'h', 'd' ),
-    ISOM_BOX_TYPE_MFRA  = LSMASH_4CC( 'm', 'f', 'r', 'a' ),
-    ISOM_BOX_TYPE_MFRO  = LSMASH_4CC( 'm', 'f', 'r', 'o' ),
-    ISOM_BOX_TYPE_MINF  = LSMASH_4CC( 'm', 'i', 'n', 'f' ),
-    ISOM_BOX_TYPE_MJHD  = LSMASH_4CC( 'm', 'j', 'h', 'd' ),
-    ISOM_BOX_TYPE_MOOF  = LSMASH_4CC( 'm', 'o', 'o', 'f' ),
-    ISOM_BOX_TYPE_MOOV  = LSMASH_4CC( 'm', 'o', 'o', 'v' ),
-    ISOM_BOX_TYPE_MVCG  = LSMASH_4CC( 'm', 'v', 'c', 'g' ),
-    ISOM_BOX_TYPE_MVCI  = LSMASH_4CC( 'm', 'v', 'c', 'i' ),
-    ISOM_BOX_TYPE_MVEX  = LSMASH_4CC( 'm', 'v', 'e', 'x' ),
-    ISOM_BOX_TYPE_MVHD  = LSMASH_4CC( 'm', 'v', 'h', 'd' ),
-    ISOM_BOX_TYPE_MVRA  = LSMASH_4CC( 'm', 'v', 'r', 'a' ),
-    ISOM_BOX_TYPE_NMHD  = LSMASH_4CC( 'n', 'm', 'h', 'd' ),
-    ISOM_BOX_TYPE_OCHD  = LSMASH_4CC( 'o', 'c', 'h', 'd' ),
-    ISOM_BOX_TYPE_ODAF  = LSMASH_4CC( 'o', 'd', 'a', 'f' ),
-    ISOM_BOX_TYPE_ODDA  = LSMASH_4CC( 'o', 'd', 'd', 'a' ),
-    ISOM_BOX_TYPE_ODHD  = LSMASH_4CC( 'o', 'd', 'h', 'd' ),
-    ISOM_BOX_TYPE_ODHE  = LSMASH_4CC( 'o', 'd', 'h', 'e' ),
-    ISOM_BOX_TYPE_ODRB  = LSMASH_4CC( 'o', 'd', 'r', 'b' ),
-    ISOM_BOX_TYPE_ODRM  = LSMASH_4CC( 'o', 'd', 'r', 'm' ),
-    ISOM_BOX_TYPE_ODTT  = LSMASH_4CC( 'o', 'd', 't', 't' ),
-    ISOM_BOX_TYPE_OHDR  = LSMASH_4CC( 'o', 'h', 'd', 'r' ),
-    ISOM_BOX_TYPE_PADB  = LSMASH_4CC( 'p', 'a', 'd', 'b' ),
-    ISOM_BOX_TYPE_PAEN  = LSMASH_4CC( 'p', 'a', 'e', 'n' ),
-    ISOM_BOX_TYPE_PCLR  = LSMASH_4CC( 'p', 'c', 'l', 'r' ),
-    ISOM_BOX_TYPE_PDIN  = LSMASH_4CC( 'p', 'd', 'i', 'n' ),
-    ISOM_BOX_TYPE_PERF  = LSMASH_4CC( 'p', 'e', 'r', 'f' ),
-    ISOM_BOX_TYPE_PITM  = LSMASH_4CC( 'p', 'i', 't', 'm' ),
-    ISOM_BOX_TYPE_RES   = LSMASH_4CC( 'r', 'e', 's', ' ' ),
-    ISOM_BOX_TYPE_RESC  = LSMASH_4CC( 'r', 'e', 's', 'c' ),
-    ISOM_BOX_TYPE_RESD  = LSMASH_4CC( 'r', 'e', 's', 'd' ),
-    ISOM_BOX_TYPE_RTNG  = LSMASH_4CC( 'r', 't', 'n', 'g' ),
-    ISOM_BOX_TYPE_SBGP  = LSMASH_4CC( 's', 'b', 'g', 'p' ),
-    ISOM_BOX_TYPE_SCHI  = LSMASH_4CC( 's', 'c', 'h', 'i' ),
-    ISOM_BOX_TYPE_SCHM  = LSMASH_4CC( 's', 'c', 'h', 'm' ),
-    ISOM_BOX_TYPE_SDEP  = LSMASH_4CC( 's', 'd', 'e', 'p' ),
-    ISOM_BOX_TYPE_SDHD  = LSMASH_4CC( 's', 'd', 'h', 'd' ),
-    ISOM_BOX_TYPE_SDTP  = LSMASH_4CC( 's', 'd', 't', 'p' ),
-    ISOM_BOX_TYPE_SDVP  = LSMASH_4CC( 's', 'd', 'v', 'p' ),
-    ISOM_BOX_TYPE_SEGR  = LSMASH_4CC( 's', 'e', 'g', 'r' ),
-    ISOM_BOX_TYPE_SGPD  = LSMASH_4CC( 's', 'g', 'p', 'd' ),
-    ISOM_BOX_TYPE_SINF  = LSMASH_4CC( 's', 'i', 'n', 'f' ),
-    ISOM_BOX_TYPE_SKIP  = LSMASH_4CC( 's', 'k', 'i', 'p' ),
-    ISOM_BOX_TYPE_SMHD  = LSMASH_4CC( 's', 'm', 'h', 'd' ),
-    ISOM_BOX_TYPE_SRMB  = LSMASH_4CC( 's', 'r', 'm', 'b' ),
-    ISOM_BOX_TYPE_SRMC  = LSMASH_4CC( 's', 'r', 'm', 'c' ),
-    ISOM_BOX_TYPE_SRPP  = LSMASH_4CC( 's', 'r', 'p', 'p' ),
-    ISOM_BOX_TYPE_STBL  = LSMASH_4CC( 's', 't', 'b', 'l' ),
-    ISOM_BOX_TYPE_STCO  = LSMASH_4CC( 's', 't', 'c', 'o' ),
-    ISOM_BOX_TYPE_STDP  = LSMASH_4CC( 's', 't', 'd', 'p' ),
-    ISOM_BOX_TYPE_STSC  = LSMASH_4CC( 's', 't', 's', 'c' ),
-    ISOM_BOX_TYPE_STSD  = LSMASH_4CC( 's', 't', 's', 'd' ),
-    ISOM_BOX_TYPE_STSH  = LSMASH_4CC( 's', 't', 's', 'h' ),
-    ISOM_BOX_TYPE_STSS  = LSMASH_4CC( 's', 't', 's', 's' ),
-    ISOM_BOX_TYPE_STSZ  = LSMASH_4CC( 's', 't', 's', 'z' ),
-    ISOM_BOX_TYPE_STTS  = LSMASH_4CC( 's', 't', 't', 's' ),
-    ISOM_BOX_TYPE_STZ2  = LSMASH_4CC( 's', 't', 'z', '2' ),
-    ISOM_BOX_TYPE_SUBS  = LSMASH_4CC( 's', 'u', 'b', 's' ),
-    ISOM_BOX_TYPE_SWTC  = LSMASH_4CC( 's', 'w', 't', 'c' ),
-    ISOM_BOX_TYPE_TFHD  = LSMASH_4CC( 't', 'f', 'h', 'd' ),
-    ISOM_BOX_TYPE_TFRA  = LSMASH_4CC( 't', 'f', 'r', 'a' ),
-    ISOM_BOX_TYPE_TIBR  = LSMASH_4CC( 't', 'i', 'b', 'r' ),
-    ISOM_BOX_TYPE_TIRI  = LSMASH_4CC( 't', 'i', 'r', 'i' ),
-    ISOM_BOX_TYPE_TITL  = LSMASH_4CC( 't', 'i', 't', 'l' ),
-    ISOM_BOX_TYPE_TKHD  = LSMASH_4CC( 't', 'k', 'h', 'd' ),
-    ISOM_BOX_TYPE_TRAF  = LSMASH_4CC( 't', 'r', 'a', 'f' ),
-    ISOM_BOX_TYPE_TRAK  = LSMASH_4CC( 't', 'r', 'a', 'k' ),
-    ISOM_BOX_TYPE_TREF  = LSMASH_4CC( 't', 'r', 'e', 'f' ),
-    ISOM_BOX_TYPE_TREX  = LSMASH_4CC( 't', 'r', 'e', 'x' ),
-    ISOM_BOX_TYPE_TRGR  = LSMASH_4CC( 't', 'r', 'g', 'r' ),
-    ISOM_BOX_TYPE_TRUN  = LSMASH_4CC( 't', 'r', 'u', 'n' ),
-    ISOM_BOX_TYPE_TSEL  = LSMASH_4CC( 't', 's', 'e', 'l' ),
-    ISOM_BOX_TYPE_UDTA  = LSMASH_4CC( 'u', 'd', 't', 'a' ),
-    ISOM_BOX_TYPE_UINF  = LSMASH_4CC( 'u', 'i', 'n', 'f' ),
-    ISOM_BOX_TYPE_ULST  = LSMASH_4CC( 'u', 'l', 's', 't' ),
-    ISOM_BOX_TYPE_URL   = LSMASH_4CC( 'u', 'r', 'l', ' ' ),
-    ISOM_BOX_TYPE_URN   = LSMASH_4CC( 'u', 'r', 'n', ' ' ),
-    ISOM_BOX_TYPE_UUID  = LSMASH_4CC( 'u', 'u', 'i', 'd' ),
-    ISOM_BOX_TYPE_VMHD  = LSMASH_4CC( 'v', 'm', 'h', 'd' ),
-    ISOM_BOX_TYPE_VWDI  = LSMASH_4CC( 'v', 'w', 'd', 'i' ),
-    ISOM_BOX_TYPE_XML   = LSMASH_4CC( 'x', 'm', 'l', ' ' ),
-    ISOM_BOX_TYPE_YRRC  = LSMASH_4CC( 'y', 'r', 'r', 'c' ),
-
-    ISOM_BOX_TYPE_AVCC  = LSMASH_4CC( 'a', 'v', 'c', 'C' ),
-    ISOM_BOX_TYPE_BTRT  = LSMASH_4CC( 'b', 't', 'r', 't' ),
-    ISOM_BOX_TYPE_CLAP  = LSMASH_4CC( 'c', 'l', 'a', 'p' ),
-    ISOM_BOX_TYPE_ESDS  = LSMASH_4CC( 'e', 's', 'd', 's' ),
-    ISOM_BOX_TYPE_PASP  = LSMASH_4CC( 'p', 'a', 's', 'p' ),
-    ISOM_BOX_TYPE_STSL  = LSMASH_4CC( 's', 't', 's', 'l' ),
-
-    ISOM_BOX_TYPE_CHPL  = LSMASH_4CC( 'c', 'h', 'p', 'l' ),
-
-    ISOM_BOX_TYPE_DAC3  = LSMASH_4CC( 'd', 'a', 'c', '3' ),
-    ISOM_BOX_TYPE_DAMR  = LSMASH_4CC( 'd', 'a', 'm', 'r' ),
-
-    ISOM_BOX_TYPE_FTAB  = LSMASH_4CC( 'f', 't', 'a', 'b' ),
-
-    QT_BOX_TYPE_CHAN    = LSMASH_4CC( 'c', 'h', 'a', 'n' ),
-    QT_BOX_TYPE_CLEF    = LSMASH_4CC( 'c', 'l', 'e', 'f' ),
-    QT_BOX_TYPE_CLIP    = LSMASH_4CC( 'c', 'l', 'i', 'p' ),
-    QT_BOX_TYPE_COLR    = LSMASH_4CC( 'c', 'o', 'l', 'r' ),
-    QT_BOX_TYPE_CRGN    = LSMASH_4CC( 'c', 'r', 'g', 'n' ),
-    QT_BOX_TYPE_CTAB    = LSMASH_4CC( 'c', 't', 'a', 'b' ),
-    QT_BOX_TYPE_ENDA    = LSMASH_4CC( 'e', 'n', 'd', 'a' ),
-    QT_BOX_TYPE_ENOF    = LSMASH_4CC( 'e', 'n', 'o', 'f' ),
-    QT_BOX_TYPE_FRMA    = LSMASH_4CC( 'f', 'r', 'm', 'a' ),
-    QT_BOX_TYPE_GMHD    = LSMASH_4CC( 'g', 'm', 'h', 'd' ),
-    QT_BOX_TYPE_GMIN    = LSMASH_4CC( 'g', 'm', 'i', 'n' ),
-    QT_BOX_TYPE_IMAP    = LSMASH_4CC( 'i', 'm', 'a', 'p' ),
-    QT_BOX_TYPE_KMAT    = LSMASH_4CC( 'k', 'm', 'a', 't' ),
-    QT_BOX_TYPE_LOAD    = LSMASH_4CC( 'l', 'o', 'a', 'd' ),
-    QT_BOX_TYPE_MATT    = LSMASH_4CC( 'm', 'a', 't', 't' ),
-    QT_BOX_TYPE_MP4A    = LSMASH_4CC( 'm', 'p', '4', 'a' ),
-    QT_BOX_TYPE_PNOT    = LSMASH_4CC( 'p', 'n', 'o', 't' ),
-    QT_BOX_TYPE_PROF    = LSMASH_4CC( 'p', 'r', 'o', 'f' ),
-    QT_BOX_TYPE_STPS    = LSMASH_4CC( 's', 't', 'p', 's' ),
-    QT_BOX_TYPE_TAPT    = LSMASH_4CC( 't', 'a', 'p', 't' ),
-    QT_BOX_TYPE_TEXT    = LSMASH_4CC( 't', 'e', 'x', 't' ),
-    QT_BOX_TYPE_WAVE    = LSMASH_4CC( 'w', 'a', 'v', 'e' ),
-
-    QT_BOX_TYPE_TERMINATOR  = 0x00000000,
-} lsmash_box_type_code;
-
-typedef enum
-{
-    QT_HANDLER_TYPE_DATA    = LSMASH_4CC( 'd', 'h', 'l', 'r' ),
-    QT_HANDLER_TYPE_MEDIA   = LSMASH_4CC( 'm', 'h', 'l', 'r' ),
-} lsmash_handler_type_code;
+} lsmash_file_mode;
 
 typedef enum
 {
@@ -264,14 +68,7 @@ typedef enum
     ISOM_MEDIA_HANDLER_TYPE_TEXT_TRACK                          = LSMASH_4CC( 't', 'e', 'x', 't' ),
     ISOM_MEDIA_HANDLER_TYPE_PROPRIETARY_DESCRIPTIVE_METADATA    = LSMASH_4CC( 'u', 'r', 'i', ' ' ),
     ISOM_MEDIA_HANDLER_TYPE_VIDEO_TRACK                         = LSMASH_4CC( 'v', 'i', 'd', 'e' ),
-} lsmash_media_type_code;
-
-typedef enum
-{
-    QT_REFERENCE_HANDLER_TYPE_ALIAS     = LSMASH_4CC( 'a', 'l', 'i', 's' ),
-    QT_REFERENCE_HANDLER_TYPE_RESOURCE  = LSMASH_4CC( 'r', 's', 'r', 'c' ),
-    QT_REFERENCE_HANDLER_TYPE_URL       = LSMASH_4CC( 'u', 'r', 'l', ' ' ),
-} lsmash_data_reference_type_code;
+} lsmash_media_type;
 
 typedef enum
 {
@@ -331,7 +128,7 @@ typedef enum
     ISOM_BRAND_TYPE_PANA  = LSMASH_4CC( 'p', 'a', 'n', 'a' ),
     ISOM_BRAND_TYPE_QT    = LSMASH_4CC( 'q', 't', ' ', ' ' ),
     ISOM_BRAND_TYPE_SDV   = LSMASH_4CC( 's', 'd', 'v', ' ' ),
-} lsmash_brand_type_code;
+} lsmash_brand_type;
 
 typedef enum
 {
@@ -366,6 +163,7 @@ typedef enum
     QT_CODEC_TYPE_QDM2_AUDIO    = LSMASH_4CC( 'Q', 'D', 'M', '2' ),   /* Qdesign music 2 */
     QT_CODEC_TYPE_QDMC_AUDIO    = LSMASH_4CC( 'Q', 'D', 'M', 'C' ),   /* Qdesign music 1 */
     QT_CODEC_TYPE_QCLP_AUDIO    = LSMASH_4CC( 'Q', 'c', 'l', 'p' ),   /* Qualcomm PureVoice */
+    QT_CODEC_TYPE_AC_3_AUDIO    = LSMASH_4CC( 'a', 'c', '-', '3' ),   /* Digital Audio Compression Standard (AC-3, Enhanced AC-3) */
     QT_CODEC_TYPE_AGSM_AUDIO    = LSMASH_4CC( 'a', 'g', 's', 'm' ),   /* GSM */
     QT_CODEC_TYPE_ALAC_AUDIO    = LSMASH_4CC( 'a', 'l', 'a', 'c' ),   /* Apple lossless audio codec */
     QT_CODEC_TYPE_ALAW_AUDIO    = LSMASH_4CC( 'a', 'l', 'a', 'w' ),   /* a-Law 2:1 */
@@ -386,11 +184,11 @@ typedef enum
     QT_CODEC_TYPE_ULAW_AUDIO    = LSMASH_4CC( 'u', 'l', 'a', 'w' ),   /* uLaw 2:1 */
     QT_CODEC_TYPE_VDVA_AUDIO    = LSMASH_4CC( 'v', 'd', 'v', 'a' ),   /* DV audio (variable duration per video frame) */
     QT_CODEC_TYPE_FULLMP3_AUDIO = LSMASH_4CC( '.', 'm', 'p', '3' ),   /* MPEG-1 layer 3, CBR & VBR (QT4.1 and later) */
-    QT_CODEC_TYPE_MP3_AUDIO     = 0x6D730055,                       /* MPEG-1 layer 3, CBR only (pre-QT4.1) */
-    QT_CODEC_TYPE_ADPCM2_AUDIO  = 0x6D730002,                       /* Microsoft ADPCM - ACM code 2 */
-    QT_CODEC_TYPE_ADPCM17_AUDIO = 0x6D730011,                       /* DVI/Intel IMA ADPCM - ACM code 17 */
-    QT_CODEC_TYPE_GSM49_AUDIO   = 0x6D730031,                       /* Microsoft GSM 6.10 - ACM code 49 */
-    QT_CODEC_TYPE_NOT_SPECIFIED = 0x00000000,                       /* either 'raw ' or 'twos' */
+    QT_CODEC_TYPE_MP3_AUDIO     = 0x6D730055,                         /* MPEG-1 layer 3, CBR only (pre-QT4.1) */
+    QT_CODEC_TYPE_ADPCM2_AUDIO  = 0x6D730002,                         /* Microsoft ADPCM - ACM code 2 */
+    QT_CODEC_TYPE_ADPCM17_AUDIO = 0x6D730011,                         /* DVI/Intel IMA ADPCM - ACM code 17 */
+    QT_CODEC_TYPE_GSM49_AUDIO   = 0x6D730031,                         /* Microsoft GSM 6.10 - ACM code 49 */
+    QT_CODEC_TYPE_NOT_SPECIFIED = 0x00000000,                         /* either 'raw ' or 'twos' */
 
     /* Video Type */
     ISOM_CODEC_TYPE_AVC1_VIDEO  = LSMASH_4CC( 'a', 'v', 'c', '1' ),   /* Advanced Video Coding */
@@ -423,6 +221,11 @@ typedef enum
     QT_CODEC_TYPE_SHR3_VIDEO    = LSMASH_4CC( 'S', 'h', 'r', '3' ),   /* SheerVideo Y'CbCr 8bv 4:2:2 - 2:1 chroma subsampling, at 8 bits/channel, in ITU-R BT.601-4 video range */
     QT_CODEC_TYPE_SHR4_VIDEO    = LSMASH_4CC( 'S', 'h', 'r', '4' ),   /* SheerVideo Y'CbCr 8bw 4:2:2 - 2:1 chroma subsampling, at 8 bits/channel, with full-range luma and wide-range two's-complement chroma */
     QT_CODEC_TYPE_WRLE_VIDEO    = LSMASH_4CC( 'W', 'R', 'L', 'E' ),   /* Windows BMP image format */
+    QT_CODEC_TYPE_APCH_VIDEO    = LSMASH_4CC( 'a', 'p', 'c', 'h' ),   /* Apple ProRes 422 High Quality */
+    QT_CODEC_TYPE_APCN_VIDEO    = LSMASH_4CC( 'a', 'p', 'c', 'n' ),   /* Apple ProRes 422 Standard Definition */
+    QT_CODEC_TYPE_APCS_VIDEO    = LSMASH_4CC( 'a', 'p', 'c', 's' ),   /* Apple ProRes 422 LT */
+    QT_CODEC_TYPE_APCO_VIDEO    = LSMASH_4CC( 'a', 'p', 'c', 'o' ),   /* Apple ProRes 422 Proxy */
+    QT_CODEC_TYPE_AP4H_VIDEO    = LSMASH_4CC( 'a', 'p', '4', 'h' ),   /* Apple ProRes 4444 */
     QT_CODEC_TYPE_CIVD_VIDEO    = LSMASH_4CC( 'c', 'i', 'v', 'd' ),   /* Cinepak Video */
     QT_CODEC_TYPE_DRAC_VIDEO    = LSMASH_4CC( 'd', 'r', 'a', 'c' ),   /* Dirac Video Coder */
     QT_CODEC_TYPE_DVH5_VIDEO    = LSMASH_4CC( 'd', 'v', 'h', '5' ),   /* DVCPRO-HD 1080/50i */
@@ -440,6 +243,12 @@ typedef enum
     QT_CODEC_TYPE_RPZA_VIDEO    = LSMASH_4CC( 'r', 'p', 'z', 'a' ),   /* Apple simple video 'road pizza' compression */
     QT_CODEC_TYPE_TGA_VIDEO     = LSMASH_4CC( 't', 'g', 'a', ' ' ),   /* Truvision Targa video format */
     QT_CODEC_TYPE_TIFF_VIDEO    = LSMASH_4CC( 't', 'i', 'f', 'f' ),   /* Tagged Image File Format (Adobe) */
+    QT_CODEC_TYPE_V210_VIDEO    = LSMASH_4CC( 'v', '2', '1', '0' ),   /* Uncompressed Y'CbCr, 10-bit-per-component 4:2:2 */
+    QT_CODEC_TYPE_V216_VIDEO    = LSMASH_4CC( 'v', '2', '1', '6' ),   /* Uncompressed Y'CbCr, 10, 12, 14, or 16-bit-per-component 4:2:2 */
+    QT_CODEC_TYPE_V308_VIDEO    = LSMASH_4CC( 'v', '3', '0', '8' ),   /* Uncompressed Y'CbCr, 8-bit-per-component 4:4:4 */
+    QT_CODEC_TYPE_V408_VIDEO    = LSMASH_4CC( 'v', '4', '0', '8' ),   /* Uncompressed Y'CbCr, 8-bit-per-component 4:4:4:4 */
+    QT_CODEC_TYPE_V410_VIDEO    = LSMASH_4CC( 'v', '4', '1', '0' ),   /* Uncompressed Y'CbCr, 10-bit-per-component 4:4:4 */
+    QT_CODEC_TYPE_YUV2_VIDEO    = LSMASH_4CC( 'y', 'u', 'v', '2' ),   /* Uncompressed Y'CbCr, 8-bit-per-component 4:2:2 */
 
     /* Text Type */
     ISOM_CODEC_TYPE_ENCT_TEXT   = LSMASH_4CC( 'e', 'n', 'c', 't' ),   /* Encrypted Text */
@@ -473,163 +282,113 @@ typedef enum
     /* Other Type */
     ISOM_CODEC_TYPE_ENCS_SYSTEM = LSMASH_4CC( 'e', 'n', 'c', 's' ),   /* Encrypted Systems stream */
     ISOM_CODEC_TYPE_MP4S_SYSTEM = LSMASH_4CC( 'm', 'p', '4', 's' ),   /* MPEG-4 Systems */
-} lsmash_codec_type_code;
+} lsmash_codec_type;
 
 typedef enum
 {
-    ISOM_TREF_TYPE_AVCP = LSMASH_4CC( 'a', 'v', 'c', 'p' ),   /* AVC parameter set stream link */
-    ISOM_TREF_TYPE_CDSC = LSMASH_4CC( 'c', 'd', 's', 'c' ),   /* This track describes the referenced track. */
-    ISOM_TREF_TYPE_DPND = LSMASH_4CC( 'd', 'p', 'n', 'd' ),   /* This track has an MPEG-4 dependency on the referenced track. */
-    ISOM_TREF_TYPE_HIND = LSMASH_4CC( 'h', 'i', 'n', 'd' ),   /* Hint dependency */
-    ISOM_TREF_TYPE_HINT = LSMASH_4CC( 'h', 'i', 'n', 't' ),   /* Links hint track to original media track */
-    ISOM_TREF_TYPE_IPIR = LSMASH_4CC( 'i', 'p', 'i', 'r' ),   /* This track contains IPI declarations for the referenced track. */
-    ISOM_TREF_TYPE_MPOD = LSMASH_4CC( 'm', 'p', 'o', 'd' ),   /* This track is an OD track which uses the referenced track as an included elementary stream track. */
-    ISOM_TREF_TYPE_SBAS = LSMASH_4CC( 's', 'b', 'a', 's' ),   /* Scalable base */
-    ISOM_TREF_TYPE_SCAL = LSMASH_4CC( 's', 'c', 'a', 'l' ),   /* Scalable extraction */
-    ISOM_TREF_TYPE_SWFR = LSMASH_4CC( 's', 'w', 'f', 'r' ),   /* AVC Switch from */
-    ISOM_TREF_TYPE_SWTO = LSMASH_4CC( 's', 'w', 't', 'o' ),   /* AVC Switch to */
-    ISOM_TREF_TYPE_SYNC = LSMASH_4CC( 's', 'y', 'n', 'c' ),   /* This track uses the referenced track as its synchronization source. */
-    ISOM_TREF_TYPE_VDEP = LSMASH_4CC( 'v', 'd', 'e', 'p' ),   /* Auxiliary video depth */
-    ISOM_TREF_TYPE_VPLX = LSMASH_4CC( 'v', 'p', 'l', 'x' ),   /* Auxiliary video parallax */
-
-    QT_TREF_TYPE_CHAP   = LSMASH_4CC( 'c', 'h', 'a', 'p' ),   /* Chapter or scene list. Usually references a text track. */
-    QT_TREF_TYPE_SCPT   = LSMASH_4CC( 's', 'c', 'p', 't' ),   /* Transcript. Usually references a text track. */
-    QT_TREF_TYPE_SSRC   = LSMASH_4CC( 's', 's', 'r', 'c' ),   /* Nonprimary source. Indicates that the referenced track should send its data to this track, rather than presenting it. */
-    QT_TREF_TYPE_TMCD   = LSMASH_4CC( 't', 'm', 'c', 'd' ),   /* Time code. Usually references a time code track. */
-} lsmash_track_reference_type_code;
-
-typedef enum
-{
-    ISOM_GROUP_TYPE_3GAG = LSMASH_4CC( '3', 'g', 'a', 'g' ),      /* Text track3GPP PSS Annex G video buffer parameters */
-    ISOM_GROUP_TYPE_ALST = LSMASH_4CC( 'a', 'l', 's', 't' ),      /* Alternative startup sequence */
-    ISOM_GROUP_TYPE_AVCB = LSMASH_4CC( 'a', 'v', 'c', 'b' ),      /* AVC HRD parameters */
-    ISOM_GROUP_TYPE_AVLL = LSMASH_4CC( 'a', 'v', 'l', 'l' ),      /* AVC Layer */
-    ISOM_GROUP_TYPE_AVSS = LSMASH_4CC( 'a', 'v', 's', 's' ),      /* AVC Sub Sequence */
-    ISOM_GROUP_TYPE_DTRT = LSMASH_4CC( 'd', 't', 'r', 't' ),      /* Decode re-timing */
-    ISOM_GROUP_TYPE_MVIF = LSMASH_4CC( 'm', 'v', 'i', 'f' ),      /* MVC Scalability Information */
-    ISOM_GROUP_TYPE_RAP  = LSMASH_4CC( 'r', 'a', 'p', ' ' ),      /* Random Access Point / This grouping type hasn't been published yet. */
-    ISOM_GROUP_TYPE_RASH = LSMASH_4CC( 'r', 'a', 's', 'h' ),      /* Rate Share */
-    ISOM_GROUP_TYPE_ROLL = LSMASH_4CC( 'r', 'o', 'l', 'l' ),      /* Random Access Recovery Point */
-    ISOM_GROUP_TYPE_SCIF = LSMASH_4CC( 's', 'c', 'i', 'f' ),      /* SVC Scalability Information */
-    ISOM_GROUP_TYPE_SCNM = LSMASH_4CC( 's', 'c', 'n', 'm' ),      /* AVC/SVC/MVC map groups */
-    ISOM_GROUP_TYPE_VIPR = LSMASH_4CC( 'v', 'i', 'p', 'r' ),      /* View priority */
-} lsmash_grouping_type_code;
-
-#define ISOM_LANG_T( a, b, c ) ((((a-0x60)&0x1f)<<10) | (((b-0x60)&0x1f)<<5) | ((c-0x60)&0x1f))
-
-typedef enum
-{
-    ISOM_LANGUAGE_CODE_ENGLISH          = ISOM_LANG_T( 'e', 'n', 'g' ),
-    ISOM_LANGUAGE_CODE_FRENCH           = ISOM_LANG_T( 'f', 'r', 'a' ),
-    ISOM_LANGUAGE_CODE_GERMAN           = ISOM_LANG_T( 'd', 'e', 'u' ),
-    ISOM_LANGUAGE_CODE_ITALIAN          = ISOM_LANG_T( 'i', 't', 'a' ),
-    ISOM_LANGUAGE_CODE_DUTCH_M          = ISOM_LANG_T( 'd', 'u', 'm' ),
-    ISOM_LANGUAGE_CODE_SWEDISH          = ISOM_LANG_T( 's', 'w', 'e' ),
-    ISOM_LANGUAGE_CODE_SPANISH          = ISOM_LANG_T( 's', 'p', 'a' ),
-    ISOM_LANGUAGE_CODE_DANISH           = ISOM_LANG_T( 'd', 'a', 'n' ),
-    ISOM_LANGUAGE_CODE_PORTUGUESE       = ISOM_LANG_T( 'p', 'o', 'r' ),
-    ISOM_LANGUAGE_CODE_NORWEGIAN        = ISOM_LANG_T( 'n', 'o', 'r' ),
-    ISOM_LANGUAGE_CODE_HEBREW           = ISOM_LANG_T( 'h', 'e', 'b' ),
-    ISOM_LANGUAGE_CODE_JAPANESE         = ISOM_LANG_T( 'j', 'p', 'n' ),
-    ISOM_LANGUAGE_CODE_ARABIC           = ISOM_LANG_T( 'a', 'r', 'a' ),
-    ISOM_LANGUAGE_CODE_FINNISH          = ISOM_LANG_T( 'f', 'i', 'n' ),
-    ISOM_LANGUAGE_CODE_GREEK            = ISOM_LANG_T( 'e', 'l', 'l' ),
-    ISOM_LANGUAGE_CODE_ICELANDIC        = ISOM_LANG_T( 'i', 's', 'l' ),
-    ISOM_LANGUAGE_CODE_MALTESE          = ISOM_LANG_T( 'm', 'l', 't' ),
-    ISOM_LANGUAGE_CODE_TURKISH          = ISOM_LANG_T( 't', 'u', 'r' ),
-    ISOM_LANGUAGE_CODE_CROATIAN         = ISOM_LANG_T( 'h', 'r', 'v' ),
-    ISOM_LANGUAGE_CODE_CHINESE          = ISOM_LANG_T( 'z', 'h', 'o' ),
-    ISOM_LANGUAGE_CODE_URDU             = ISOM_LANG_T( 'u', 'r', 'd' ),
-    ISOM_LANGUAGE_CODE_HINDI            = ISOM_LANG_T( 'h', 'i', 'n' ),
-    ISOM_LANGUAGE_CODE_THAI             = ISOM_LANG_T( 't', 'h', 'a' ),
-    ISOM_LANGUAGE_CODE_KOREAN           = ISOM_LANG_T( 'k', 'o', 'r' ),
-    ISOM_LANGUAGE_CODE_LITHUANIAN       = ISOM_LANG_T( 'l', 'i', 't' ),
-    ISOM_LANGUAGE_CODE_POLISH           = ISOM_LANG_T( 'p', 'o', 'l' ),
-    ISOM_LANGUAGE_CODE_HUNGARIAN        = ISOM_LANG_T( 'h', 'u', 'n' ),
-    ISOM_LANGUAGE_CODE_ESTONIAN         = ISOM_LANG_T( 'e', 's', 't' ),
-    ISOM_LANGUAGE_CODE_LATVIAN          = ISOM_LANG_T( 'l', 'a', 'v' ),
-    ISOM_LANGUAGE_CODE_SAMI             = ISOM_LANG_T( 's', 'm', 'i' ),
-    ISOM_LANGUAGE_CODE_FAROESE          = ISOM_LANG_T( 'f', 'a', 'o' ),
-    ISOM_LANGUAGE_CODE_RUSSIAN          = ISOM_LANG_T( 'r', 'u', 's' ),
-    ISOM_LANGUAGE_CODE_DUTCH            = ISOM_LANG_T( 'n', 'l', 'd' ),
-    ISOM_LANGUAGE_CODE_IRISH            = ISOM_LANG_T( 'g', 'l', 'e' ),
-    ISOM_LANGUAGE_CODE_ALBANIAN         = ISOM_LANG_T( 's', 'q', 'i' ),
-    ISOM_LANGUAGE_CODE_ROMANIAN         = ISOM_LANG_T( 'r', 'o', 'n' ),
-    ISOM_LANGUAGE_CODE_CZECH            = ISOM_LANG_T( 'c', 'e', 's' ),
-    ISOM_LANGUAGE_CODE_SLOVAK           = ISOM_LANG_T( 's', 'l', 'k' ),
-    ISOM_LANGUAGE_CODE_SLOVENIA         = ISOM_LANG_T( 's', 'l', 'v' ),
-    ISOM_LANGUAGE_CODE_YIDDISH          = ISOM_LANG_T( 'y', 'i', 'd' ),
-    ISOM_LANGUAGE_CODE_SERBIAN          = ISOM_LANG_T( 's', 'r', 'p' ),
-    ISOM_LANGUAGE_CODE_MACEDONIAN       = ISOM_LANG_T( 'm', 'k', 'd' ),
-    ISOM_LANGUAGE_CODE_BULGARIAN        = ISOM_LANG_T( 'b', 'u', 'l' ),
-    ISOM_LANGUAGE_CODE_UKRAINIAN        = ISOM_LANG_T( 'u', 'k', 'r' ),
-    ISOM_LANGUAGE_CODE_BELARUSIAN       = ISOM_LANG_T( 'b', 'e', 'l' ),
-    ISOM_LANGUAGE_CODE_UZBEK            = ISOM_LANG_T( 'u', 'z', 'b' ),
-    ISOM_LANGUAGE_CODE_KAZAKH           = ISOM_LANG_T( 'k', 'a', 'z' ),
-    ISOM_LANGUAGE_CODE_AZERBAIJANI      = ISOM_LANG_T( 'a', 'z', 'e' ),
-    ISOM_LANGUAGE_CODE_ARMENIAN         = ISOM_LANG_T( 'h', 'y', 'e' ),
-    ISOM_LANGUAGE_CODE_GEORGIAN         = ISOM_LANG_T( 'k', 'a', 't' ),
-    ISOM_LANGUAGE_CODE_MOLDAVIAN        = ISOM_LANG_T( 'r', 'o', 'n' ),
-    ISOM_LANGUAGE_CODE_KIRGHIZ          = ISOM_LANG_T( 'k', 'i', 'r' ),
-    ISOM_LANGUAGE_CODE_TAJIK            = ISOM_LANG_T( 't', 'g', 'k' ),
-    ISOM_LANGUAGE_CODE_TURKMEN          = ISOM_LANG_T( 't', 'u', 'k' ),
-    ISOM_LANGUAGE_CODE_MONGOLIAN        = ISOM_LANG_T( 'm', 'o', 'n' ),
-    ISOM_LANGUAGE_CODE_PASHTO           = ISOM_LANG_T( 'p', 'u', 's' ),
-    ISOM_LANGUAGE_CODE_KURDISH          = ISOM_LANG_T( 'k', 'u', 'r' ),
-    ISOM_LANGUAGE_CODE_KASHMIRI         = ISOM_LANG_T( 'k', 'a', 's' ),
-    ISOM_LANGUAGE_CODE_SINDHI           = ISOM_LANG_T( 's', 'n', 'd' ),
-    ISOM_LANGUAGE_CODE_TIBETAN          = ISOM_LANG_T( 'b', 'o', 'd' ),
-    ISOM_LANGUAGE_CODE_NEPALI           = ISOM_LANG_T( 'n', 'e', 'p' ),
-    ISOM_LANGUAGE_CODE_SANSKRIT         = ISOM_LANG_T( 's', 'a', 'n' ),
-    ISOM_LANGUAGE_CODE_MARATHI          = ISOM_LANG_T( 'm', 'a', 'r' ),
-    ISOM_LANGUAGE_CODE_BENGALI          = ISOM_LANG_T( 'b', 'e', 'n' ),
-    ISOM_LANGUAGE_CODE_ASSAMESE         = ISOM_LANG_T( 'a', 's', 'm' ),
-    ISOM_LANGUAGE_CODE_GUJARATI         = ISOM_LANG_T( 'g', 'u', 'j' ),
-    ISOM_LANGUAGE_CODE_PUNJABI          = ISOM_LANG_T( 'p', 'a', 'n' ),
-    ISOM_LANGUAGE_CODE_ORIYA            = ISOM_LANG_T( 'o', 'r', 'i' ),
-    ISOM_LANGUAGE_CODE_MALAYALAM        = ISOM_LANG_T( 'm', 'a', 'l' ),
-    ISOM_LANGUAGE_CODE_KANNADA          = ISOM_LANG_T( 'k', 'a', 'n' ),
-    ISOM_LANGUAGE_CODE_TAMIL            = ISOM_LANG_T( 't', 'a', 'm' ),
-    ISOM_LANGUAGE_CODE_TELUGU           = ISOM_LANG_T( 't', 'e', 'l' ),
-    ISOM_LANGUAGE_CODE_SINHALESE        = ISOM_LANG_T( 's', 'i', 'n' ),
-    ISOM_LANGUAGE_CODE_BURMESE          = ISOM_LANG_T( 'm', 'y', 'a' ),
-    ISOM_LANGUAGE_CODE_KHMER            = ISOM_LANG_T( 'k', 'h', 'm' ),
-    ISOM_LANGUAGE_CODE_LAO              = ISOM_LANG_T( 'l', 'a', 'o' ),
-    ISOM_LANGUAGE_CODE_VIETNAMESE       = ISOM_LANG_T( 'v', 'i', 'e' ),
-    ISOM_LANGUAGE_CODE_INDONESIAN       = ISOM_LANG_T( 'i', 'n', 'd' ),
-    ISOM_LANGUAGE_CODE_TAGALOG          = ISOM_LANG_T( 't', 'g', 'l' ),
-    ISOM_LANGUAGE_CODE_MALAY_ROMAN      = ISOM_LANG_T( 'm', 's', 'a' ),
-    ISOM_LANGUAGE_CODE_MAYAY_ARABIC     = ISOM_LANG_T( 'm', 's', 'a' ),
-    ISOM_LANGUAGE_CODE_AMHARIC          = ISOM_LANG_T( 'a', 'm', 'h' ),
-    ISOM_LANGUAGE_CODE_OROMO            = ISOM_LANG_T( 'o', 'r', 'm' ),
-    ISOM_LANGUAGE_CODE_SOMALI           = ISOM_LANG_T( 's', 'o', 'm' ),
-    ISOM_LANGUAGE_CODE_SWAHILI          = ISOM_LANG_T( 's', 'w', 'a' ),
-    ISOM_LANGUAGE_CODE_KINYARWANDA      = ISOM_LANG_T( 'k', 'i', 'n' ),
-    ISOM_LANGUAGE_CODE_RUNDI            = ISOM_LANG_T( 'r', 'u', 'n' ),
-    ISOM_LANGUAGE_CODE_CHEWA            = ISOM_LANG_T( 'n', 'y', 'a' ),
-    ISOM_LANGUAGE_CODE_MALAGASY         = ISOM_LANG_T( 'm', 'l', 'g' ),
-    ISOM_LANGUAGE_CODE_ESPERANTO        = ISOM_LANG_T( 'e', 'p', 'o' ),
-    ISOM_LANGUAGE_CODE_WELSH            = ISOM_LANG_T( 'c', 'y', 'm' ),
-    ISOM_LANGUAGE_CODE_BASQUE           = ISOM_LANG_T( 'e', 'u', 's' ),
-    ISOM_LANGUAGE_CODE_CATALAN          = ISOM_LANG_T( 'c', 'a', 't' ),
-    ISOM_LANGUAGE_CODE_LATIN            = ISOM_LANG_T( 'l', 'a', 't' ),
-    ISOM_LANGUAGE_CODE_QUECHUA          = ISOM_LANG_T( 'q', 'u', 'e' ),
-    ISOM_LANGUAGE_CODE_GUARANI          = ISOM_LANG_T( 'g', 'r', 'n' ),
-    ISOM_LANGUAGE_CODE_AYMARA           = ISOM_LANG_T( 'a', 'y', 'm' ),
-    ISOM_LANGUAGE_CODE_TATAR            = ISOM_LANG_T( 'c', 'r', 'h' ),
-    ISOM_LANGUAGE_CODE_UIGHUR           = ISOM_LANG_T( 'u', 'i', 'g' ),
-    ISOM_LANGUAGE_CODE_DZONGKHA         = ISOM_LANG_T( 'd', 'z', 'o' ),
-    ISOM_LANGUAGE_CODE_JAVANESE         = ISOM_LANG_T( 'j', 'a', 'v' ),
-    ISOM_LANGUAGE_CODE_UNDEFINED        = ISOM_LANG_T( 'u', 'n', 'd' ),
+    ISOM_LANGUAGE_CODE_ENGLISH          = LSMASH_PACK_ISO_LANGUAGE( 'e', 'n', 'g' ),
+    ISOM_LANGUAGE_CODE_FRENCH           = LSMASH_PACK_ISO_LANGUAGE( 'f', 'r', 'a' ),
+    ISOM_LANGUAGE_CODE_GERMAN           = LSMASH_PACK_ISO_LANGUAGE( 'd', 'e', 'u' ),
+    ISOM_LANGUAGE_CODE_ITALIAN          = LSMASH_PACK_ISO_LANGUAGE( 'i', 't', 'a' ),
+    ISOM_LANGUAGE_CODE_DUTCH_M          = LSMASH_PACK_ISO_LANGUAGE( 'd', 'u', 'm' ),
+    ISOM_LANGUAGE_CODE_SWEDISH          = LSMASH_PACK_ISO_LANGUAGE( 's', 'w', 'e' ),
+    ISOM_LANGUAGE_CODE_SPANISH          = LSMASH_PACK_ISO_LANGUAGE( 's', 'p', 'a' ),
+    ISOM_LANGUAGE_CODE_DANISH           = LSMASH_PACK_ISO_LANGUAGE( 'd', 'a', 'n' ),
+    ISOM_LANGUAGE_CODE_PORTUGUESE       = LSMASH_PACK_ISO_LANGUAGE( 'p', 'o', 'r' ),
+    ISOM_LANGUAGE_CODE_NORWEGIAN        = LSMASH_PACK_ISO_LANGUAGE( 'n', 'o', 'r' ),
+    ISOM_LANGUAGE_CODE_HEBREW           = LSMASH_PACK_ISO_LANGUAGE( 'h', 'e', 'b' ),
+    ISOM_LANGUAGE_CODE_JAPANESE         = LSMASH_PACK_ISO_LANGUAGE( 'j', 'p', 'n' ),
+    ISOM_LANGUAGE_CODE_ARABIC           = LSMASH_PACK_ISO_LANGUAGE( 'a', 'r', 'a' ),
+    ISOM_LANGUAGE_CODE_FINNISH          = LSMASH_PACK_ISO_LANGUAGE( 'f', 'i', 'n' ),
+    ISOM_LANGUAGE_CODE_GREEK            = LSMASH_PACK_ISO_LANGUAGE( 'e', 'l', 'l' ),
+    ISOM_LANGUAGE_CODE_ICELANDIC        = LSMASH_PACK_ISO_LANGUAGE( 'i', 's', 'l' ),
+    ISOM_LANGUAGE_CODE_MALTESE          = LSMASH_PACK_ISO_LANGUAGE( 'm', 'l', 't' ),
+    ISOM_LANGUAGE_CODE_TURKISH          = LSMASH_PACK_ISO_LANGUAGE( 't', 'u', 'r' ),
+    ISOM_LANGUAGE_CODE_CROATIAN         = LSMASH_PACK_ISO_LANGUAGE( 'h', 'r', 'v' ),
+    ISOM_LANGUAGE_CODE_CHINESE          = LSMASH_PACK_ISO_LANGUAGE( 'z', 'h', 'o' ),
+    ISOM_LANGUAGE_CODE_URDU             = LSMASH_PACK_ISO_LANGUAGE( 'u', 'r', 'd' ),
+    ISOM_LANGUAGE_CODE_HINDI            = LSMASH_PACK_ISO_LANGUAGE( 'h', 'i', 'n' ),
+    ISOM_LANGUAGE_CODE_THAI             = LSMASH_PACK_ISO_LANGUAGE( 't', 'h', 'a' ),
+    ISOM_LANGUAGE_CODE_KOREAN           = LSMASH_PACK_ISO_LANGUAGE( 'k', 'o', 'r' ),
+    ISOM_LANGUAGE_CODE_LITHUANIAN       = LSMASH_PACK_ISO_LANGUAGE( 'l', 'i', 't' ),
+    ISOM_LANGUAGE_CODE_POLISH           = LSMASH_PACK_ISO_LANGUAGE( 'p', 'o', 'l' ),
+    ISOM_LANGUAGE_CODE_HUNGARIAN        = LSMASH_PACK_ISO_LANGUAGE( 'h', 'u', 'n' ),
+    ISOM_LANGUAGE_CODE_ESTONIAN         = LSMASH_PACK_ISO_LANGUAGE( 'e', 's', 't' ),
+    ISOM_LANGUAGE_CODE_LATVIAN          = LSMASH_PACK_ISO_LANGUAGE( 'l', 'a', 'v' ),
+    ISOM_LANGUAGE_CODE_SAMI             = LSMASH_PACK_ISO_LANGUAGE( 's', 'm', 'i' ),
+    ISOM_LANGUAGE_CODE_FAROESE          = LSMASH_PACK_ISO_LANGUAGE( 'f', 'a', 'o' ),
+    ISOM_LANGUAGE_CODE_RUSSIAN          = LSMASH_PACK_ISO_LANGUAGE( 'r', 'u', 's' ),
+    ISOM_LANGUAGE_CODE_DUTCH            = LSMASH_PACK_ISO_LANGUAGE( 'n', 'l', 'd' ),
+    ISOM_LANGUAGE_CODE_IRISH            = LSMASH_PACK_ISO_LANGUAGE( 'g', 'l', 'e' ),
+    ISOM_LANGUAGE_CODE_ALBANIAN         = LSMASH_PACK_ISO_LANGUAGE( 's', 'q', 'i' ),
+    ISOM_LANGUAGE_CODE_ROMANIAN         = LSMASH_PACK_ISO_LANGUAGE( 'r', 'o', 'n' ),
+    ISOM_LANGUAGE_CODE_CZECH            = LSMASH_PACK_ISO_LANGUAGE( 'c', 'e', 's' ),
+    ISOM_LANGUAGE_CODE_SLOVAK           = LSMASH_PACK_ISO_LANGUAGE( 's', 'l', 'k' ),
+    ISOM_LANGUAGE_CODE_SLOVENIA         = LSMASH_PACK_ISO_LANGUAGE( 's', 'l', 'v' ),
+    ISOM_LANGUAGE_CODE_YIDDISH          = LSMASH_PACK_ISO_LANGUAGE( 'y', 'i', 'd' ),
+    ISOM_LANGUAGE_CODE_SERBIAN          = LSMASH_PACK_ISO_LANGUAGE( 's', 'r', 'p' ),
+    ISOM_LANGUAGE_CODE_MACEDONIAN       = LSMASH_PACK_ISO_LANGUAGE( 'm', 'k', 'd' ),
+    ISOM_LANGUAGE_CODE_BULGARIAN        = LSMASH_PACK_ISO_LANGUAGE( 'b', 'u', 'l' ),
+    ISOM_LANGUAGE_CODE_UKRAINIAN        = LSMASH_PACK_ISO_LANGUAGE( 'u', 'k', 'r' ),
+    ISOM_LANGUAGE_CODE_BELARUSIAN       = LSMASH_PACK_ISO_LANGUAGE( 'b', 'e', 'l' ),
+    ISOM_LANGUAGE_CODE_UZBEK            = LSMASH_PACK_ISO_LANGUAGE( 'u', 'z', 'b' ),
+    ISOM_LANGUAGE_CODE_KAZAKH           = LSMASH_PACK_ISO_LANGUAGE( 'k', 'a', 'z' ),
+    ISOM_LANGUAGE_CODE_AZERBAIJANI      = LSMASH_PACK_ISO_LANGUAGE( 'a', 'z', 'e' ),
+    ISOM_LANGUAGE_CODE_ARMENIAN         = LSMASH_PACK_ISO_LANGUAGE( 'h', 'y', 'e' ),
+    ISOM_LANGUAGE_CODE_GEORGIAN         = LSMASH_PACK_ISO_LANGUAGE( 'k', 'a', 't' ),
+    ISOM_LANGUAGE_CODE_MOLDAVIAN        = LSMASH_PACK_ISO_LANGUAGE( 'r', 'o', 'n' ),
+    ISOM_LANGUAGE_CODE_KIRGHIZ          = LSMASH_PACK_ISO_LANGUAGE( 'k', 'i', 'r' ),
+    ISOM_LANGUAGE_CODE_TAJIK            = LSMASH_PACK_ISO_LANGUAGE( 't', 'g', 'k' ),
+    ISOM_LANGUAGE_CODE_TURKMEN          = LSMASH_PACK_ISO_LANGUAGE( 't', 'u', 'k' ),
+    ISOM_LANGUAGE_CODE_MONGOLIAN        = LSMASH_PACK_ISO_LANGUAGE( 'm', 'o', 'n' ),
+    ISOM_LANGUAGE_CODE_PASHTO           = LSMASH_PACK_ISO_LANGUAGE( 'p', 'u', 's' ),
+    ISOM_LANGUAGE_CODE_KURDISH          = LSMASH_PACK_ISO_LANGUAGE( 'k', 'u', 'r' ),
+    ISOM_LANGUAGE_CODE_KASHMIRI         = LSMASH_PACK_ISO_LANGUAGE( 'k', 'a', 's' ),
+    ISOM_LANGUAGE_CODE_SINDHI           = LSMASH_PACK_ISO_LANGUAGE( 's', 'n', 'd' ),
+    ISOM_LANGUAGE_CODE_TIBETAN          = LSMASH_PACK_ISO_LANGUAGE( 'b', 'o', 'd' ),
+    ISOM_LANGUAGE_CODE_NEPALI           = LSMASH_PACK_ISO_LANGUAGE( 'n', 'e', 'p' ),
+    ISOM_LANGUAGE_CODE_SANSKRIT         = LSMASH_PACK_ISO_LANGUAGE( 's', 'a', 'n' ),
+    ISOM_LANGUAGE_CODE_MARATHI          = LSMASH_PACK_ISO_LANGUAGE( 'm', 'a', 'r' ),
+    ISOM_LANGUAGE_CODE_BENGALI          = LSMASH_PACK_ISO_LANGUAGE( 'b', 'e', 'n' ),
+    ISOM_LANGUAGE_CODE_ASSAMESE         = LSMASH_PACK_ISO_LANGUAGE( 'a', 's', 'm' ),
+    ISOM_LANGUAGE_CODE_GUJARATI         = LSMASH_PACK_ISO_LANGUAGE( 'g', 'u', 'j' ),
+    ISOM_LANGUAGE_CODE_PUNJABI          = LSMASH_PACK_ISO_LANGUAGE( 'p', 'a', 'n' ),
+    ISOM_LANGUAGE_CODE_ORIYA            = LSMASH_PACK_ISO_LANGUAGE( 'o', 'r', 'i' ),
+    ISOM_LANGUAGE_CODE_MALAYALAM        = LSMASH_PACK_ISO_LANGUAGE( 'm', 'a', 'l' ),
+    ISOM_LANGUAGE_CODE_KANNADA          = LSMASH_PACK_ISO_LANGUAGE( 'k', 'a', 'n' ),
+    ISOM_LANGUAGE_CODE_TAMIL            = LSMASH_PACK_ISO_LANGUAGE( 't', 'a', 'm' ),
+    ISOM_LANGUAGE_CODE_TELUGU           = LSMASH_PACK_ISO_LANGUAGE( 't', 'e', 'l' ),
+    ISOM_LANGUAGE_CODE_SINHALESE        = LSMASH_PACK_ISO_LANGUAGE( 's', 'i', 'n' ),
+    ISOM_LANGUAGE_CODE_BURMESE          = LSMASH_PACK_ISO_LANGUAGE( 'm', 'y', 'a' ),
+    ISOM_LANGUAGE_CODE_KHMER            = LSMASH_PACK_ISO_LANGUAGE( 'k', 'h', 'm' ),
+    ISOM_LANGUAGE_CODE_LAO              = LSMASH_PACK_ISO_LANGUAGE( 'l', 'a', 'o' ),
+    ISOM_LANGUAGE_CODE_VIETNAMESE       = LSMASH_PACK_ISO_LANGUAGE( 'v', 'i', 'e' ),
+    ISOM_LANGUAGE_CODE_INDONESIAN       = LSMASH_PACK_ISO_LANGUAGE( 'i', 'n', 'd' ),
+    ISOM_LANGUAGE_CODE_TAGALOG          = LSMASH_PACK_ISO_LANGUAGE( 't', 'g', 'l' ),
+    ISOM_LANGUAGE_CODE_MALAY_ROMAN      = LSMASH_PACK_ISO_LANGUAGE( 'm', 's', 'a' ),
+    ISOM_LANGUAGE_CODE_MAYAY_ARABIC     = LSMASH_PACK_ISO_LANGUAGE( 'm', 's', 'a' ),
+    ISOM_LANGUAGE_CODE_AMHARIC          = LSMASH_PACK_ISO_LANGUAGE( 'a', 'm', 'h' ),
+    ISOM_LANGUAGE_CODE_OROMO            = LSMASH_PACK_ISO_LANGUAGE( 'o', 'r', 'm' ),
+    ISOM_LANGUAGE_CODE_SOMALI           = LSMASH_PACK_ISO_LANGUAGE( 's', 'o', 'm' ),
+    ISOM_LANGUAGE_CODE_SWAHILI          = LSMASH_PACK_ISO_LANGUAGE( 's', 'w', 'a' ),
+    ISOM_LANGUAGE_CODE_KINYARWANDA      = LSMASH_PACK_ISO_LANGUAGE( 'k', 'i', 'n' ),
+    ISOM_LANGUAGE_CODE_RUNDI            = LSMASH_PACK_ISO_LANGUAGE( 'r', 'u', 'n' ),
+    ISOM_LANGUAGE_CODE_CHEWA            = LSMASH_PACK_ISO_LANGUAGE( 'n', 'y', 'a' ),
+    ISOM_LANGUAGE_CODE_MALAGASY         = LSMASH_PACK_ISO_LANGUAGE( 'm', 'l', 'g' ),
+    ISOM_LANGUAGE_CODE_ESPERANTO        = LSMASH_PACK_ISO_LANGUAGE( 'e', 'p', 'o' ),
+    ISOM_LANGUAGE_CODE_WELSH            = LSMASH_PACK_ISO_LANGUAGE( 'c', 'y', 'm' ),
+    ISOM_LANGUAGE_CODE_BASQUE           = LSMASH_PACK_ISO_LANGUAGE( 'e', 'u', 's' ),
+    ISOM_LANGUAGE_CODE_CATALAN          = LSMASH_PACK_ISO_LANGUAGE( 'c', 'a', 't' ),
+    ISOM_LANGUAGE_CODE_LATIN            = LSMASH_PACK_ISO_LANGUAGE( 'l', 'a', 't' ),
+    ISOM_LANGUAGE_CODE_QUECHUA          = LSMASH_PACK_ISO_LANGUAGE( 'q', 'u', 'e' ),
+    ISOM_LANGUAGE_CODE_GUARANI          = LSMASH_PACK_ISO_LANGUAGE( 'g', 'r', 'n' ),
+    ISOM_LANGUAGE_CODE_AYMARA           = LSMASH_PACK_ISO_LANGUAGE( 'a', 'y', 'm' ),
+    ISOM_LANGUAGE_CODE_TATAR            = LSMASH_PACK_ISO_LANGUAGE( 'c', 'r', 'h' ),
+    ISOM_LANGUAGE_CODE_UIGHUR           = LSMASH_PACK_ISO_LANGUAGE( 'u', 'i', 'g' ),
+    ISOM_LANGUAGE_CODE_DZONGKHA         = LSMASH_PACK_ISO_LANGUAGE( 'd', 'z', 'o' ),
+    ISOM_LANGUAGE_CODE_JAVANESE         = LSMASH_PACK_ISO_LANGUAGE( 'j', 'a', 'v' ),
+    ISOM_LANGUAGE_CODE_UNDEFINED        = LSMASH_PACK_ISO_LANGUAGE( 'u', 'n', 'd' ),
 } lsmash_iso_language_code;
-
-#undef ISOM_LANG_T
-
-typedef enum
-{
-    QT_COLOR_PARAMETER_TYPE_NCLC = LSMASH_4CC( 'n', 'c', 'l', 'c' ),      /* nonconstant luminance coding */
-    QT_COLOR_PARAMETER_TYPE_PROF = LSMASH_4CC( 'p', 'r', 'o', 'f' ),      /* ICC profile */
-} lsmash_color_patameter_type_code;
 
 typedef enum
 {
@@ -729,7 +488,7 @@ typedef enum
     QT_CHANNEL_LABEL_DISCRETE_14            = (1<<16) | 14,
     QT_CHANNEL_LABEL_DISCRETE_15            = (1<<16) | 15,
     QT_CHANNEL_LABEL_DISCRETE_65535         = (1<<16) | 65535,
-} lsmash_channel_label_code;
+} lsmash_channel_label;
 
 typedef enum
 {
@@ -752,7 +511,7 @@ typedef enum
     QT_CHANNEL_BIT_TOP_BACK_CENTER        = 1<<16,
     QT_CHANNEL_BIT_TOP_BACK_RIGHT         = 1<<17,
     QT_CHANNEL_BIT_FULL                   = 0x3ffff,
-} lsmash_channel_bitmap_code;
+} lsmash_channel_bitmap;
 
 typedef enum
 {
@@ -760,7 +519,7 @@ typedef enum
     QT_CHANNEL_FLAGS_RECTANGULAR_COORDINATES = 1,
     QT_CHANNEL_FLAGS_SPHERICAL_COORDINATES   = 1<<1,
     QT_CHANNEL_FLAGS_METERS                  = 1<<2,
-} lsmash_channel_flags_code;
+} lsmash_channel_flags;
 
 typedef enum
 {
@@ -773,7 +532,7 @@ typedef enum
     QT_CHANNEL_COORDINATES_AZIMUTH    = 0,      /* 0 is front center, positive is right, negative is left. This is measured in degrees. */
     QT_CHANNEL_COORDINATES_ELEVATION  = 1,      /* +90 is zenith, 0 is horizontal, -90 is nadir. This is measured in degrees. */
     QT_CHANNEL_COORDINATES_DISTANCE   = 2,      /* The units are described by flags. */
-} lsmash_channel_coordinates_index_code;
+} lsmash_channel_coordinates_index;
 
 typedef enum
 {
@@ -902,11 +661,11 @@ typedef enum
     QT_CHANNEL_LAYOUT_AAC_QUADRAPHONIC         = QT_CHANNEL_LAYOUT_QUADRAPHONIC,    /* L R Ls Rs */
     QT_CHANNEL_LAYOUT_AAC_4_0                  = QT_CHANNEL_LAYOUT_MPEG_4_0_B,      /* C L R Cs */
     QT_CHANNEL_LAYOUT_AAC_5_0                  = QT_CHANNEL_LAYOUT_MPEG_5_0_D,      /* C L R Ls Rs */
-    QT_CHANNEL_LAYOUT_AAC_5_1                  = QT_CHANNEL_LAYOUT_MPEG_5_1_D,      /* C L R Ls Rs Lfe */
+    QT_CHANNEL_LAYOUT_AAC_5_1                  = QT_CHANNEL_LAYOUT_MPEG_5_1_D,      /* C L R Ls Rs LFE */
     QT_CHANNEL_LAYOUT_AAC_6_0                  = (141<<16) | 6,                     /* C L R Ls Rs Cs */
-    QT_CHANNEL_LAYOUT_AAC_6_1                  = (142<<16) | 7,                     /* C L R Ls Rs Cs Lfe */
+    QT_CHANNEL_LAYOUT_AAC_6_1                  = (142<<16) | 7,                     /* C L R Ls Rs Cs LFE */
     QT_CHANNEL_LAYOUT_AAC_7_0                  = (143<<16) | 7,                     /* C L R Ls Rs Rls Rrs */
-    QT_CHANNEL_LAYOUT_AAC_7_1                  = QT_CHANNEL_LAYOUT_MPEG_7_1_B,      /* C Lc Rc L R Ls Rs Lfe */
+    QT_CHANNEL_LAYOUT_AAC_7_1                  = QT_CHANNEL_LAYOUT_MPEG_7_1_B,      /* C Lc Rc L R Ls Rs LFE */
     QT_CHANNEL_LAYOUT_AAC_OCTAGONAL            = (144<<16) | 8,                     /* C L R Ls Rs Rls Rrs Cs */
 
     QT_CHANNEL_LAYOUT_TMH_10_2_STD             = (145<<16) | 16,                    /* L R C Vhc Lsd Rsd Ls Rs Vhl Vhr Lw Rw Csd Cs LFE1 LFE2 */
@@ -919,9 +678,50 @@ typedef enum
     QT_CHANNEL_LAYOUT_AC3_2_1_1                = (153<<16) | 4,                     /* L R Cs LFE */
     QT_CHANNEL_LAYOUT_AC3_3_1_1                = (154<<16) | 5,                     /* L C R Cs LFE */
 
+    QT_CHANNEL_LAYOUT_EAC_6_0_A                = (155<<16) | 6,                     /* L C R Ls Rs Cs */
+    QT_CHANNEL_LAYOUT_EAC_7_0_A                = (156<<16) | 7,                     /* L C R Ls Rs Rls Rrs */
+
+    QT_CHANNEL_LAYOUT_EAC3_6_1_A               = (157<<16) | 7,                     /* L C R Ls Rs LFE Cs */
+    QT_CHANNEL_LAYOUT_EAC3_6_1_B               = (158<<16) | 7,                     /* L C R Ls Rs LFE Ts */
+    QT_CHANNEL_LAYOUT_EAC3_6_1_C               = (159<<16) | 7,                     /* L C R Ls Rs LFE Vhc */
+    QT_CHANNEL_LAYOUT_EAC3_7_1_A               = (160<<16) | 8,                     /* L C R Ls Rs LFE Rls Rrs */
+    QT_CHANNEL_LAYOUT_EAC3_7_1_B               = (161<<16) | 8,                     /* L C R Ls Rs LFE Lc Rc */
+    QT_CHANNEL_LAYOUT_EAC3_7_1_C               = (162<<16) | 8,                     /* L C R Ls Rs LFE Lsd Rsd */
+    QT_CHANNEL_LAYOUT_EAC3_7_1_D               = (163<<16) | 8,                     /* L C R Ls Rs LFE Lw Rw */
+    QT_CHANNEL_LAYOUT_EAC3_7_1_E               = (164<<16) | 8,                     /* L C R Ls Rs LFE Vhl Vhr */
+
+    QT_CHANNEL_LAYOUT_EAC3_7_1_F               = (165<<16) | 8,                     /* L C R Ls Rs LFE Cs Ts */
+    QT_CHANNEL_LAYOUT_EAC3_7_1_G               = (166<<16) | 8,                     /* L C R Ls Rs LFE Cs Vhc */
+    QT_CHANNEL_LAYOUT_EAC3_7_1_H               = (167<<16) | 8,                     /* L C R Ls Rs LFE Ts Vhc */
+
+    QT_CHANNEL_LAYOUT_DTS_3_1                  = (168<<16) | 4,                     /* C L R LFE */
+    QT_CHANNEL_LAYOUT_DTS_4_1                  = (169<<16) | 5,                     /* C L R Cs LFE */
+    QT_CHANNEL_LAYOUT_DTS_6_0_A                = (170<<16) | 6,                     /* Lc Rc L R Ls Rs */
+    QT_CHANNEL_LAYOUT_DTS_6_0_B                = (171<<16) | 6,                     /* C L R Rls Rrs Ts */
+    QT_CHANNEL_LAYOUT_DTS_6_0_C                = (172<<16) | 6,                     /* C Cs L R Rls Rrs */
+    QT_CHANNEL_LAYOUT_DTS_6_1_A                = (173<<16) | 7,                     /* Lc Rc L R Ls Rs LFE */
+    QT_CHANNEL_LAYOUT_DTS_6_1_B                = (174<<16) | 7,                     /* C L R Rls Rrs Ts LFE */
+    QT_CHANNEL_LAYOUT_DTS_6_1_C                = (175<<16) | 7,                     /* C Cs L R Rls Rrs LFE */
+    QT_CHANNEL_LAYOUT_DTS_7_0                  = (176<<16) | 7,                     /* Lc C Rc L R Ls Rs */
+    QT_CHANNEL_LAYOUT_DTS_7_1                  = (177<<16) | 8,                     /* Lc C Rc L R Ls Rs LFE */
+    QT_CHANNEL_LAYOUT_DTS_8_0_A                = (178<<16) | 8,                     /* Lc Rc L R Ls Rs Rls Rrs */
+    QT_CHANNEL_LAYOUT_DTS_8_0_B                = (179<<16) | 8,                     /* Lc C Rc L R Ls Cs Rs */
+    QT_CHANNEL_LAYOUT_DTS_8_1_A                = (180<<16) | 9,                     /* Lc Rc L R Ls Rs Rls Rrs LFE */
+    QT_CHANNEL_LAYOUT_DTS_8_1_B                = (181<<16) | 9,                     /* Lc C Rc L R Ls Cs Rs LFE */
+    QT_CHANNEL_LAYOUT_DTS_6_1_D                = (182<<16) | 7,                     /* C L R Ls Rs LFE Cs */
+
+    QT_CHANNEL_LAYOUT_ALAC_MONO                = QT_CHANNEL_LAYOUT_MONO,            /* C */
+    QT_CHANNEL_LAYOUT_ALAC_STEREO              = QT_CHANNEL_LAYOUT_STEREO,          /* L R */
+    QT_CHANNEL_LAYOUT_ALAC_3_0                 = QT_CHANNEL_LAYOUT_MPEG_3_0_B,      /* C L R */
+    QT_CHANNEL_LAYOUT_ALAC_4_0                 = QT_CHANNEL_LAYOUT_MPEG_4_0_B,      /* C L R Cs */
+    QT_CHANNEL_LAYOUT_ALAC_5_0                 = QT_CHANNEL_LAYOUT_MPEG_5_0_D,      /* C L R Ls Rs */
+    QT_CHANNEL_LAYOUT_ALAC_5_1                 = QT_CHANNEL_LAYOUT_MPEG_5_1_D,      /* C L R Ls Rs LFE */
+    QT_CHANNEL_LAYOUT_ALAC_6_1                 = QT_CHANNEL_LAYOUT_AAC_6_1,         /* C L R Ls Rs Cs LFE */
+    QT_CHANNEL_LAYOUT_ALAC_7_1                 = QT_CHANNEL_LAYOUT_MPEG_7_1_B,      /* C Lc Rc L R Ls Rs LFE */
+
     QT_CHANNEL_LAYOUT_DISCRETE_IN_ORDER        = 147<<16,                           /* needs to be ORed with the actual number of channels */  
     QT_CHANNEL_LAYOUT_UNKNOWN                  = 0xffff0000,                        /* needs to be ORed with the actual number of channels */
-} lsmash_channel_layout_tag_code;
+} lsmash_channel_layout_tag;
 
 typedef enum
 {
@@ -933,7 +733,7 @@ typedef enum
     ISOM_TRACK_IN_PREVIEW   = 0x000004,     /* Track_in_preview: Indicates that the track is used when previewing the presentation. */
 
     QT_TRACK_IN_POSTER      = 0x000008,     /* Track_in_poster: Indicates that the track is used in the movie's poster. (only defined in QuickTime file format) */
-} lsmash_track_mode_code;
+} lsmash_track_mode;
 
 typedef enum
 {
@@ -942,14 +742,14 @@ typedef enum
     ISOM_SCALING_METHOD_MEET    = 3,
     ISOM_SCALING_METHOD_SLICE_X = 4,
     ISOM_SCALING_METHOD_SLICE_Y = 5,
-} lsmash_scaling_method_code;
+} lsmash_scaling_method;
 
 typedef enum
 {
     ISOM_EDIT_MODE_NORMAL   = 1<<16,
     ISOM_EDIT_MODE_DWELL    = 0,
     ISOM_EDIT_MODE_EMPTY    = -1,
-} lsmash_edit_mode_code;
+} lsmash_edit_mode;
 
 typedef enum
 {
@@ -972,7 +772,7 @@ typedef enum
     ISOM_SAMPLE_REDUNDANCY_UNKNOWN      = 0,
     ISOM_SAMPLE_HAS_REDUNDANCY          = 1,
     ISOM_SAMPLE_HAS_NO_REDUNDANCY       = 2,
-} lsmash_sample_property_code;
+} lsmash_sample_dependency;
 
 /* objectTypeIndication */
 typedef enum {
@@ -1124,16 +924,77 @@ typedef enum
     ISOM_SAMPLE_RANDOM_ACCESS_TYPE_NONE         = 0,        /* not random access point */
     ISOM_SAMPLE_RANDOM_ACCESS_TYPE_SYNC         = 1,        /* sync sample */
     ISOM_SAMPLE_RANDOM_ACCESS_TYPE_CLOSED_RAP   = 1,        /* the first sample of a closed GOP */
-    ISOM_SAMPLE_RANDOM_ACCESS_TYPE_OPEN_RAP     = 2,        /* the first sample of an open GOP  */
-    ISOM_SAMPLE_RANDOM_ACCESS_TYPE_RECOVERY     = 3,        /* starting point of gradual decoder refresh */
+    ISOM_SAMPLE_RANDOM_ACCESS_TYPE_OPEN_RAP     = 2,        /* the first sample of an open GOP */
+    ISOM_SAMPLE_RANDOM_ACCESS_TYPE_UNKNOWN_RAP  = 3,        /* the first sample of an open or closed GOP */
+    ISOM_SAMPLE_RANDOM_ACCESS_TYPE_RECOVERY     = 4,        /* starting point of gradual decoder refresh */
 
     QT_SAMPLE_RANDOM_ACCESS_TYPE_NONE           = 0,        /* not random access point */
     QT_SAMPLE_RANDOM_ACCESS_TYPE_SYNC           = 1,        /* sync sample */
     QT_SAMPLE_RANDOM_ACCESS_TYPE_PARTIAL_SYNC   = 2,        /* partial sync sample */
     QT_SAMPLE_RANDOM_ACCESS_TYPE_CLOSED_RAP     = 1,        /* the first sample of a closed GOP */
-    QT_SAMPLE_RANDOM_ACCESS_TYPE_OPEN_RAP       = 2,        /* the first sample of an open GOP  */
+    QT_SAMPLE_RANDOM_ACCESS_TYPE_OPEN_RAP       = 2,        /* the first sample of an open GOP */
 } lsmash_random_access_type;
 
+typedef enum
+{
+    /* UTF String type */
+    ITUNES_METADATA_TYPE_ALBUM_NAME                 = LSMASH_4CC( 0xA9, 'a', 'l', 'b' ),    /* Album Name */
+    ITUNES_METADATA_TYPE_ARTIST                     = LSMASH_4CC( 0xA9, 'A', 'R', 'T' ),    /* Artist */
+    ITUNES_METADATA_TYPE_USER_COMMENT               = LSMASH_4CC( 0xA9, 'c', 'm', 't' ),    /* User Comment */
+    ITUNES_METADATA_TYPE_RELEASE_DATE               = LSMASH_4CC( 0xA9, 'd', 'a', 'y' ),    /* YYYY-MM-DD format string (may be incomplete, i.e. only year) */
+    ITUNES_METADATA_TYPE_ENCODED_BY                 = LSMASH_4CC( 0xA9, 'e', 'n', 'c' ),    /* Person or company that encoded the recording */
+    ITUNES_METADATA_TYPE_USER_GENRE                 = LSMASH_4CC( 0xA9, 'g', 'e', 'n' ),    /* User Genre user-specified string */
+    ITUNES_METADATA_TYPE_0XA9_GROUPING              = LSMASH_4CC( 0xA9, 'g', 'r', 'p' ),    /* Grouping */
+    ITUNES_METADATA_TYPE_LYRICS                     = LSMASH_4CC( 0xA9, 'l', 'y', 'r' ),    /* Lyrics */
+    ITUNES_METADATA_TYPE_TITLE                      = LSMASH_4CC( 0xA9, 'n', 'a', 'm' ),    /* Title / Song Name */
+    ITUNES_METADATA_TYPE_TRACK_SUBTITLE             = LSMASH_4CC( 0xA9, 's', 't', '3' ),    /* Track Sub-Title */
+    ITUNES_METADATA_TYPE_ENCODING_TOOL              = LSMASH_4CC( 0xA9, 't', 'o', 'o' ),    /* Software which encoded the recording */
+    ITUNES_METADATA_TYPE_COMPOSER                   = LSMASH_4CC( 0xA9, 'w', 'r', 't' ),    /* Composer */
+    ITUNES_METADATA_TYPE_ALBUM_ARTIST               = LSMASH_4CC( 'a', 'A', 'R', 'T' ),     /* Artist for the whole album (if different than the individual tracks) */
+    ITUNES_METADATA_TYPE_PODCAST_CATEGORY           = LSMASH_4CC( 'c', 'a', 't', 'g' ),     /* Podcast Category */
+    ITUNES_METADATA_TYPE_COPYRIGHT                  = LSMASH_4CC( 'c', 'p', 'r', 't' ),     /* Copyright */
+    ITUNES_METADATA_TYPE_DESCRIPTION                = LSMASH_4CC( 'd', 'e', 's', 'c' ),     /* Description (limited to 255 bytes) */
+    ITUNES_METADATA_TYPE_GROUPING                   = LSMASH_4CC( 'g', 'r', 'u', 'p' ),     /* Grouping */
+    ITUNES_METADATA_TYPE_PODCAST_KEYWORD            = LSMASH_4CC( 'k', 'e', 'y', 'w' ),     /* Podcast Keywords */
+    ITUNES_METADATA_TYPE_LONG_DESCRIPTION           = LSMASH_4CC( 'l', 'd', 'e', 's' ),     /* Long Description */
+    ITUNES_METADATA_TYPE_PURCHASE_DATE              = LSMASH_4CC( 'p', 'u', 'r', 'd' ),     /* Purchase Date */
+    ITUNES_METADATA_TYPE_TV_EPISODE_ID              = LSMASH_4CC( 't', 'v', 'e', 'n' ),     /* TV Episode ID */
+    ITUNES_METADATA_TYPE_TV_NETWORK                 = LSMASH_4CC( 't', 'v', 'n', 'n' ),     /* TV Network Name */
+    ITUNES_METADATA_TYPE_TV_SHOW_NAME               = LSMASH_4CC( 't', 'v', 's', 'h' ),     /* TV Show Name */
+    ITUNES_METADATA_TYPE_ITUNES_PURCHASE_ACCOUNT_ID = LSMASH_4CC( 'a', 'p', 'I', 'D' ),     /* iTunes Account Used for Purchase */
+
+    /* Integer type
+     * (X): X means length of bytes */
+    ITUNES_METADATA_TYPE_EPISODE_GLOBAL_ID          = LSMASH_4CC( 'e', 'g', 'i', 'd' ),     /* (1) Episode Global Unique ID */
+    ITUNES_METADATA_TYPE_PREDEFINED_GENRE           = LSMASH_4CC( 'g', 'n', 'r', 'e' ),     /* (4) Pre-defined Genre / Enumerated value from ID3 tag set, plus 1 */
+    ITUNES_METADATA_TYPE_PODCAST_URL                = LSMASH_4CC( 'p', 'u', 'r', 'l' ),     /* (?) Podcast URL */
+    ITUNES_METADATA_TYPE_CONTENT_RATING             = LSMASH_4CC( 'r', 't', 'n', 'g' ),     /* (1) Content Rating / Does song have explicit content? 0: none, 2: clean, 4: explicit */
+    ITUNES_METADATA_TYPE_MEDIA_TYPE                 = LSMASH_4CC( 's', 't', 'i', 'k' ),     /* (1) Media Type */
+    ITUNES_METADATA_TYPE_BEATS_PER_MINUTE           = LSMASH_4CC( 't', 'm', 'p', 'o' ),     /* (2) Beats Per Minute */
+    ITUNES_METADATA_TYPE_TV_EPISODE                 = LSMASH_4CC( 't', 'v', 'e', 's' ),     /* (4) TV Episode */
+    ITUNES_METADATA_TYPE_TV_SEASON                  = LSMASH_4CC( 't', 'v', 's', 'n' ),     /* (4) TV Season */
+    ITUNES_METADATA_TYPE_ITUNES_ACCOUNT_TYPE        = LSMASH_4CC( 'a', 'k', 'I', 'D' ),     /* (1) iTunes Account Type / 0: iTunes, 1: AOL */
+    ITUNES_METADATA_TYPE_ITUNES_ARTIST_ID           = LSMASH_4CC( 'a', 't', 'I', 'D' ),     /* (4) iTunes Artist ID */
+    ITUNES_METADATA_TYPE_ITUNES_COMPOSER_ID         = LSMASH_4CC( 'c', 'm', 'I', 'D' ),     /* (4) iTunes Composer ID */
+    ITUNES_METADATA_TYPE_ITUNES_CATALOG_ID          = LSMASH_4CC( 'c', 'n', 'I', 'D' ),     /* (4) iTunes Catalog ID */
+    ITUNES_METADATA_TYPE_ITUNES_TV_GENRE_ID         = LSMASH_4CC( 'g', 'e', 'I', 'D' ),     /* (4) iTunes TV Genre ID */
+    ITUNES_METADATA_TYPE_ITUNES_PLAYLIST_ID         = LSMASH_4CC( 'p', 'l', 'I', 'D' ),     /* (8) iTunes Playlist ID */
+    ITUNES_METADATA_TYPE_ITUNES_COUNTRY_CODE        = LSMASH_4CC( 's', 'f', 'I', 'D' ),     /* (4) iTunes Country Code */
+
+    /* Boolean type */
+    ITUNES_METADATA_TYPE_DISC_COMPILATION           = LSMASH_4CC( 'c', 'p', 'i', 'l' ),     /* Disc Compilation / Is disc part of a compilation? 0: No, 1: Yes */
+    ITUNES_METADATA_TYPE_HIGH_DEFINITION_VIDEO      = LSMASH_4CC( 'h', 'd', 'v', 'd' ),     /* High Definition Video / 0: No, 1: Yes */
+    ITUNES_METADATA_TYPE_PODCAST                    = LSMASH_4CC( 'p', 'c', 's', 't' ),     /* Podcast / 0: No, 1: Yes */
+    ITUNES_METADATA_TYPE_GAPLESS_PLAYBACK           = LSMASH_4CC( 'p', 'g', 'a', 'p' ),     /* Gapless Playback / 0: insert gap, 1: no gap */
+
+    /* Binary type */
+    ITUNES_METADATA_TYPE_COVER_ART                  = LSMASH_4CC( 'c', 'o', 'v', 'r' ),     /* One or more cover art images */
+    ITUNES_METADATA_TYPE_DISC_NUMBER                = LSMASH_4CC( 'd', 'i', 's', 'k' ),     /* Disc Number */
+    ITUNES_METADATA_TYPE_TRACH_NUMBER               = LSMASH_4CC( 't', 'r', 'k', 'n' ),     /* Track Number */
+
+    /* Custom type */
+    ITUNES_METADATA_TYPE_CUSTOM                     = LSMASH_4CC( '-', '-', '-', '-' ),     /* Custom */
+} lsmash_itunes_metadata_type;
 
 /* public data types */
 typedef struct
@@ -1142,7 +1003,17 @@ typedef struct
     uint32_t identifier;    /* the identifier for samples
                              * If this identifier equals a certain identifier of recovery point,
                              * then this sample is the recovery point of the earliest group in the pool. */
-} lsmash_recovery_t;
+} lsmash_post_roll_t;
+
+typedef struct
+{
+    uint16_t distance;      /* pre-roll distance for representing audio decoder delay derived from composition
+                             * For example, typical AAC encoding uses a transform over consecutive sets of 2048 audio samples,
+                             * applied every 1024 audio samples (MDCTs are overlapped).
+                             * For correct audio to be decoded, both transforms for any period of 1024 audio samples are needed.
+                             * For this AAC stream, therefore, shall be set to 1 (one AAC access unit).
+                             * Note: the number of priming audio sample i.e. encoder delay shall be represented by media_time in edit. */
+} lsmash_pre_roll_t;
 
 typedef struct
 {
@@ -1152,7 +1023,8 @@ typedef struct
     uint8_t disposable;
     uint8_t redundant;
     lsmash_random_access_type random_access_type;
-    lsmash_recovery_t recovery;
+    lsmash_post_roll_t        post_roll;
+    lsmash_pre_roll_t         pre_roll;
 } lsmash_sample_property_t;
 
 typedef struct
@@ -1165,6 +1037,19 @@ typedef struct
     lsmash_sample_property_t prop;
 } lsmash_sample_t;
 
+typedef struct
+{
+    uint64_t dts;
+    uint64_t cts;
+} lsmash_media_ts_t;
+
+typedef struct
+{
+    uint32_t sample_count;
+    lsmash_media_ts_t *timestamp;
+} lsmash_media_ts_list_t;
+
+/* */
 typedef int (*lsmash_adhoc_remux_callback)( void* param, uint64_t done, uint64_t total );
 typedef struct {
     uint64_t buffer_size;
@@ -1176,6 +1061,7 @@ typedef struct {
 /* NOTE: For audio, currently assuming AAC-LC. */
 
 #define LSMASH_BASE_SUMMARY \
+    lsmash_codec_type sample_type;      /* Codec type */ \
     lsmash_mp4sys_object_type_indication object_type_indication; \
     lsmash_mp4sys_stream_type stream_type; \
     void *exdata;               /* typically payload of DecoderSpecificInfo (that's called AudioSpecificConfig in mp4a) */ \
@@ -1190,17 +1076,16 @@ typedef struct
 typedef struct
 {
     LSMASH_BASE_SUMMARY
-    // mp4a_audioProfileLevelIndication pli ; /* I wonder we should have this or not. */
-    uint32_t sample_type;               /* Audio codec type. */
-    lsmash_mp4a_AudioObjectType aot;    /* Detailed codec type. If not mp4a, just ignored. */
-    uint32_t frequency;                 /* Even if the stream is HE-AAC v1/SBR, this is base AAC's one. */
-    uint32_t channels;                  /* Even if the stream is HE-AAC v2/SBR+PS, this is base AAC's one. */
-    uint32_t bit_depth;                 /* If AAC, AAC stream itself does not mention to accuracy (bit_depth of decoded PCM data), we assume 16bit. */
-    uint32_t samples_in_frame;          /* Even if the stream is HE-AAC/aacPlus/SBR(+PS), this is base AAC's one, so 1024. */
-    lsmash_mp4a_aac_sbr_mode sbr_mode;  /* SBR treatment. Currently we always set this as mp4a_AAC_SBR_NOT_SPECIFIED(Implicit signaling).
-                                         * User can set this for treatment in other way. */
-    lsmash_channel_layout_tag_code layout_tag;  /* channel layout */
-    lsmash_channel_bitmap_code bitmap;          /* Only available when layout_tag is set to QT_CHANNEL_LAYOUT_USE_CHANNEL_BITMAP. */
+    // mp4a_audioProfileLevelIndication pli;   /* I wonder we should have this or not. */
+    lsmash_mp4a_AudioObjectType aot;        /* Detailed codec type. If not mp4a, just ignored. */
+    uint32_t frequency;                     /* Even if the stream is HE-AAC v1/SBR, this is base AAC's one. */
+    uint32_t channels;                      /* Even if the stream is HE-AAC v2/SBR+PS, this is base AAC's one. */
+    uint32_t bit_depth;                     /* If AAC, AAC stream itself does not mention to accuracy (bit_depth of decoded PCM data), we assume 16bit. */
+    uint32_t samples_in_frame;              /* Even if the stream is HE-AAC/aacPlus/SBR(+PS), this is base AAC's one, so 1024. */
+    lsmash_mp4a_aac_sbr_mode sbr_mode;      /* SBR treatment. Currently we always set this as mp4a_AAC_SBR_NOT_SPECIFIED(Implicit signaling).
+                                             * User can set this for treatment in other way. */
+    lsmash_channel_layout_tag layout_tag;   /* channel layout */
+    lsmash_channel_bitmap bitmap;           /* Only available when layout_tag is set to QT_CHANNEL_LAYOUT_USE_CHANNEL_BITMAP. */
     /* LPCM descriptions */
     uint8_t sample_format;      /* 0: integer, 1: floating point */
     uint8_t endianness;         /* 0: big endian, 1: little endian */
@@ -1213,17 +1098,24 @@ typedef struct
 typedef struct
 {
     LSMASH_BASE_SUMMARY
-    // mp4sys_visualProfileLevelIndication pli ; /* I wonder we should have this or not. */
-    // lsmash_mp4v_VideoObjectType vot;    /* Detailed codec type. If not mp4v, just ignored. */
-    uint32_t width;                                 /* pixel counts of width samples have */
-    uint32_t height;                                /* pixel counts of height samples have */
+    // mp4sys_visualProfileLevelIndication pli;    /* I wonder we should have this or not. */
+    // lsmash_mp4v_VideoObjectType vot;            /* Detailed codec type. If not mp4v, just ignored. */
+    uint32_t timescale;                         /* media timescale
+                                                 * User can't set this parameter manually. */
+    uint32_t timebase;                          /* increment unit of timestamp
+                                                 * User can't set this parameter manually. */
+    uint8_t vfr;                                /* whether a stream is assumed as variable frame rate
+                                                 * User can't set this parameter manually. */
+    uint8_t full_range;
+    uint32_t width;                             /* pixel counts of width samples have */
+    uint32_t height;                            /* pixel counts of height samples have */
     uint32_t crop_top;
     uint32_t crop_left;
     uint32_t crop_bottom;
     uint32_t crop_right;
-    uint32_t par_h;                                 /* horizontal factor of pixel aspect ratio */
-    uint32_t par_v;                                 /* vertical factor of pixel aspect ratio */
-    lsmash_scaling_method_code scaling_method;      /* If not set, video samples are scaled into the visual presentation region to fill it. */
+    uint32_t par_h;                             /* horizontal factor of pixel aspect ratio */
+    uint32_t par_v;                             /* vertical factor of pixel aspect ratio */
+    lsmash_scaling_method scaling_method;       /* If not set, video samples are scaled into the visual presentation region to fill it. */
     lsmash_color_parameter primaries;
     lsmash_color_parameter transfer;
     lsmash_color_parameter matrix;
@@ -1231,61 +1123,96 @@ typedef struct
 
 typedef struct
 {
-    uint32_t timescale;             /* media timescale: timescale for this media */
-    uint32_t handler_type;          /* the nature of the media
-                                     * You can't change handler_type through this parameter manually. */
-    uint64_t duration;              /* the duration of this media, expressed in the media timescale
-                                     * You can't set this parameter manually. */
+    lsmash_media_type handler_type;     /* the nature of the media
+                                         * You can't change handler_type through this parameter manually. */
+    uint32_t timescale;                 /* media timescale: timescale for this media */
+    uint64_t duration;                  /* the duration of this media, expressed in the media timescale
+                                         * You can't set this parameter manually. */
+    uint8_t  roll_grouping;             /* roll recovery grouping present
+                                         * Require 'avc1' brand, or ISO Base Media File Format version 2 or later. */
+    uint8_t  rap_grouping;              /* random access point grouping present
+                                         * Require ISO Base Media File Format version 6 or later. */
     /* Use either type of language code. */
-    uint16_t MAC_language;          /* Macintosh language code for this media */
-    char    *ISO_language;          /* ISO 639-2/T language code for this media */
+    uint16_t MAC_language;              /* Macintosh language code for this media */
+    uint16_t ISO_language;              /* ISO 639-2/T language code for this media */
     /* human-readable name for the track type (for debugging and inspection purposes) */
     char *media_handler_name;
     char *data_handler_name;
     /* Any user shouldn't use the following parameters. */
-    PRIVATE char language_shadow[4];
     PRIVATE char media_handler_name_shadow[256];
     PRIVATE char data_handler_name_shadow[256];
 } lsmash_media_parameters_t;
 
 typedef struct
 {
-    lsmash_track_mode_code mode;
-
+    lsmash_track_mode mode;
     uint32_t track_ID;              /* an integer that uniquely identifies the track
                                      * Don't set to value already used except for zero value.
                                      * Zero value don't override established track_ID. */
     uint64_t duration;              /* the duration of this track expressed in the movie timescale units
                                      * If there is any edit, your setting is ignored. */
-    int16_t  video_layer;           /* the front-to-back ordering of video tracks; tracks with lower numbers are closer to the viewer. */
     int16_t  alternate_group;       /* an integer that specifies a group or collection of tracks
                                      * If this field is not 0, it should be the same for tracks that contain alternate data for one another
                                      * and different for tracks belonging to different such groups.
-                                     * Only one track within an alternate group should be played or streamed at any one time. */
+                                     * Only one track within an alternate group should be played or streamed at any one time.
+                                     * Note: alternate_group is ignored when a file is read as an MPEG-4. */
+    /* The following parameters are ignored when a file is read as an MPEG-4 or 3GPP file format. */
+    int16_t  video_layer;           /* the front-to-back ordering of video tracks; tracks with lower numbers are closer to the viewer. */
     int16_t  audio_volume;          /* fixed point 8.8 number. 0x0100 is full volume. */
-    uint32_t display_width;         /* visual presentation region size of horizontal direction as fixed point 16.16 number.  */
+    int32_t  matrix[9];             /* transformation matrix for the video
+                                     * Each value represents, in order, a, b, u, c, d, v, x, y and w.
+                                     * All the values in a matrix are stored as 16.16 fixed-point values,
+                                     * except for u, v and w, which are stored as 2.30 fixed-point values.
+                                     * Not all derived specifications use matrices.
+                                     * If a matrix is used, the point (p, q) is transformed into (p', q') using the matrix as follows:
+                                     *             | a b u |
+                                     * (p, q, 1) * | c d v | = z * (p', q', 1)
+                                     *             | x y w |
+                                     * p' = (a * p + c * q + x) / z; q' = (b * p + d * q + y) / z; z = u * p + v * q + w
+                                     * Note: transformation matrix is applied after scaling to display size up to display_width and display_height. */
+    /* visual presentation region size */
+    uint32_t display_width;         /* visual presentation region size of horizontal direction as fixed point 16.16 number. */
     uint32_t display_height;        /* visual presentation region size of vertical direction as fixed point 16.16 number. */
+    /* */
+    uint8_t  aperture_modes;        /* track aperture modes present
+                                     * This feature is only available under QuickTime file format.
+                                     * Automatically disabled if multiple sample description is present or scaling method is specified. */
 } lsmash_track_parameters_t;
 
 typedef struct
 {
-    double   max_chunk_duration;    /* max duration per chunk in seconds. 0.5 is default value. */
-    double   max_async_tolerance;   /* max tolerance, in seconds, for amount of interleaving asynchronization between tracks.
-                                     * 2.0 is default value. At least twice of max_chunk_duration is used. */
-    uint32_t timescale;             /* movie timescale: timescale for the entire presentation */
-    uint64_t duration;              /* the duration, expressed in movie timescale, of the longest track
-                                     * You can't set this parameter manually. */
-    int32_t  playback_rate;         /* fixed point 16.16 number. 0x00010000 is normal forward playback and default value. */
-    int32_t  playback_volume;       /* fixed point 8.8 number. 0x0100 is full volume and default value. */
-    int32_t  preview_time;          /* the time value in the movie at which the preview begins */
-    int32_t  preview_duration;      /* the duration of the movie preview in movie timescale units */
-    int32_t  poster_time;           /* the time value of the time of the movie poster */
-    uint32_t number_of_tracks;      /* the number of tracks in the movie
-                                     * You can't set this parameter manually. */
+    lsmash_brand_type  major_brand;         /* the best used brand */
+    lsmash_brand_type *brands;              /* the list of compatible brands */
+    uint32_t number_of_brands;              /* the number of compatible brands used in the movie */
+    uint32_t minor_version;                 /* minor version of best used brand */
+    double   max_chunk_duration;            /* max duration per chunk in seconds. 0.5 is default value. */
+    double   max_async_tolerance;           /* max tolerance, in seconds, for amount of interleaving asynchronization between tracks.
+                                             * 2.0 is default value. At least twice of max_chunk_duration is used. */
+    uint64_t max_chunk_size;                /* max size per chunk in bytes. 4*1024*1024 (4MiB) is default value. */
+    uint64_t max_read_size;                 /* max size of reading from a chunk at a time. 4*1024*1024 (4MiB) is default value. */
+    uint32_t timescale;                     /* movie timescale: timescale for the entire presentation */
+    uint64_t duration;                      /* the duration, expressed in movie timescale, of the longest track
+                                             * You can't set this parameter manually. */
+    uint32_t number_of_tracks;              /* the number of tracks in the movie
+                                             * You can't set this parameter manually. */
+    /* The following parameters are recognized only when a file is read as an Apple MPEG-4 or QuickTime file fromat. */
+    int32_t  playback_rate;                 /* fixed point 16.16 number. 0x00010000 is normal forward playback and default value. */
+    int32_t  playback_volume;               /* fixed point 8.8 number. 0x0100 is full volume and default value. */
+    int32_t  preview_time;                  /* the time value in the movie at which the preview begins */
+    int32_t  preview_duration;              /* the duration of the movie preview in movie timescale units */
+    int32_t  poster_time;                   /* the time value of the time of the movie poster */
+    /* Any user shouldn't use the following parameter. */
+    PRIVATE lsmash_brand_type brands_shadow[50];
 } lsmash_movie_parameters_t;
 
-typedef struct lsmash_root_tag lsmash_root_t;
+typedef enum
+{
+    LSMASH_BOOLEAN_FALSE = 0,
+    LSMASH_BOOLEAN_TRUE  = 1
+} lsmash_boolean_t;
 
+typedef struct lsmash_root_tag lsmash_root_t;
+typedef void lsmash_itunes_metadata_list_t;
 
 /* public functions */
 int lsmash_add_sps_entry( lsmash_root_t *root, uint32_t track_ID, uint32_t entry_number, uint8_t *sps, uint32_t sps_size );
@@ -1296,44 +1223,43 @@ int lsmash_add_sample_entry( lsmash_root_t *root, uint32_t track_ID, uint32_t sa
 int lsmash_add_btrt( lsmash_root_t *root, uint32_t track_ID, uint32_t entry_number );
 int lsmash_add_free( lsmash_root_t *root, uint8_t *data, uint64_t data_length );
 
-int lsmash_write_ftyp( lsmash_root_t *root );
 int lsmash_write_free( lsmash_root_t *root );
 
-uint32_t lsmash_get_media_timescale( lsmash_root_t *root, uint32_t track_ID );
 uint64_t lsmash_get_media_duration( lsmash_root_t *root, uint32_t track_ID );
 uint64_t lsmash_get_track_duration( lsmash_root_t *root, uint32_t track_ID );
 uint32_t lsmash_get_last_sample_delta( lsmash_root_t *root, uint32_t track_ID );
 uint32_t lsmash_get_start_time_offset( lsmash_root_t *root, uint32_t track_ID );
+uint32_t lsmash_get_composition_to_decode_shift( lsmash_root_t *root, uint32_t track_ID );
+uint32_t lsmash_get_media_timescale( lsmash_root_t *root, uint32_t track_ID );
 uint32_t lsmash_get_movie_timescale( lsmash_root_t *root );
 
-int lsmash_set_brands( lsmash_root_t *root, lsmash_brand_type_code major_brand, uint32_t minor_version, lsmash_brand_type_code *brands, uint32_t brand_count );
-int lsmash_set_track_aperture_modes( lsmash_root_t *root, uint32_t track_ID, uint32_t entry_number );
 int lsmash_set_avc_config( lsmash_root_t *root, uint32_t track_ID, uint32_t entry_number,
                            uint8_t configurationVersion, uint8_t AVCProfileIndication, uint8_t profile_compatibility,
                            uint8_t AVCLevelIndication, uint8_t lengthSizeMinusOne,
                            uint8_t chroma_format, uint8_t bit_depth_luma_minus8, uint8_t bit_depth_chroma_minus8 );
 int lsmash_set_last_sample_delta( lsmash_root_t *root, uint32_t track_ID, uint32_t sample_delta );
 int lsmash_set_free( lsmash_root_t *root, uint8_t *data, uint64_t data_length );
-int lsmash_set_tyrant_chapter( lsmash_root_t *root, char *file_name );
+int lsmash_set_tyrant_chapter( lsmash_root_t *root, char *file_name, int add_bom );
 
-int lsmash_create_explicit_timeline_map( lsmash_root_t *root, uint32_t track_ID, uint64_t segment_duration, int64_t media_time, int32_t media_rate );
 int lsmash_create_reference_chapter_track( lsmash_root_t *root, uint32_t track_ID, char *file_name );
-int lsmash_create_grouping( lsmash_root_t *root, uint32_t track_ID, lsmash_grouping_type_code grouping_type );
 int lsmash_create_object_descriptor( lsmash_root_t *root );
 
-int lsmash_modify_timeline_map( lsmash_root_t *root, uint32_t track_ID, uint32_t entry_number, uint64_t segment_duration, int64_t media_time, int32_t media_rate );
+int lsmash_create_explicit_timeline_map( lsmash_root_t *root, uint32_t track_ID, uint64_t segment_duration, int64_t media_time, int32_t media_rate );
+int lsmash_modify_explicit_timeline_map( lsmash_root_t *root, uint32_t track_ID, uint32_t entry_number, uint64_t segment_duration, int64_t media_time, int32_t media_rate );
+int lsmash_delete_explicit_timeline_map( lsmash_root_t *root, uint32_t track_ID );
 
 int lsmash_update_media_modification_time( lsmash_root_t *root, uint32_t track_ID );
 int lsmash_update_track_modification_time( lsmash_root_t *root, uint32_t track_ID );
 int lsmash_update_movie_modification_time( lsmash_root_t *root );
 int lsmash_update_track_duration( lsmash_root_t *root, uint32_t track_ID, uint32_t last_sample_delta );
 
+uint16_t lsmash_pack_iso_language( char *iso_language );
 
-lsmash_root_t *lsmash_open_movie( const char *filename, lsmash_file_mode_code mode );
+lsmash_root_t *lsmash_open_movie( const char *filename, lsmash_file_mode mode );
 void lsmash_initialize_movie_parameters( lsmash_movie_parameters_t *param );
 int lsmash_set_movie_parameters( lsmash_root_t *root, lsmash_movie_parameters_t *param );
 int lsmash_get_movie_parameters( lsmash_root_t *root, lsmash_movie_parameters_t *param );
-uint32_t lsmash_create_track( lsmash_root_t *root, uint32_t handler_type );
+uint32_t lsmash_create_track( lsmash_root_t *root, lsmash_media_type media_type );
 uint32_t lsmash_get_track_ID( lsmash_root_t *root, uint32_t track_number );
 void lsmash_initialize_track_parameters( lsmash_track_parameters_t *param );
 int lsmash_set_track_parameters( lsmash_root_t *root, uint32_t track_ID, lsmash_track_parameters_t *param );
@@ -1347,27 +1273,65 @@ void lsmash_delete_sample( lsmash_sample_t *sample );
 int lsmash_append_sample( lsmash_root_t *root, uint32_t track_ID, lsmash_sample_t *sample );
 int lsmash_flush_pooled_samples( lsmash_root_t *root, uint32_t track_ID, uint32_t last_sample_delta );
 int lsmash_finish_movie( lsmash_root_t *root, lsmash_adhoc_remux_t* remux );
+void lsmash_discard_boxes( lsmash_root_t *root );
 void lsmash_destroy_root( lsmash_root_t *root );
 
 int lsmash_create_fragment_movie( lsmash_root_t *root );
 int lsmash_create_fragment_empty_duration( lsmash_root_t *root, uint32_t track_ID, uint32_t duration );
 
 void lsmash_delete_track( lsmash_root_t *root, uint32_t track_ID );
-void lsmash_delete_explicit_timeline_map( lsmash_root_t *root, uint32_t track_ID );
 void lsmash_delete_tyrant_chapter( lsmash_root_t *root );
+
+/* track_ID == 0 means copyright declaration applies to the entire presentation, not an entire track. */
+int lsmash_set_copyright( lsmash_root_t *root, uint32_t track_ID, uint16_t ISO_language, char *notice );
+
+/* When type is specified as ITUNES_METADATA_TYPE_CUSTOM, meaning is mandatory while name is optionally valid.
+ * Otherwise, meaning and name are just ignored. */
+int lsmash_set_itunes_metadata_string( lsmash_root_t *root, lsmash_itunes_metadata_type type, char *value, char *meaning, char *name );
+int lsmash_set_itunes_metadata_integer( lsmash_root_t *root, lsmash_itunes_metadata_type type, uint64_t value, char *meaning, char *name );
+int lsmash_set_itunes_metadata_boolean( lsmash_root_t *root, lsmash_itunes_metadata_type type, lsmash_boolean_t value, char *meaning, char *name );
 
 #ifdef LSMASH_DEMUXER_ENABLED
 int lsmash_print_movie( lsmash_root_t *root );
+
+/* This function might output BOM on Windows. Make sure that this is the first function that outputs something to stdout. */
+int lsmash_print_chapter_list( lsmash_root_t *root );
+
+int lsmash_copy_timeline_map( lsmash_root_t *dst, uint32_t dst_track_ID, lsmash_root_t *src, uint32_t src_track_ID );
+int lsmash_copy_decoder_specific_info( lsmash_root_t *dst, uint32_t dst_track_ID, lsmash_root_t *src, uint32_t src_track_ID );
+int lsmash_construct_timeline( lsmash_root_t *root, uint32_t track_ID );
+void lsmash_destruct_timeline( lsmash_root_t *root, uint32_t track_ID );
+int lsmash_get_last_sample_delta_from_media_timeline( lsmash_root_t *root, uint32_t track_ID, uint32_t *last_sample_delta );
+int lsmash_get_sample_delta_from_media_timeline( lsmash_root_t *root, uint32_t track_ID, uint32_t sample_number, uint32_t *sample_delta );
+int lsmash_get_dts_from_media_timeline( lsmash_root_t *root, uint32_t track_ID, uint32_t sample_number, uint64_t *dts );
+int lsmash_get_cts_from_media_timeline( lsmash_root_t *root, uint32_t track_ID, uint32_t sample_number, uint64_t *cts );
+int lsmash_get_composition_to_decode_shift_from_media_timeline( lsmash_root_t *root, uint32_t track_ID, uint32_t *ctd_shift );
+int lsmash_get_closest_random_accessible_point_from_media_timeline( lsmash_root_t *root, uint32_t track_ID, uint32_t sample_number, uint32_t *rap_number );
+int lsmash_get_closest_random_accessible_point_detail_from_media_timeline( lsmash_root_t *root, uint32_t track_ID, uint32_t sample_number,
+                                                                           uint32_t *rap_number, lsmash_random_access_type *type, uint32_t *leading, uint32_t *distance );
+uint32_t lsmash_get_sample_count_in_media_timeline( lsmash_root_t *root, uint32_t track_ID );
+uint32_t lsmash_get_max_sample_size_in_media_timeline( lsmash_root_t *root, uint32_t track_ID );
+lsmash_sample_t *lsmash_get_sample_from_media_timeline( lsmash_root_t *root, uint32_t track_ID, uint32_t sample_number );
+int lsmash_check_sample_existence_in_media_timeline( lsmash_root_t *root, uint32_t track_ID, uint32_t sample_number );
+
+lsmash_itunes_metadata_list_t *lsmash_export_itunes_metadata( lsmash_root_t *root );
+int lsmash_import_itunes_metadata( lsmash_root_t *root, lsmash_itunes_metadata_list_t *list );
+void lsmash_destroy_itunes_metadata( lsmash_itunes_metadata_list_t *list );
+
+int lsmash_set_media_timestamps( lsmash_root_t *root, uint32_t track_ID, lsmash_media_ts_list_t *ts_list );
+int lsmash_get_media_timestamps( lsmash_root_t *root, uint32_t track_ID, lsmash_media_ts_list_t *ts_list );
+void lsmash_delete_media_timestamps( lsmash_media_ts_list_t *ts_list );
+int lsmash_get_max_sample_delay( lsmash_media_ts_list_t *ts_list, uint32_t *max_sample_delay );
+void lsmash_sort_timestamps_decoding_order( lsmash_media_ts_list_t *ts_list );
+void lsmash_sort_timestamps_composition_order( lsmash_media_ts_list_t *ts_list );
 #endif
 
 /* to facilitate to make exdata (typically DecoderSpecificInfo or AudioSpecificConfig). */
 int lsmash_setup_AudioSpecificConfig( lsmash_audio_summary_t* summary );
-int lsmash_summary_add_exdata( lsmash_audio_summary_t* summary, void* exdata, uint32_t exdata_length );
+int lsmash_summary_add_exdata( lsmash_summary_t *summary, void* exdata, uint32_t exdata_length );
 
-/* FIXME: these functions may change in the future.
-   I wonder these functions should be for generic (not limited to audio) summary. */
-lsmash_audio_summary_t* lsmash_create_audio_summary();
-void lsmash_cleanup_audio_summary( lsmash_audio_summary_t* summary );
+lsmash_summary_t *lsmash_create_summary( lsmash_mp4sys_stream_type stream_type );
+void lsmash_cleanup_summary( lsmash_summary_t *summary );
 
 #undef PRIVATE
 

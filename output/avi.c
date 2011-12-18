@@ -130,7 +130,7 @@ static int set_param( hnd_t handle, x264_param_t *p_param )
     if( !h->mux_fc || h->video_stm )
         return -1;
 
-    h->video_stm = av_new_stream( h->mux_fc, 0 );
+    h->video_stm = avformat_new_stream( h->mux_fc, NULL );
     if( !h->video_stm )
         return -1;
 
@@ -145,9 +145,7 @@ static int set_param( hnd_t handle, x264_param_t *p_param )
     c->codec_id = CODEC_ID_H264;
     c->codec_tag = MKTAG('H','2','6','4');
 
-    if( av_set_parameters( h->mux_fc, NULL ) < 0 )
-        return -1;
-    if( !(c->flags & CODEC_FLAG_GLOBAL_HEADER) && av_write_header( h->mux_fc ) )
+    if( !(c->flags & CODEC_FLAG_GLOBAL_HEADER) && avformat_write_header( h->mux_fc, NULL ) )
         return -1;
 
     return 0;
@@ -201,7 +199,7 @@ static int write_headers( hnd_t handle, x264_nal_t *p_nal )
         /* Write the SEI as part of the first frame */
         if( write_buffer( h, p_nal[2].p_payload, p_nal[2].i_payload ) < 0 )
             return -1;
-        if( av_write_header( h->mux_fc ) )
+        if( avformat_write_header( h->mux_fc, NULL ) )
             return -1;
     }
     else

@@ -108,6 +108,15 @@ const char * const muxer_names[] =
 
 const char * const log_level_names[] = { "none", "error", "warning", "info", "debug", NULL };
 
+const char * const range_names[] = { "auto", "tv", "pc", 0 };
+
+typedef enum
+{
+    RANGE_AUTO = -1,
+    RANGE_TV,
+    RANGE_PC
+} range_enum;
+
 /* Return a valid x264 colorspace or X264VFW_CSP_NONE if it is not supported */
 static int get_csp(BITMAPINFOHEADER *hdr)
 {
@@ -348,7 +357,7 @@ static void x264vfw_log_internal(CODEC *codec, const char *name, int i_level, co
     sprintf(msg, "%s [%s]: ", name, s_level);
     vsprintf(msg + strlen(msg), psz_fmt, arg);
 
-    DPRINTF(msg);
+    DPRINTF("%s", msg);
 
     if (codec && codec->hCons)
     {
@@ -426,7 +435,7 @@ static void x264vfw_log_callback(void *p_private, int i_level, const char *psz_f
     x264vfw_log_internal(p_private, "x264vfw", i_level, psz_fmt, arg);
 }
 
-enum
+typedef enum
 {
     OPT_FRAMES = 256,
     OPT_SEEK,
@@ -453,6 +462,8 @@ enum
     OPT_PULLDOWN,
     OPT_LOG_LEVEL,
     OPT_DTS_COMPRESSION,
+    OPT_OUTPUT_CSP,
+    OPT_RANGE,
 #if X264VFW_USE_VIRTUALDUB_HACK
     OPT_VD_HACK,
 #endif
@@ -571,6 +582,7 @@ static struct option long_options[] =
     { "sync-lookahead",    required_argument, NULL, 0                   },
     { "deterministic",     no_argument,       NULL, 0                   },
     { "non-deterministic", no_argument,       NULL, 0                   },
+    { "cpu-independent",   no_argument,       NULL, 0                   },
     { "psnr",              no_argument,       NULL, 0                   },
     { "no-psnr",           no_argument,       NULL, 0                   },
     { "ssim",              no_argument,       NULL, 0                   },
@@ -600,7 +612,7 @@ static struct option long_options[] =
     { "cqm8p",             required_argument, NULL, 0                   },
     { "overscan",          required_argument, NULL, 0                   },
     { "videoformat",       required_argument, NULL, 0                   },
-    { "fullrange",         required_argument, NULL, 0                   },
+    { "range",             required_argument, NULL, OPT_RANGE           },
     { "colorprim",         required_argument, NULL, 0                   },
     { "transfer",          required_argument, NULL, 0                   },
     { "colormatrix",       required_argument, NULL, 0                   },
@@ -616,6 +628,7 @@ static struct option long_options[] =
     { "fake-interlaced",   no_argument,       NULL, 0                   },
     { "frame-packing",     required_argument, NULL, 0                   },
     { "dts-compress",      no_argument,       NULL, OPT_DTS_COMPRESSION },
+    { "output-csp",        required_argument, NULL, OPT_OUTPUT_CSP      },
 #if X264VFW_USE_VIRTUALDUB_HACK
     { "vd-hack",           no_argument,       NULL, OPT_VD_HACK         },
 #endif
@@ -871,6 +884,7 @@ static int parse_cmdline(int argc, char **argv, x264_param_t *param, CODEC *code
             case OPT_TCFILE_OUT:
             case OPT_TIMEBASE:
             case OPT_PULLDOWN:
+            case OPT_OUTPUT_CSP:
                 x264vfw_log(codec, X264_LOG_WARNING, "not supported option: '%s'\n", argv[checked_optind]);
                 break;
 
@@ -933,6 +947,15 @@ static int parse_cmdline(int argc, char **argv, x264_param_t *param, CODEC *code
 
             case OPT_NO_OUTPUT:
                 codec->b_no_output = TRUE;
+                break;
+
+            case OPT_RANGE:
+                if (parse_enum_value(optarg, range_names, &param->vui.b_fullrange) < 0)
+                {
+                    x264vfw_log(codec, X264_LOG_ERROR, "unknown range '%s'\n", optarg);
+                    return -1;
+                }
+                param->vui.b_fullrange += RANGE_AUTO;
                 break;
 
             default:
@@ -1060,6 +1083,9 @@ LRESULT compress_begin(CODEC *codec, BITMAPINFO *lpbiInput, BITMAPINFO *lpbiOutp
         x264vfw_log(codec, X264_LOG_ERROR, "x264_param_default_preset failed\n");
         goto fail;
     }
+    /* Set VFW defaults for colorspace options */
+    param.vui.b_fullrange = 0; /* tv range */
+    param.vui.i_colmatrix = 2; /* undef */
 
     /* Video Properties */
     param.i_width  = lpbiInput->bmiHeader.biWidth;
@@ -1164,6 +1190,10 @@ LRESULT compress_begin(CODEC *codec, BITMAPINFO *lpbiInput, BITMAPINFO *lpbiOutp
     param.b_vfr_input = 0;
     param.i_timebase_num = param.i_fps_den;
     param.i_timebase_den = param.i_fps_num;
+    /* VFW currently support only YUV 4:2:0 output so explicitly change auto values for x264vfw_csp_init */
+    param.vui.b_fullrange = param.vui.b_fullrange == RANGE_PC;
+    if (param.vui.i_colmatrix < 0)
+        param.vui.i_colmatrix = 2; /* undef */
 
     /* If "1st pass (fast)" mode or --fast-firstpass is used, apply faster settings. */
     if (codec->b_fast1pass)
@@ -1613,7 +1643,7 @@ LRESULT decompress_begin(CODEC *codec, BITMAPINFO *lpbiInput, BITMAPINFO *lpbiOu
         return ICERR_ERROR;
     }
 
-    codec->decoder_context = avcodec_alloc_context();
+    codec->decoder_context = avcodec_alloc_context3(codec->decoder);
     if (!codec->decoder_context)
     {
         x264vfw_log(codec, X264_LOG_DEBUG, "avcodec_alloc_context failed\n");
@@ -1628,6 +1658,7 @@ LRESULT decompress_begin(CODEC *codec, BITMAPINFO *lpbiInput, BITMAPINFO *lpbiOu
         return ICERR_ERROR;
     }
 
+    codec->decoder_context->thread_count = 1; //minimize latency
     codec->decoder_context->coded_width  = lpbiInput->bmiHeader.biWidth;
     codec->decoder_context->coded_height = lpbiInput->bmiHeader.biHeight;
     codec->decoder_context->codec_tag = lpbiInput->bmiHeader.biCompression;
@@ -1652,7 +1683,7 @@ LRESULT decompress_begin(CODEC *codec, BITMAPINFO *lpbiInput, BITMAPINFO *lpbiOu
         }
     }
 
-    if (avcodec_open(codec->decoder_context, codec->decoder) < 0)
+    if (avcodec_open2(codec->decoder_context, codec->decoder, NULL) < 0)
     {
         x264vfw_log(codec, X264_LOG_DEBUG, "avcodec_open failed\n");
         av_freep(&codec->decoder_context);
@@ -1816,7 +1847,6 @@ LRESULT decompress(CODEC *codec, ICDECOMPRESS *icd)
 
     if (!codec->sws)
     {
-        int cpu_flags = av_get_cpu_flags();
         int flags = SWS_BICUBIC |
                     SWS_FULL_CHR_H_INP | SWS_ACCURATE_RND;
         int width = codec->decoder_context->width;
@@ -1829,13 +1859,6 @@ LRESULT decompress(CODEC *codec, ICDECOMPRESS *icd)
         /* SWS_FULL_CHR_H_INT is correctly supported only for RGB formats */
         if (codec->decoder_pix_fmt == PIX_FMT_BGR24 || codec->decoder_pix_fmt == PIX_FMT_BGRA)
             flags |= SWS_FULL_CHR_H_INT;
-        /* Set flags according to runtime CPU detection */
-        if (cpu_flags & AV_CPU_FLAG_MMX)
-            flags |= SWS_CPU_CAPS_MMX;
-        if (cpu_flags & AV_CPU_FLAG_MMX2)
-            flags |= SWS_CPU_CAPS_MMX2;
-        if (cpu_flags & AV_CPU_FLAG_SSE2)
-            flags |= SWS_CPU_CAPS_SSE2;
         codec->sws = sws_getContext(width, height, codec->decoder_context->pix_fmt,
                                     inhdr->biWidth, inhdr->biHeight, codec->decoder_pix_fmt,
                                     flags, NULL, NULL, NULL);

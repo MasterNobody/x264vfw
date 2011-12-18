@@ -94,7 +94,6 @@ LRESULT WINAPI attribute_align_arg DriverProc(DWORD_PTR dwDriverId, HDRVR hDrive
     {
         case DRV_LOAD:
 #if defined(HAVE_FFMPEG)
-            avcodec_init();
             avcodec_register_all();
             av_log_set_callback(log_callback);
 #endif
