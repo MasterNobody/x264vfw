@@ -1,7 +1,7 @@
 /*****************************************************************************
  * codec.c: main encoding/decoding functions
  *****************************************************************************
- * Copyright (C) 2003-2011 x264vfw project
+ * Copyright (C) 2003-2012 x264vfw project
  *
  * Authors: Justin Clay
  *          Laurent Aimar <fenrir@via.ecp.fr>
@@ -30,7 +30,7 @@
 #define _GNU_SOURCE
 #include <getopt.h>
 
-const named_str_t preset_table[COUNT_PRESET] =
+const named_str_t x264vfw_preset_table[COUNT_PRESET] =
 {
     { "Ultrafast", "ultrafast" },
     { "Superfast", "superfast" },
@@ -44,7 +44,7 @@ const named_str_t preset_table[COUNT_PRESET] =
     { "Placebo",   "placebo"   }
 };
 
-const named_str_t tune_table[COUNT_TUNE] =
+const named_str_t x264vfw_tune_table[COUNT_TUNE] =
 {
     { "None",        ""           },
     { "Film",        "film"       },
@@ -55,7 +55,7 @@ const named_str_t tune_table[COUNT_TUNE] =
     { "SSIM",        "ssim"       }
 };
 
-const named_str_t profile_table[COUNT_PROFILE] =
+const named_str_t x264vfw_profile_table[COUNT_PROFILE] =
 {
     { "Auto",     ""         },
     { "Baseline", "baseline" },
@@ -63,7 +63,7 @@ const named_str_t profile_table[COUNT_PROFILE] =
     { "High",     "high"     }
 };
 
-const named_int_t level_table[COUNT_LEVEL] =
+const named_int_t x264vfw_level_table[COUNT_LEVEL] =
 {
     { "Auto", -1 },
     { "1.0",  10 },
@@ -84,7 +84,7 @@ const named_int_t level_table[COUNT_LEVEL] =
     { "5.1",  51 }
 };
 
-const named_fourcc_t fourcc_table[COUNT_FOURCC] =
+const named_fourcc_t x264vfw_fourcc_table[COUNT_FOURCC] =
 {
     { "H264", mmioFOURCC('H','2','6','4') },
     { "h264", mmioFOURCC('h','2','6','4') },
@@ -95,7 +95,7 @@ const named_fourcc_t fourcc_table[COUNT_FOURCC] =
     { "VSSH", mmioFOURCC('V','S','S','H') }
 };
 
-const char * const muxer_names[] =
+const char * const x264vfw_muxer_names[] =
 {
     "auto",
     "raw",
@@ -106,9 +106,9 @@ const char * const muxer_names[] =
     NULL
 };
 
-const char * const log_level_names[] = { "none", "error", "warning", "info", "debug", NULL };
+const char * const x264vfw_log_level_names[] = { "none", "error", "warning", "info", "debug", NULL };
 
-const char * const range_names[] = { "auto", "tv", "pc", 0 };
+const char * const x264vfw_range_names[] = { "auto", "tv", "pc", 0 };
 
 typedef enum
 {
@@ -230,13 +230,13 @@ static int supported_fourcc(DWORD fourcc)
 {
     int i;
     for (i = 0; i < COUNT_FOURCC; i++)
-        if (fourcc == fourcc_table[i].value)
+        if (fourcc == x264vfw_fourcc_table[i].value)
             return TRUE;
     return FALSE;
 }
 
 /* Return the output format of the compressed data */
-LRESULT compress_get_format(CODEC *codec, BITMAPINFO *lpbiInput, BITMAPINFO *lpbiOutput)
+LRESULT x264vfw_compress_get_format(CODEC *codec, BITMAPINFO *lpbiInput, BITMAPINFO *lpbiOutput)
 {
     BITMAPINFOHEADER *inhdr = &lpbiInput->bmiHeader;
     BITMAPINFOHEADER *outhdr = &lpbiOutput->bmiHeader;
@@ -265,21 +265,21 @@ LRESULT compress_get_format(CODEC *codec, BITMAPINFO *lpbiInput, BITMAPINFO *lpb
     outhdr->biPlanes      = 1;
     outhdr->biBitCount    = 24;
     outhdr->biCompression = config->i_fourcc >= 0 && config->i_fourcc < COUNT_FOURCC
-                            ? fourcc_table[config->i_fourcc].value
-                            : fourcc_table[0].value;
-    outhdr->biSizeImage   = compress_get_size(codec, lpbiInput, lpbiOutput);
+                            ? x264vfw_fourcc_table[config->i_fourcc].value
+                            : x264vfw_fourcc_table[0].value;
+    outhdr->biSizeImage   = x264vfw_compress_get_size(codec, lpbiInput, lpbiOutput);
 
     return ICERR_OK;
 }
 
 /* Return the maximum number of bytes a single compressed frame can occupy */
-LRESULT compress_get_size(CODEC *codec, BITMAPINFO *lpbiInput, BITMAPINFO *lpbiOutput)
+LRESULT x264vfw_compress_get_size(CODEC *codec, BITMAPINFO *lpbiInput, BITMAPINFO *lpbiOutput)
 {
     return ((lpbiOutput->bmiHeader.biWidth + 15) & ~15) * ((lpbiOutput->bmiHeader.biHeight + 31) & ~31) * 3 + 4096;
 }
 
 /* Test if the driver can compress a specific input format to a specific output format */
-LRESULT compress_query(CODEC *codec, BITMAPINFO *lpbiInput, BITMAPINFO *lpbiOutput)
+LRESULT x264vfw_compress_query(CODEC *codec, BITMAPINFO *lpbiInput, BITMAPINFO *lpbiOutput)
 {
     BITMAPINFOHEADER *inhdr = &lpbiInput->bmiHeader;
     BITMAPINFOHEADER *outhdr = &lpbiOutput->bmiHeader;
@@ -314,7 +314,7 @@ void x264vfw_log_create(CODEC *codec)
 {
     x264vfw_log_destroy(codec);
     if (codec->config.i_log_level > 0)
-        codec->hCons = CreateDialog(g_hInst, MAKEINTRESOURCE(IDD_LOG), GetDesktopWindow(), callback_log);
+        codec->hCons = CreateDialog(x264vfw_hInst, MAKEINTRESOURCE(IDD_LOG), GetDesktopWindow(), x264vfw_callback_log);
 }
 
 void x264vfw_log_destroy(CODEC *codec)
@@ -354,8 +354,9 @@ static void x264vfw_log_internal(CODEC *codec, const char *name, int i_level, co
             s_level = "unknown";
             break;
     }
-    sprintf(msg, "%s [%s]: ", name, s_level);
-    vsprintf(msg + strlen(msg), psz_fmt, arg);
+    memset(msg, 0, sizeof(msg));
+    snprintf(msg, sizeof(msg) - 1, "%s [%s]: ", name, s_level);
+    vsnprintf(msg + strlen(msg), sizeof(msg) - strlen(msg) - 1, psz_fmt, arg);
 
     DPRINTF("%s", msg);
 
@@ -893,7 +894,7 @@ static int parse_cmdline(int argc, char **argv, x264_param_t *param, CODEC *code
                 break;
 
             case OPT_MUXER:
-                if (parse_enum_name(optarg, muxer_names, &codec->cli_output_muxer) < 0)
+                if (parse_enum_name(optarg, x264vfw_muxer_names, &codec->cli_output_muxer) < 0)
                 {
                     x264vfw_log(codec, X264_LOG_ERROR, "unknown muxer '%s'\n", optarg);
                     return -1;
@@ -909,7 +910,7 @@ static int parse_cmdline(int argc, char **argv, x264_param_t *param, CODEC *code
                 break;
 
             case OPT_LOG_LEVEL:
-                if (!parse_enum_value(optarg, log_level_names, &param->i_log_level))
+                if (!parse_enum_value(optarg, x264vfw_log_level_names, &param->i_log_level))
                     param->i_log_level += X264_LOG_NONE;
                 else
                     param->i_log_level = atoi(optarg);
@@ -950,7 +951,7 @@ static int parse_cmdline(int argc, char **argv, x264_param_t *param, CODEC *code
                 break;
 
             case OPT_RANGE:
-                if (parse_enum_value(optarg, range_names, &param->vui.b_fullrange) < 0)
+                if (parse_enum_value(optarg, x264vfw_range_names, &param->vui.b_fullrange) < 0)
                 {
                     x264vfw_log(codec, X264_LOG_ERROR, "unknown range '%s'\n", optarg);
                     return -1;
@@ -1003,7 +1004,7 @@ generic_option:
 }
 
 /* Prepare to compress data */
-LRESULT compress_begin(CODEC *codec, BITMAPINFO *lpbiInput, BITMAPINFO *lpbiOutput)
+LRESULT x264vfw_compress_begin(CODEC *codec, BITMAPINFO *lpbiInput, BITMAPINFO *lpbiOutput)
 {
     CONFIG *config = &codec->config;
     char tune_buf[64];
@@ -1015,11 +1016,11 @@ LRESULT compress_begin(CODEC *codec, BITMAPINFO *lpbiInput, BITMAPINFO *lpbiOutp
     char stat_in[MAX_STATS_SIZE];
 
     /* Destroy previous handle */
-    compress_end(codec);
+    x264vfw_compress_end(codec);
     /* Create log window (or clear it) */
     x264vfw_log_create(codec);
 
-    if (compress_query(codec, lpbiInput, lpbiOutput) != ICERR_OK)
+    if (x264vfw_compress_query(codec, lpbiInput, lpbiOutput) != ICERR_OK)
     {
         x264vfw_log(codec, X264_LOG_ERROR, "incompatible input/output frame format (encode)\n");
         codec->b_encoder_error = TRUE;
@@ -1043,17 +1044,17 @@ LRESULT compress_begin(CODEC *codec, BITMAPINFO *lpbiInput, BITMAPINFO *lpbiOutp
 
     /* Preset/Tuning/Profile */
     codec->preset = config->i_preset >= 0 && config->i_preset < COUNT_PRESET
-                    ? preset_table[config->i_preset].value
+                    ? x264vfw_preset_table[config->i_preset].value
                     : NULL;
     if (codec->preset && !codec->preset[0])
         codec->preset = NULL;
     codec->profile = config->i_profile >= 0 && config->i_profile < COUNT_PROFILE
-                     ? profile_table[config->i_profile].value
+                     ? x264vfw_profile_table[config->i_profile].value
                      : NULL;
     if (codec->profile && !codec->profile[0])
         codec->profile = NULL;
     if (config->i_tuning >= 0 && config->i_tuning < COUNT_TUNE)
-        strcpy(tune_buf, tune_table[config->i_tuning].value);
+        strcpy(tune_buf, x264vfw_tune_table[config->i_tuning].value);
     else
         strcpy(tune_buf, "");
     if (config->b_fastdecode)
@@ -1102,7 +1103,7 @@ LRESULT compress_begin(CODEC *codec, BITMAPINFO *lpbiInput, BITMAPINFO *lpbiOutp
 
     /* Basic */
     param.i_level_idc = config->i_level >= 0 && config->i_level < COUNT_LEVEL
-                        ? level_table[config->i_level].value
+                        ? x264vfw_level_table[config->i_level].value
                         : -1;
 
     /* Rate control */
@@ -1166,7 +1167,7 @@ LRESULT compress_begin(CODEC *codec, BITMAPINFO *lpbiInput, BITMAPINFO *lpbiOutp
     /* Output */
     codec->b_cli_output = FALSE;
     codec->cli_output_file = config->i_output_mode == 1 ? config->output_file : "-";
-    codec->cli_output_muxer = muxer_names[0];
+    codec->cli_output_muxer = x264vfw_muxer_names[0];
     memset(&codec->cli_output_opt, 0, sizeof(cli_output_opt_t));
     codec->cli_output_opt.p_private = codec;
 
@@ -1297,7 +1298,7 @@ LRESULT compress_begin(CODEC *codec, BITMAPINFO *lpbiInput, BITMAPINFO *lpbiOutp
     return ICERR_OK;
 fail:
     codec->b_encoder_error = TRUE;
-    compress_end(codec);
+    x264vfw_compress_end(codec);
     return ICERR_ERROR;
 }
 
@@ -1343,7 +1344,7 @@ static int encode_frame(CODEC *codec, x264_picture_t *pic, x264_picture_t *pic_o
 }
 
 /* Compress a frame of data */
-LRESULT compress(CODEC *codec, ICCOMPRESS *icc)
+LRESULT x264vfw_compress(CODEC *codec, ICCOMPRESS *icc)
 {
     BITMAPINFOHEADER *inhdr = icc->lpbiInput;
     BITMAPINFOHEADER *outhdr = icc->lpbiOutput;
@@ -1480,7 +1481,7 @@ LRESULT compress(CODEC *codec, ICCOMPRESS *icc)
 }
 
 /* End compression and free resources allocated for compression */
-LRESULT compress_end(CODEC *codec)
+LRESULT x264vfw_compress_end(CODEC *codec)
 {
     if (codec->h)
     {
@@ -1516,7 +1517,7 @@ LRESULT compress_end(CODEC *codec)
 }
 
 /* Set the parameters for the pending compression */
-LRESULT compress_frames_info(CODEC *codec, ICCOMPRESSFRAMES *icf)
+LRESULT x264vfw_compress_frames_info(CODEC *codec, ICCOMPRESSFRAMES *icf)
 {
     codec->i_frame_total = icf->lFrameCount;
     codec->i_fps_num = icf->dwRate;
@@ -1525,16 +1526,16 @@ LRESULT compress_frames_info(CODEC *codec, ICCOMPRESSFRAMES *icf)
 }
 
 /* Set the parameters for the pending compression (default values for buggy applications which don't send ICM_COMPRESS_FRAMES_INFO) */
-void default_compress_frames_info(CODEC *codec)
+void x264vfw_default_compress_frames_info(CODEC *codec)
 {
-    /* Zero values are correct (they will be checked in compress_begin) */
+    /* Zero values are correct (they will be checked in x264vfw_compress_begin) */
     codec->i_frame_total = 0;
     codec->i_fps_num = 0;
     codec->i_fps_den = 0;
 }
 
 #if defined(HAVE_FFMPEG) && X264VFW_USE_DECODER
-LRESULT decompress_get_format(CODEC *codec, BITMAPINFO *lpbiInput, BITMAPINFO *lpbiOutput)
+LRESULT x264vfw_decompress_get_format(CODEC *codec, BITMAPINFO *lpbiInput, BITMAPINFO *lpbiOutput)
 {
     BITMAPINFOHEADER *inhdr = &lpbiInput->bmiHeader;
     BITMAPINFOHEADER *outhdr = &lpbiOutput->bmiHeader;
@@ -1572,7 +1573,7 @@ LRESULT decompress_get_format(CODEC *codec, BITMAPINFO *lpbiInput, BITMAPINFO *l
     return ICERR_OK;
 }
 
-LRESULT decompress_query(CODEC *codec, BITMAPINFO *lpbiInput, BITMAPINFO *lpbiOutput)
+LRESULT x264vfw_decompress_query(CODEC *codec, BITMAPINFO *lpbiInput, BITMAPINFO *lpbiOutput)
 {
     BITMAPINFOHEADER *inhdr = &lpbiInput->bmiHeader;
     BITMAPINFOHEADER *outhdr = &lpbiOutput->bmiHeader;
@@ -1619,13 +1620,13 @@ LRESULT decompress_query(CODEC *codec, BITMAPINFO *lpbiInput, BITMAPINFO *lpbiOu
     return ICERR_OK;
 }
 
-LRESULT decompress_begin(CODEC *codec, BITMAPINFO *lpbiInput, BITMAPINFO *lpbiOutput)
+LRESULT x264vfw_decompress_begin(CODEC *codec, BITMAPINFO *lpbiInput, BITMAPINFO *lpbiOutput)
 {
     int i_csp;
 
-    decompress_end(codec);
+    x264vfw_decompress_end(codec);
 
-    if (decompress_query(codec, lpbiInput, lpbiOutput) != ICERR_OK)
+    if (x264vfw_decompress_query(codec, lpbiInput, lpbiOutput) != ICERR_OK)
     {
         x264vfw_log(codec, X264_LOG_DEBUG, "incompatible input/output frame format (decode)\n");
         return ICERR_BADFORMAT;
@@ -1699,7 +1700,7 @@ LRESULT decompress_begin(CODEC *codec, BITMAPINFO *lpbiInput, BITMAPINFO *lpbiOu
     return ICERR_OK;
 }
 
-LRESULT decompress(CODEC *codec, ICDECOMPRESS *icd)
+LRESULT x264vfw_decompress(CODEC *codec, ICDECOMPRESS *icd)
 {
     BITMAPINFOHEADER *inhdr = icd->lpbiInput;
     DWORD neededsize = inhdr->biSizeImage + FF_INPUT_BUFFER_PADDING_SIZE;
@@ -1875,7 +1876,7 @@ LRESULT decompress(CODEC *codec, ICDECOMPRESS *icd)
     return ICERR_OK;
 }
 
-LRESULT decompress_end(CODEC *codec)
+LRESULT x264vfw_decompress_end(CODEC *codec)
 {
     codec->decoder_is_avc = 0;
     if (codec->decoder_context)

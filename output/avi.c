@@ -1,7 +1,7 @@
 /*****************************************************************************
  * avi.c: avi muxer (using libavformat)
  *****************************************************************************
- * Copyright (C) 2010-2011 x264 project
+ * Copyright (C) 2010-2012 x264 project
  *
  * Authors: Anton Mitrofanov <BugMaster@narod.ru>
  *
@@ -109,9 +109,10 @@ static int open_file( char *psz_filename, hnd_t *p_handle, cli_output_opt_t *opt
         return -1;
     }
     h->mux_fc->oformat = mux_fmt;
-    snprintf( h->mux_fc->filename, sizeof(h->mux_fc->filename), "%s", psz_filename );
+    memset( h->mux_fc->filename, 0, sizeof(h->mux_fc->filename) );
+    snprintf( h->mux_fc->filename, sizeof(h->mux_fc->filename) - 1, "%s", psz_filename );
 
-    if( avio_open( &h->mux_fc->pb, psz_filename, URL_WRONLY ) < 0 )
+    if( avio_open( &h->mux_fc->pb, psz_filename, AVIO_FLAG_WRITE ) < 0 )
     {
         close_file( h, 0, 0 );
         return -1;

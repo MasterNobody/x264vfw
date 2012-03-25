@@ -1,7 +1,7 @@
 /*****************************************************************************
  * csp.c: colorspace conversion functions
  *****************************************************************************
- * Copyright (C) 2004-2011 x264vfw project
+ * Copyright (C) 2004-2012 x264vfw project
  *
  * Authors: Laurent Aimar <fenrir@via.ecp.fr>
  *          Anton Mitrofanov <BugMaster@narod.ru>
@@ -314,7 +314,7 @@ static void uyvy_to_i420( x264_image_t *img_dst, x264_image_t *img_src,
     }
 }
 
-#define BITS         22
+#define BITS         20
 #define INT_FIX      (1 << BITS)
 #define INT_ROUND    (INT_FIX >> 1)
 #define FIX(f)       ((uint32_t)((f) * INT_FIX + 0.5))
@@ -334,13 +334,17 @@ static void uyvy_to_i420( x264_image_t *img_dst, x264_image_t *img_src,
 #define Ay_tv        16.0
 #define Au_tv        128.0
 #define Av_tv        128.0
+#define Bu_tv        0
+#define Bv_tv        0
 
 #define Ky_pc        1.0
 #define Ku_pc( rec ) (0.5 / Sb(rec))
 #define Kv_pc( rec ) (0.5 / Sr(rec))
 #define Ay_pc        0.0
-#define Au_pc        127.5
-#define Av_pc        127.5
+#define Au_pc        128.0
+#define Av_pc        128.0
+#define Bu_pc        -1
+#define Bv_pc        -1
 
 #define Y_R( rec, scale )   FIX(Kr_##rec * Ky_##scale)
 #define Y_G( rec, scale )   FIX(Kg(rec)  * Ky_##scale)
@@ -350,12 +354,12 @@ static void uyvy_to_i420( x264_image_t *img_dst, x264_image_t *img_src,
 #define U_R( rec, scale )   FIX(Kr_##rec * Ku_##scale(rec))
 #define U_G( rec, scale )   FIX(Kg(rec)  * Ku_##scale(rec))
 #define U_B( rec, scale )   FIX(Sb(rec)  * Ku_##scale(rec))
-#define U_ADD( scale )      ((uint32_t)((Au_##scale * INT_FIX + INT_ROUND) * 4 + 0.5))
+#define U_ADD( scale )      ((uint32_t)((Au_##scale * INT_FIX + INT_ROUND) * 4 + (Bu_##scale) + 0.5))
 
 #define V_R( rec, scale )   FIX(Sr(rec)  * Kv_##scale(rec))
 #define V_G( rec, scale )   FIX(Kg(rec)  * Kv_##scale(rec))
 #define V_B( rec, scale )   FIX(Kb_##rec * Kv_##scale(rec))
-#define V_ADD( scale )      ((uint32_t)((Av_##scale * INT_FIX + INT_ROUND) * 4 + 0.5))
+#define V_ADD( scale )      ((uint32_t)((Av_##scale * INT_FIX + INT_ROUND) * 4 + (Bv_##scale) + 0.5))
 
 #define RGB_TO_I420( name, POS_R, POS_G, POS_B, S_RGB, rec, scale )               \
 static void name##_##rec##_##scale( x264_image_t *img_dst, x264_image_t *img_src, \

@@ -1,7 +1,7 @@
 /*****************************************************************************
  * x264vfw.h: x264vfw main header
  *****************************************************************************
- * Copyright (C) 2003-2011 x264vfw project
+ * Copyright (C) 2003-2012 x264vfw project
  *
  * Authors: Justin Clay
  *          Laurent Aimar <fenrir@via.ecp.fr>
@@ -225,22 +225,22 @@ typedef struct
 } CODEC;
 
 /* Compress functions */
-LRESULT compress_get_format(CODEC *, BITMAPINFO *, BITMAPINFO *);
-LRESULT compress_get_size(CODEC *, BITMAPINFO *, BITMAPINFO *);
-LRESULT compress_query(CODEC *, BITMAPINFO *, BITMAPINFO *);
-LRESULT compress_begin(CODEC *, BITMAPINFO *, BITMAPINFO *);
-LRESULT compress(CODEC *, ICCOMPRESS *);
-LRESULT compress_end(CODEC *);
-LRESULT compress_frames_info(CODEC *, ICCOMPRESSFRAMES *);
-void default_compress_frames_info(CODEC *);
+LRESULT x264vfw_compress_get_format(CODEC *, BITMAPINFO *, BITMAPINFO *);
+LRESULT x264vfw_compress_get_size(CODEC *, BITMAPINFO *, BITMAPINFO *);
+LRESULT x264vfw_compress_query(CODEC *, BITMAPINFO *, BITMAPINFO *);
+LRESULT x264vfw_compress_begin(CODEC *, BITMAPINFO *, BITMAPINFO *);
+LRESULT x264vfw_compress(CODEC *, ICCOMPRESS *);
+LRESULT x264vfw_compress_end(CODEC *);
+LRESULT x264vfw_compress_frames_info(CODEC *, ICCOMPRESSFRAMES *);
+void x264vfw_default_compress_frames_info(CODEC *);
 
 #if defined(HAVE_FFMPEG) && X264VFW_USE_DECODER
 /* Decompress functions */
-LRESULT decompress_get_format(CODEC *, BITMAPINFO *, BITMAPINFO *);
-LRESULT decompress_query(CODEC *, BITMAPINFO *, BITMAPINFO *);
-LRESULT decompress_begin(CODEC *, BITMAPINFO *, BITMAPINFO *);
-LRESULT decompress(CODEC *, ICDECOMPRESS *);
-LRESULT decompress_end(CODEC *);
+LRESULT x264vfw_decompress_get_format(CODEC *, BITMAPINFO *, BITMAPINFO *);
+LRESULT x264vfw_decompress_query(CODEC *, BITMAPINFO *, BITMAPINFO *);
+LRESULT x264vfw_decompress_begin(CODEC *, BITMAPINFO *, BITMAPINFO *);
+LRESULT x264vfw_decompress(CODEC *, ICDECOMPRESS *);
+LRESULT x264vfw_decompress_end(CODEC *);
 #endif
 
 /* Log functions */
@@ -249,19 +249,19 @@ void x264vfw_log_destroy(CODEC *codec);
 void x264vfw_log(CODEC *codec, int i_level, const char *psz_fmt, ...);
 
 /* Config functions */
-void config_defaults(CONFIG *config);
-void config_reg_load(CONFIG *config);
-void config_reg_save(CONFIG *config);
+void x264vfw_config_defaults(CONFIG *config);
+void x264vfw_config_reg_load(CONFIG *config);
+void x264vfw_config_reg_save(CONFIG *config);
 
 /* Dialog callbacks */
-INT_PTR CALLBACK callback_main(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lParam);
-INT_PTR CALLBACK callback_about(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lParam);
-INT_PTR CALLBACK callback_log(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lParam);
-INT_PTR CALLBACK callback_help(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lParam);
+INT_PTR CALLBACK x264vfw_callback_main(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lParam);
+INT_PTR CALLBACK x264vfw_callback_about(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lParam);
+INT_PTR CALLBACK x264vfw_callback_log(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lParam);
+INT_PTR CALLBACK x264vfw_callback_help(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lParam);
 
 /* DLL instance */
-extern HINSTANCE g_hInst;
+extern HINSTANCE x264vfw_hInst;
 /* DLL critical section */
-extern CRITICAL_SECTION g_CS;
+extern CRITICAL_SECTION x264vfw_CS;
 
 #endif

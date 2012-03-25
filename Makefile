@@ -130,6 +130,11 @@ VFW_LDFLAGS += "-L$(FFMPEG_DIR)/libavutil" -lavutil
 VFW_LDFLAGS += "-L$(FFMPEG_DIR)/libswscale" -lswscale
 endif
 
+ifneq ($(wildcard version.h)x,x)
+RESFLAGS += -DHAVE_VERSION
+RESFLAGS += "-DDLL_NAME=$(DLL)"
+endif
+
 # Sources
 SRC_C = codec.c config.c csp.c driverproc.c
 SRC_RES = resource.rc
@@ -144,7 +149,7 @@ SRC_C += output/raw.c
 SRC_C += output/matroska.c output/matroska_ebml.c
 SRC_C += output/flv.c output/flv_bytestream.c
 SRC_C += output/mp4.c
-SRC_C += $(addprefix output/mp4/, isom.c utils.c mp4sys.c mp4a.c summary.c importer.c write.c)
+SRC_C += $(addprefix output/mp4/, isom.c utils.c mp4sys.c mp4a.c dts.c a52.c importer.c summary.c chapter.c write.c)
 
 ifeq ($(HAVE_FFMPEG),yes)
 SRC_C += output/avi.c
@@ -173,6 +178,9 @@ endif
 
 # Resource dependence manually
 resource.obj: resource.rc resource.h x264vfw_config.h
+ifneq ($(wildcard version.h)x,x)
+resource.obj: version.h
+endif
 
 %.obj: %.rc
 	@echo " W: $(@D)/$(<F)"

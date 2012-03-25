@@ -1,7 +1,7 @@
 /*****************************************************************************
  * common.h: misc common functions
  *****************************************************************************
- * Copyright (C) 2010-2011 x264vfw project
+ * Copyright (C) 2010-2012 x264vfw project
  *
  * Authors: Anton Mitrofanov <BugMaster@narod.ru>
  *
@@ -144,7 +144,8 @@ static inline void DPRINTF(const char *fmt, ...)
     char buf[DPRINTF_BUF_SZ];
 
     va_start(arg, fmt);
-    vsprintf(buf, fmt, arg);
+    memset(buf, 0, sizeof(buf));
+    vsnprintf(buf, sizeof(buf) - 1, fmt, arg);
     va_end(arg);
     OutputDebugString(buf);
 }
@@ -152,7 +153,8 @@ static inline void DVPRINTF(const char *fmt, va_list arg)
 {
     char buf[DPRINTF_BUF_SZ];
 
-    vsprintf(buf, fmt, arg);
+    memset(buf, 0, sizeof(buf));
+    vsnprintf(buf, sizeof(buf) - 1, fmt, arg);
     OutputDebugString(buf);
 }
 #else

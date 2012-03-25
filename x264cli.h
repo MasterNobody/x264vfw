@@ -1,7 +1,7 @@
 /*****************************************************************************
  * x264cli.h: x264cli common
  *****************************************************************************
- * Copyright (C) 2003-2011 x264 project
+ * Copyright (C) 2003-2012 x264vfw project
  *
  * Authors: Laurent Aimar <fenrir@via.ecp.fr>
  *          Loren Merritt <lorenm@u.washington.edu>
@@ -28,7 +28,7 @@
 
 typedef void *hnd_t;
 
-static inline int64_t gcd( int64_t a, int64_t b )
+static inline uint64_t gcd( uint64_t a, uint64_t b )
 {
     while( 1 )
     {
@@ -40,7 +40,7 @@ static inline int64_t gcd( int64_t a, int64_t b )
     }
 }
 
-static inline int64_t lcm( int64_t a, int64_t b )
+static inline uint64_t lcm( uint64_t a, uint64_t b )
 {
     return ( a / gcd( a, b ) ) * b;
 }

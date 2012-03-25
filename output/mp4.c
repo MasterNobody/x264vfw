@@ -1,7 +1,7 @@
 /*****************************************************************************
  * mp4.c: mp4 muxer using L-SMASH
  *****************************************************************************
- * Copyright (C) 2003-2011 x264 project
+ * Copyright (C) 2003-2012 x264 project
  *
  * Authors: Laurent Aimar <fenrir@via.ecp.fr>
  *          Loren Merritt <lorenm@u.washington.edu>
@@ -138,25 +138,29 @@ static int close_file( hnd_t handle, int64_t largest_pts, int64_t second_largest
             else
                 MP4_LOG_ERROR( "timescale is broken.\n" );
 
+            /*
+             * Declare the explicit time-line mapping.
+             * A segment_duration is given by movie timescale, while a media_time that is the start time of this segment
+             * is given by not the movie timescale but rather the media timescale.
+             * The reason is that ISO media have two time-lines, presentation and media time-line,
+             * and an edit maps the presentation time-line to the media time-line.
+             * According to QuickTime file format specification and the actual playback in QuickTime Player,
+             * if the Edit Box doesn't exist in the track, the ratio of the summation of sample durations and track's duration becomes
+             * the track's media_rate so that the entire media can be used by the track.
+             * So, we add Edit Box here to avoid this implicit media_rate could distort track's presentation timestamps slightly.
+             * Note: Any demuxers should follow the Edit List Box if it exists.
+             */
+            lsmash_edit_t edit;
+            edit.duration   = actual_duration;
+            edit.start_time = p_mp4->i_first_cts;
+            edit.rate       = ISOM_EDIT_MODE_NORMAL;
             if( !p_mp4->b_fragments )
             {
-                /*
-                 * Declare the explicit time-line mapping.
-                 * A segment_duration is given by movie timescale, while a media_time that is the start time of this segment
-                 * is given by not the movie timescale but rather the media timescale.
-                 * The reason is that ISO media have two time-lines, presentation and media time-line,
-                 * and an edit maps the presentation time-line to the media time-line.
-                 * According to QuickTime file format specification and the actual playback in QuickTime Player,
-                 * if the Edit Box doesn't exist in the track, the ratio of the summation of sample durations and track's duration becomes
-                 * the track's media_rate so that the entire media can be used by the track.
-                 * So, we add Edit Box here to avoid this implicit media_rate could distort track's presentation timestamps slightly.
-                 * Note: Any demuxers should follow the Edit List Box if it exists.
-                 */
-                MP4_LOG_IF_ERR( lsmash_create_explicit_timeline_map( p_mp4->p_root, p_mp4->i_track, actual_duration, p_mp4->i_first_cts, ISOM_EDIT_MODE_NORMAL ),
+                MP4_LOG_IF_ERR( lsmash_create_explicit_timeline_map( p_mp4->p_root, p_mp4->i_track, edit ),
                                 "failed to set timeline map for video.\n" );
             }
             else if( !p_mp4->b_stdout )
-                MP4_LOG_IF_ERR( lsmash_modify_explicit_timeline_map( p_mp4->p_root, p_mp4->i_track, 1, actual_duration, p_mp4->i_first_cts, ISOM_EDIT_MODE_NORMAL ),
+                MP4_LOG_IF_ERR( lsmash_modify_explicit_timeline_map( p_mp4->p_root, p_mp4->i_track, 1, edit ),
                                 "failed to update timeline map for video.\n" );
         }
 
@@ -393,8 +397,14 @@ static int write_frame( hnd_t handle, uint8_t *p_nalu, int i_size, x264_picture_
         p_mp4->i_start_offset = p_picture->i_dts * -1;
         p_mp4->i_first_cts = p_mp4->opt.use_dts_compress ? 0 : p_mp4->i_start_offset * p_mp4->i_time_inc;
         if( p_mp4->b_fragments )
-            MP4_LOG_IF_ERR( lsmash_create_explicit_timeline_map( p_mp4->p_root, p_mp4->i_track, UINT32_MAX, p_mp4->i_first_cts, ISOM_EDIT_MODE_NORMAL ),
+        {
+            lsmash_edit_t edit;
+            edit.duration   = ISOM_EDIT_DURATION_UNKNOWN32;     /* QuickTime doesn't support 64bit duration. */
+            edit.start_time = p_mp4->i_first_cts;
+            edit.rate       = ISOM_EDIT_MODE_NORMAL;
+            MP4_LOG_IF_ERR( lsmash_create_explicit_timeline_map( p_mp4->p_root, p_mp4->i_track, edit ),
                             "failed to set timeline map for video.\n" );
+        }
     }
 
     lsmash_sample_t *p_sample = lsmash_create_sample( i_size + p_mp4->i_sei_size );

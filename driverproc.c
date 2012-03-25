@@ -1,7 +1,7 @@
 /*****************************************************************************
  * driverproc.c: vfw wrapper
  *****************************************************************************
- * Copyright (C) 2003-2011 x264vfw project
+ * Copyright (C) 2003-2012 x264vfw project
  *
  * Authors: Justin Clay
  *          Laurent Aimar <fenrir@via.ecp.fr>
@@ -29,20 +29,20 @@
 #endif
 
 /* Global DLL instance */
-HINSTANCE g_hInst;
+HINSTANCE x264vfw_hInst;
 /* Global DLL critical section */
-CRITICAL_SECTION g_CS;
+CRITICAL_SECTION x264vfw_CS;
 
-/* Calling back point for our DLL so we can keep track of the window in g_hInst */
+/* Calling back point for our DLL so we can keep track of the window in x264vfw_hInst */
 BOOL WINAPI DllMain(HANDLE hModule, DWORD ul_reason_for_call, LPVOID lpReserved)
 {
-    g_hInst = (HINSTANCE) hModule;
+    x264vfw_hInst = (HINSTANCE)hModule;
 
 #ifdef PTW32_STATIC_LIB
     switch (ul_reason_for_call)
     {
         case DLL_PROCESS_ATTACH:
-            InitializeCriticalSection(&g_CS);
+            InitializeCriticalSection(&x264vfw_CS);
             pthread_win32_process_attach_np();
             pthread_win32_thread_attach_np();
             break;
@@ -58,18 +58,18 @@ BOOL WINAPI DllMain(HANDLE hModule, DWORD ul_reason_for_call, LPVOID lpReserved)
         case DLL_PROCESS_DETACH:
             pthread_win32_thread_detach_np();
             pthread_win32_process_detach_np();
-            DeleteCriticalSection(&g_CS);
+            DeleteCriticalSection(&x264vfw_CS);
             break;
     }
 #else
     switch (ul_reason_for_call)
     {
         case DLL_PROCESS_ATTACH:
-            InitializeCriticalSection(&g_CS);
+            InitializeCriticalSection(&x264vfw_CS);
             break;
 
         case DLL_PROCESS_DETACH:
-            DeleteCriticalSection(&g_CS);
+            DeleteCriticalSection(&x264vfw_CS);
             break;
     }
 #endif
@@ -117,11 +117,11 @@ LRESULT WINAPI attribute_align_arg DriverProc(DWORD_PTR dwDriverId, HDRVR hDrive
             }
 
             memset(codec, 0, sizeof(CODEC));
-            config_reg_load(&codec->config);
+            x264vfw_config_reg_load(&codec->config);
 #if defined(HAVE_FFMPEG) && X264VFW_USE_DECODER
             codec->decoder_enabled = !codec->config.b_disable_decoder;
 #endif
-            default_compress_frames_info(codec);
+            x264vfw_default_compress_frames_info(codec);
 
             if (icopen)
                 icopen->dwError = ICERR_OK;
@@ -129,10 +129,10 @@ LRESULT WINAPI attribute_align_arg DriverProc(DWORD_PTR dwDriverId, HDRVR hDrive
         }
 
         case DRV_CLOSE:
-            /* From xvid: compress_end/decompress_end don't always get called */
-            compress_end(codec);
+            /* From xvid: x264vfw_compress_end/x264vfw_decompress_end don't always get called */
+            x264vfw_compress_end(codec);
 #if defined(HAVE_FFMPEG) && X264VFW_USE_DECODER
-            decompress_end(codec);
+            x264vfw_decompress_end(codec);
 #endif
             x264vfw_log_destroy(codec);
             free(codec);
@@ -168,7 +168,7 @@ LRESULT WINAPI attribute_align_arg DriverProc(DWORD_PTR dwDriverId, HDRVR hDrive
         case ICM_SETSTATE:
             if (!(void *)lParam1)
             {
-                config_reg_load(&codec->config);
+                x264vfw_config_reg_load(&codec->config);
                 return 0;
             }
             if (lParam2 != sizeof(CONFIG) || ((CONFIG *)lParam1)->i_format_version != X264VFW_FORMAT_VERSION)
@@ -213,19 +213,19 @@ LRESULT WINAPI attribute_align_arg DriverProc(DWORD_PTR dwDriverId, HDRVR hDrive
                 memset(&temp, 0, sizeof(CONFIG_DATA));
                 memcpy(&temp.config, &codec->config, sizeof(CONFIG));
 
-                DialogBoxParam(g_hInst, MAKEINTRESOURCE(IDD_CONFIG), (HWND)lParam1, callback_main, (LPARAM)&temp);
+                DialogBoxParam(x264vfw_hInst, MAKEINTRESOURCE(IDD_CONFIG), (HWND)lParam1, x264vfw_callback_main, (LPARAM)&temp);
 
                 if (temp.b_save)
                 {
                     memcpy(&codec->config, &temp.config, sizeof(CONFIG));
-                    config_reg_save(&codec->config);
+                    x264vfw_config_reg_save(&codec->config);
                 }
             }
             return ICERR_OK;
 
         case ICM_ABOUT:
             if (lParam1 != -1)
-                DialogBoxParam(g_hInst, MAKEINTRESOURCE(IDD_ABOUT), (HWND)lParam1, callback_about, 0);
+                DialogBoxParam(x264vfw_hInst, MAKEINTRESOURCE(IDD_ABOUT), (HWND)lParam1, x264vfw_callback_about, 0);
             return ICERR_OK;
 
         case ICM_GET:
@@ -238,56 +238,56 @@ LRESULT WINAPI attribute_align_arg DriverProc(DWORD_PTR dwDriverId, HDRVR hDrive
 
         /* Compressor */
         case ICM_COMPRESS_GET_FORMAT:
-            return compress_get_format(codec, (BITMAPINFO *)lParam1, (BITMAPINFO *)lParam2);
+            return x264vfw_compress_get_format(codec, (BITMAPINFO *)lParam1, (BITMAPINFO *)lParam2);
 
         case ICM_COMPRESS_GET_SIZE:
-            return compress_get_size(codec, (BITMAPINFO *)lParam1, (BITMAPINFO *)lParam2);
+            return x264vfw_compress_get_size(codec, (BITMAPINFO *)lParam1, (BITMAPINFO *)lParam2);
 
         case ICM_COMPRESS_QUERY:
-            return compress_query(codec, (BITMAPINFO *)lParam1, (BITMAPINFO *)lParam2);
+            return x264vfw_compress_query(codec, (BITMAPINFO *)lParam1, (BITMAPINFO *)lParam2);
 
         case ICM_COMPRESS_BEGIN:
-            return compress_begin(codec, (BITMAPINFO *)lParam1, (BITMAPINFO *)lParam2);
+            return x264vfw_compress_begin(codec, (BITMAPINFO *)lParam1, (BITMAPINFO *)lParam2);
 
         case ICM_COMPRESS:
-            return compress(codec, (ICCOMPRESS *)lParam1);
+            return x264vfw_compress(codec, (ICCOMPRESS *)lParam1);
 
         case ICM_COMPRESS_END:
-            default_compress_frames_info(codec);
-            return compress_end(codec);
+            x264vfw_default_compress_frames_info(codec);
+            return x264vfw_compress_end(codec);
 
         case ICM_COMPRESS_FRAMES_INFO:
-            return compress_frames_info(codec, (ICCOMPRESSFRAMES *)lParam1);
+            return x264vfw_compress_frames_info(codec, (ICCOMPRESSFRAMES *)lParam1);
 
 #if defined(HAVE_FFMPEG) && X264VFW_USE_DECODER
         /* Decompressor */
         case ICM_DECOMPRESS_GET_FORMAT:
             if (codec->decoder_enabled)
-                return decompress_get_format(codec, (BITMAPINFO *)lParam1, (BITMAPINFO *)lParam2);
+                return x264vfw_decompress_get_format(codec, (BITMAPINFO *)lParam1, (BITMAPINFO *)lParam2);
             else
                 return ICERR_UNSUPPORTED;
 
         case ICM_DECOMPRESS_QUERY:
             if (codec->decoder_enabled)
-                return decompress_query(codec, (BITMAPINFO *)lParam1, (BITMAPINFO *)lParam2);
+                return x264vfw_decompress_query(codec, (BITMAPINFO *)lParam1, (BITMAPINFO *)lParam2);
             else
                 return ICERR_UNSUPPORTED;
 
         case ICM_DECOMPRESS_BEGIN:
             if (codec->decoder_enabled)
-                return decompress_begin(codec, (BITMAPINFO *)lParam1, (BITMAPINFO *)lParam2);
+                return x264vfw_decompress_begin(codec, (BITMAPINFO *)lParam1, (BITMAPINFO *)lParam2);
             else
                 return ICERR_UNSUPPORTED;
 
         case ICM_DECOMPRESS:
             if (codec->decoder_enabled)
-                return decompress(codec, (ICDECOMPRESS *)lParam1);
+                return x264vfw_decompress(codec, (ICDECOMPRESS *)lParam1);
             else
                 return ICERR_UNSUPPORTED;
 
         case ICM_DECOMPRESS_END:
             if (codec->decoder_enabled)
-                return decompress_end(codec);
+                return x264vfw_decompress_end(codec);
             else
                 return ICERR_UNSUPPORTED;
 #endif

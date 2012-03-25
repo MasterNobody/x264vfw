@@ -1,7 +1,7 @@
 /*****************************************************************************
  * config.c: configuration dialog
  *****************************************************************************
- * Copyright (C) 2003-2011 x264vfw project
+ * Copyright (C) 2003-2012 x264vfw project
  *
  * Authors: Justin Clay
  *          Laurent Aimar <fenrir@via.ecp.fr>
@@ -70,30 +70,30 @@ typedef struct
     const int max_len; /* Maximum string length, including the terminating NULL char */
 } reg_str_t;
 
-CONFIG reg;
+static CONFIG reg;
 
-extern const named_str_t preset_table[COUNT_PRESET];
+extern const named_str_t x264vfw_preset_table[COUNT_PRESET];
 
-extern const named_str_t tune_table[COUNT_TUNE];
+extern const named_str_t x264vfw_tune_table[COUNT_TUNE];
 
-extern const named_str_t profile_table[COUNT_PROFILE];
+extern const named_str_t x264vfw_profile_table[COUNT_PROFILE];
 
-extern const named_int_t level_table[COUNT_LEVEL];
+extern const named_int_t x264vfw_level_table[COUNT_LEVEL];
 
-extern const named_fourcc_t fourcc_table[COUNT_FOURCC];
+extern const named_fourcc_t x264vfw_fourcc_table[COUNT_FOURCC];
 
-extern const char * const muxer_names[];
+extern const char * const x264vfw_muxer_names[];
 
-extern const char * const log_level_names[];
+extern const char * const x264vfw_log_level_names[];
 
-extern const char * const range_names[];
+extern const char * const x264vfw_range_names[];
 
 static const reg_named_str_t reg_named_str_table[] =
 {
     /* Basic */
-    { "preset",  &reg.i_preset,  "medium", preset_table,  COUNT_PRESET  },
-    { "tuning",  &reg.i_tuning,  "",       tune_table,    COUNT_TUNE    },
-    { "profile", &reg.i_profile, "",       profile_table, COUNT_PROFILE }
+    { "preset",  &reg.i_preset,  "medium", x264vfw_preset_table,  COUNT_PRESET  },
+    { "tuning",  &reg.i_tuning,  "",       x264vfw_tune_table,    COUNT_TUNE    },
+    { "profile", &reg.i_profile, "",       x264vfw_profile_table, COUNT_PROFILE }
 };
 
 static const reg_int_t reg_int_table[] =
@@ -224,11 +224,11 @@ do {\
     }\
 } while (0)
 
-void config_defaults(CONFIG *config)
+void x264vfw_config_defaults(CONFIG *config)
 {
     int     i;
 
-    EnterCriticalSection(&g_CS);
+    EnterCriticalSection(&x264vfw_CS);
     memset(&reg, 0, sizeof(CONFIG));
 
     /* Save all named params */
@@ -252,10 +252,10 @@ void config_defaults(CONFIG *config)
 
     GordianKnotWorkaround(reg.i_encoding_type);
     memcpy(config, &reg, sizeof(CONFIG));
-    LeaveCriticalSection(&g_CS);
+    LeaveCriticalSection(&x264vfw_CS);
 }
 
-void config_reg_load(CONFIG *config)
+void x264vfw_config_reg_load(CONFIG *config)
 {
     HKEY    hKey;
     DWORD   i_size;
@@ -263,10 +263,10 @@ void config_reg_load(CONFIG *config)
 
     if (RegOpenKeyEx(X264VFW_REG_KEY, X264VFW_REG_PARENT "\\" X264VFW_REG_CHILD, 0, KEY_READ, &hKey) != ERROR_SUCCESS)
     {
-        config_defaults(config);
+        x264vfw_config_defaults(config);
         return;
     }
-    EnterCriticalSection(&g_CS);
+    EnterCriticalSection(&x264vfw_CS);
     memset(&reg, 0, sizeof(CONFIG));
 
     /* Read all named params */
@@ -306,11 +306,11 @@ void config_reg_load(CONFIG *config)
 
     GordianKnotWorkaround(reg.i_encoding_type);
     memcpy(config, &reg, sizeof(CONFIG));
-    LeaveCriticalSection(&g_CS);
+    LeaveCriticalSection(&x264vfw_CS);
     RegCloseKey(hKey);
 }
 
-void config_reg_save(CONFIG *config)
+void x264vfw_config_reg_save(CONFIG *config)
 {
     HKEY    hKey;
     DWORD   dwDisposition;
@@ -318,7 +318,7 @@ void config_reg_save(CONFIG *config)
 
     if (RegCreateKeyEx(X264VFW_REG_KEY, X264VFW_REG_PARENT "\\" X264VFW_REG_CHILD, 0, X264VFW_REG_CLASS, REG_OPTION_NON_VOLATILE, KEY_WRITE, 0, &hKey, &dwDisposition) != ERROR_SUCCESS)
         return;
-    EnterCriticalSection(&g_CS);
+    EnterCriticalSection(&x264vfw_CS);
     memcpy(&reg, config, sizeof(CONFIG));
     GordianKnotWorkaround(reg.i_encoding_type);
 
@@ -339,7 +339,7 @@ void config_reg_save(CONFIG *config)
     for (i = 0; i < sizeof(reg_str_table) / sizeof(reg_str_t); i++)
         RegSetValueEx(hKey, reg_str_table[i].reg_value, 0, REG_SZ, (LPBYTE)reg_str_table[i].config_str, strlen(reg_str_table[i].config_str) + 1);
 
-    LeaveCriticalSection(&g_CS);
+    LeaveCriticalSection(&x264vfw_CS);
     RegCloseKey(hKey);
 }
 
@@ -376,28 +376,28 @@ static void dlg_update_items(CONFIG_DATA *cfg_data)
     {
         int i;
         for (i = 0; i < COUNT_PRESET; i++)
-            SendDlgItemMessage(hMainDlg, IDC_PRESET, CB_ADDSTRING, 0, (LPARAM)preset_table[i].name);
+            SendDlgItemMessage(hMainDlg, IDC_PRESET, CB_ADDSTRING, 0, (LPARAM)x264vfw_preset_table[i].name);
     }
     SendDlgItemMessage(hMainDlg, IDC_PRESET, CB_SETCURSEL, config->i_preset, 0);
     if (SendMessage(GetDlgItem(hMainDlg, IDC_TUNING), CB_GETCOUNT, 0, 0) == 0)
     {
         int i;
         for (i = 0; i < COUNT_TUNE; i++)
-            SendDlgItemMessage(hMainDlg, IDC_TUNING, CB_ADDSTRING, 0, (LPARAM)tune_table[i].name);
+            SendDlgItemMessage(hMainDlg, IDC_TUNING, CB_ADDSTRING, 0, (LPARAM)x264vfw_tune_table[i].name);
     }
     SendDlgItemMessage(hMainDlg, IDC_TUNING, CB_SETCURSEL, config->i_tuning, 0);
     if (SendMessage(GetDlgItem(hMainDlg, IDC_PROFILE), CB_GETCOUNT, 0, 0) == 0)
     {
         int i;
         for (i = 0; i < COUNT_PROFILE; i++)
-            SendDlgItemMessage(hMainDlg, IDC_PROFILE, CB_ADDSTRING, 0, (LPARAM)profile_table[i].name);
+            SendDlgItemMessage(hMainDlg, IDC_PROFILE, CB_ADDSTRING, 0, (LPARAM)x264vfw_profile_table[i].name);
     }
     SendDlgItemMessage(hMainDlg, IDC_PROFILE, CB_SETCURSEL, config->i_profile, 0);
     if (SendMessage(GetDlgItem(hMainDlg, IDC_LEVEL), CB_GETCOUNT, 0, 0) == 0)
     {
         int i;
         for (i = 0; i < COUNT_LEVEL; i++)
-            SendDlgItemMessage(hMainDlg, IDC_LEVEL, CB_ADDSTRING, 0, (LPARAM)level_table[i].name);
+            SendDlgItemMessage(hMainDlg, IDC_LEVEL, CB_ADDSTRING, 0, (LPARAM)x264vfw_level_table[i].name);
     }
     SendDlgItemMessage(hMainDlg, IDC_LEVEL, CB_SETCURSEL, config->i_level, 0);
     CheckDlgButton(hMainDlg, IDC_TUNE_FASTDECODE, config->b_fastdecode);
@@ -499,7 +499,7 @@ static void dlg_update_items(CONFIG_DATA *cfg_data)
     {
         int i;
         for (i = 0; i < COUNT_FOURCC; i++)
-            SendDlgItemMessage(hMainDlg, IDC_VFW_FOURCC, CB_ADDSTRING, 0, (LPARAM)fourcc_table[i].name);
+            SendDlgItemMessage(hMainDlg, IDC_VFW_FOURCC, CB_ADDSTRING, 0, (LPARAM)x264vfw_fourcc_table[i].name);
     }
     SendDlgItemMessage(hMainDlg, IDC_VFW_FOURCC, CB_SETCURSEL, config->i_fourcc, 0);
 #if X264VFW_USE_VIRTUALDUB_HACK
@@ -546,7 +546,7 @@ static BOOL CALLBACK enum_tooltips(HWND hDlg, LPARAM lParam)
     char temp[1024];
 
     /* The tooltip for a control is named the same as the control itself */
-    if (LoadString(g_hInst, GetDlgCtrlID(hDlg), temp, 1024))
+    if (LoadString(x264vfw_hInst, GetDlgCtrlID(hDlg), temp, 1024))
     {
         TOOLINFO ti;
 
@@ -701,7 +701,7 @@ static int get_extension_index(const char *filename, const char *list)
 }
 
 /* Main window (configuration) */
-INT_PTR CALLBACK callback_main(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lParam)
+INT_PTR CALLBACK x264vfw_callback_main(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
     CONFIG_DATA *cfg_data = (CONFIG_DATA *)GetWindowLongPtr(hDlg, GWLP_USERDATA);
     CONFIG *config;
@@ -716,7 +716,7 @@ INT_PTR CALLBACK callback_main(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lPara
         cfg_data->hMainDlg = hDlg;
         cfg_data->b_dlg_updated = FALSE;
 
-        if ((hTooltip = CreateWindow(TOOLTIPS_CLASS, NULL, TTS_ALWAYSTIP, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, hDlg, NULL, g_hInst, NULL)))
+        if ((hTooltip = CreateWindow(TOOLTIPS_CLASS, NULL, TTS_ALWAYSTIP, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, hDlg, NULL, x264vfw_hInst, NULL)))
         {
             SetWindowPos(hTooltip, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
             SendMessage(hTooltip, TTM_SETMAXTIPWIDTH, 0, 400);
@@ -939,7 +939,7 @@ INT_PTR CALLBACK callback_main(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lPara
 
                         case IDC_EXTRA_HELP:
                             if (!cfg_data->hHelpDlg)
-                                cfg_data->hHelpDlg = CreateDialog(g_hInst, MAKEINTRESOURCE(IDD_HELP), GetDesktopWindow(), callback_help);
+                                cfg_data->hHelpDlg = CreateDialog(x264vfw_hInst, MAKEINTRESOURCE(IDD_HELP), GetDesktopWindow(), x264vfw_callback_help);
                             if (cfg_data->hHelpDlg)
                             {
                                 ShowWindow(cfg_data->hHelpDlg, SW_SHOWNORMAL);
@@ -950,7 +950,7 @@ INT_PTR CALLBACK callback_main(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lPara
                         case IDC_DEFAULTS:
                             if (MessageBox(hMainDlg, X264VFW_DEF_TEXT, X264VFW_NAME, MB_YESNO) == IDYES)
                             {
-                                config_defaults(config);
+                                x264vfw_config_defaults(config);
                                 cfg_data->b_dlg_updated = FALSE;
                                 dlg_enable_items(cfg_data);
                                 dlg_update_items(cfg_data);
@@ -1147,7 +1147,7 @@ INT_PTR CALLBACK callback_main(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lPara
 }
 
 /* About window */
-INT_PTR CALLBACK callback_about(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lParam)
+INT_PTR CALLBACK x264vfw_callback_about(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
     switch (uMsg)
     {
@@ -1229,7 +1229,7 @@ static void update_log_layout(HWND hDlg)
     MoveWindow(GetDlgItem(hDlg, LOG_IDC_COPY), rcNewItem.left, rcNewItem.top, rcNewItem.right - rcNewItem.left, rcNewItem.bottom - rcNewItem.top, TRUE);
 }
 
-INT_PTR CALLBACK callback_log(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lParam)
+INT_PTR CALLBACK x264vfw_callback_log(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
     switch (uMsg)
     {
@@ -1693,7 +1693,7 @@ static void help(char *buffer, int longhelp)
         "                                  - component, pal, ntsc, secam, mac, undef\r\n",
                                        strtable_lookup( x264_vidformat_names, defaults->vui.i_vidformat ) );
     H2( "      --range <string>        Specify color range [\"%s\"]\r\n"
-        "                                  - %s\r\n", range_names[0], stringify_names( buf, range_names ) );
+        "                                  - %s\r\n", x264vfw_range_names[0], stringify_names( buf, x264vfw_range_names ) );
     H2( "      --colorprim <string>    Specify color primaries [\"%s\"]\r\n"
         "                                  - undef, bt709, bt470m, bt470bg\r\n"
         "                                    smpte170m, smpte240m, film\r\n",
@@ -1720,7 +1720,7 @@ static void help(char *buffer, int longhelp)
     H0( "\r\n" );
     H0( "  -o, --output <string>       Specify output file\r\n" );
     H1( "      --muxer <string>        Specify output container format [\"%s\"]\r\n"
-        "                                  - %s\r\n", muxer_names[0], stringify_names( buf, muxer_names ) );
+        "                                  - %s\r\n", x264vfw_muxer_names[0], stringify_names( buf, x264vfw_muxer_names ) );
     H0( "      --sar width:height      Specify Sample Aspect Ratio\r\n" );
     H0( "      --fps <float|rational>  Specify framerate\r\n" );
     H0( "      --level <string>        Specify level (as defined by Annex A)\r\n" );
@@ -1729,8 +1729,8 @@ static void help(char *buffer, int longhelp)
     H1( "  -v, --verbose               Print stats for each frame\r\n" );
     H0( "      --quiet                 Quiet Mode\r\n" );
     H1( "      --log-level <string>    Specify the maximum level of logging [\"%s\"]\r\n"
-        "                                  - %s\r\n", strtable_lookup( log_level_names, defaults->i_log_level - X264_LOG_NONE ),
-                                       stringify_names( buf, log_level_names ) );
+        "                                  - %s\r\n", strtable_lookup( x264vfw_log_level_names, defaults->i_log_level - X264_LOG_NONE ),
+                                       stringify_names( buf, x264vfw_log_level_names ) );
     H1( "      --psnr                  Enable PSNR computation\r\n" );
     H1( "      --ssim                  Enable SSIM computation\r\n" );
     H1( "      --threads <integer>     Force a specific number of threads\r\n" );
@@ -1793,7 +1793,7 @@ static void update_help_layout(HWND hDlg)
     MoveWindow(GetDlgItem(hDlg, HELP_IDC_COPY), rcNewItem.left, rcNewItem.top, rcNewItem.right - rcNewItem.left, rcNewItem.bottom - rcNewItem.top, TRUE);
 }
 
-INT_PTR CALLBACK callback_help(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lParam)
+INT_PTR CALLBACK x264vfw_callback_help(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
     switch (uMsg)
     {

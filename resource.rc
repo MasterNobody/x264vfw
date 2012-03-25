@@ -27,7 +27,7 @@ BEGIN
     DEFPUSHBUTTON   "OK",IDOK,158,109,48,14
     CTEXT           "x264vfw - H.264/MPEG-4 AVC codec",IDC_STATIC,6,6,199,8
     CTEXT           "ABOUT_IDC_BUILD_LABEL",ABOUT_IDC_BUILD_LABEL,6,18,199,18
-    CTEXT           "Copyleft 2005-2011 Laurent Aimar, Justin Clay, Min Chen,\nEric Petit, Mans Rullgard, Loren Merritt,\nAnton Mitrofanov (a.k.a. BugMaster)",IDC_STATIC,6,42,199,30
+    CTEXT           "Copyleft 2003-2012 Laurent Aimar, Justin Clay, Min Chen,\nEric Petit, Mans Rullgard, Loren Merritt,\nAnton Mitrofanov (a.k.a. BugMaster)",IDC_STATIC,6,42,199,30
     CTEXT           "This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation.",IDC_STATIC,6,78,199,26
     PUSHBUTTON      "Visit Homepage",ABOUT_IDC_HOMEPAGE,7,109,77,14
 END
@@ -164,3 +164,40 @@ BEGIN
     IDC_EXTRA_HELP          "Help (options list)"
     IDC_DEFAULTS            "Reset all options to default values"
 END
+
+#ifdef HAVE_VERSION
+#include "version.h"
+
+#define str(s) #s
+#define xstr(s) str(s)
+
+VS_VERSION_INFO VERSIONINFO
+FILEVERSION     VER_X264VFW, VER_X264, VER_FFMPEG, VER_FIX
+PRODUCTVERSION  VER_X264VFW, VER_X264, VER_FFMPEG, VER_FIX
+FILEFLAGSMASK   VS_FFI_FILEFLAGSMASK
+FILEFLAGS       0
+FILEOS          VOS_NT_WINDOWS32 /* Identical for x86-64 */
+FILETYPE        VFT_DLL
+FILESUBTYPE     VFT2_UNKNOWN
+BEGIN
+    BLOCK "StringFileInfo"
+    BEGIN
+        BLOCK "041904E3"
+        BEGIN
+            VALUE "CompanyName",      "x264vfw project"
+            VALUE "FileDescription",  "x264vfw - H.264/MPEG-4 AVC codec"
+            VALUE "FileVersion",      VER_FULL
+            VALUE "InternalName",     "x264vfw"
+            VALUE "LegalCopyright",   "Copyright (C) 2003-2012 x264vfw project"
+            VALUE "OriginalFilename", xstr(DLL_NAME)
+            VALUE "ProductName",      "x264vfw"
+            VALUE "ProductVersion",   VER_FULL
+        END
+    END
+
+    BLOCK "VarFileInfo"
+    BEGIN
+        VALUE "Translation", 0x0419, 0x04E3
+    END
+END
+#endif

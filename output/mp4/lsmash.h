@@ -1,7 +1,7 @@
 /*****************************************************************************
  * lsmash.h:
  *****************************************************************************
- * Copyright (C) 2010-2011 L-SMASH project
+ * Copyright (C) 2010-2012 L-SMASH project
  *
  * Authors: Yusuke Nakamura <muken.the.vfrmaniac@gmail.com>
  *
@@ -228,9 +228,17 @@ typedef enum
     QT_CODEC_TYPE_AP4H_VIDEO    = LSMASH_4CC( 'a', 'p', '4', 'h' ),   /* Apple ProRes 4444 */
     QT_CODEC_TYPE_CIVD_VIDEO    = LSMASH_4CC( 'c', 'i', 'v', 'd' ),   /* Cinepak Video */
     QT_CODEC_TYPE_DRAC_VIDEO    = LSMASH_4CC( 'd', 'r', 'a', 'c' ),   /* Dirac Video Coder */
-    QT_CODEC_TYPE_DVH5_VIDEO    = LSMASH_4CC( 'd', 'v', 'h', '5' ),   /* DVCPRO-HD 1080/50i */
-    QT_CODEC_TYPE_DVH6_VIDEO    = LSMASH_4CC( 'd', 'v', 'h', '6' ),   /* DVCPRO-HD 1080/60i */
-    QT_CODEC_TYPE_DVHP_VIDEO    = LSMASH_4CC( 'd', 'v', 'h', 'p' ),   /* DVCPRO-HD 720/60p */
+    QT_CODEC_TYPE_DVC_VIDEO     = LSMASH_4CC( 'd', 'v', 'c', ' ' ),   /* DV NTSC format */
+    QT_CODEC_TYPE_DVCP_VIDEO    = LSMASH_4CC( 'd', 'v', 'c', 'p' ),   /* DV PAL format */
+    QT_CODEC_TYPE_DVPP_VIDEO    = LSMASH_4CC( 'd', 'v', 'p', 'p' ),   /* Panasonic DVCPro PAL format */
+    QT_CODEC_TYPE_DV5N_VIDEO    = LSMASH_4CC( 'd', 'v', '5', 'n' ),   /* Panasonic DVCPro-50 NTSC format */
+    QT_CODEC_TYPE_DV5P_VIDEO    = LSMASH_4CC( 'd', 'v', '5', 'p' ),   /* Panasonic DVCPro-50 PAL format */
+    QT_CODEC_TYPE_DVH2_VIDEO    = LSMASH_4CC( 'd', 'v', 'h', '2' ),   /* Panasonic DVCPro-HD 1080p25 format */
+    QT_CODEC_TYPE_DVH3_VIDEO    = LSMASH_4CC( 'd', 'v', 'h', '3' ),   /* Panasonic DVCPro-HD 1080p30 format */
+    QT_CODEC_TYPE_DVH5_VIDEO    = LSMASH_4CC( 'd', 'v', 'h', '5' ),   /* Panasonic DVCPro-HD 1080i50 format */
+    QT_CODEC_TYPE_DVH6_VIDEO    = LSMASH_4CC( 'd', 'v', 'h', '6' ),   /* Panasonic DVCPro-HD 1080i60 format */
+    QT_CODEC_TYPE_DVHP_VIDEO    = LSMASH_4CC( 'd', 'v', 'h', 'p' ),   /* Panasonic DVCPro-HD 720p60 format */
+    QT_CODEC_TYPE_DVHQ_VIDEO    = LSMASH_4CC( 'd', 'v', 'h', 'q' ),   /* Panasonic DVCPro-HD 720p50 format */
     QT_CODEC_TYPE_FLIC_VIDEO    = LSMASH_4CC( 'f', 'l', 'i', 'c' ),   /* Autodesk FLIC animation format */
     QT_CODEC_TYPE_GIF_VIDEO     = LSMASH_4CC( 'g', 'i', 'f', ' ' ),   /* GIF image format */
     QT_CODEC_TYPE_H261_VIDEO    = LSMASH_4CC( 'h', '2', '6', '1' ),   /* ITU H.261 video */
@@ -239,6 +247,7 @@ typedef enum
     QT_CODEC_TYPE_MJPA_VIDEO    = LSMASH_4CC( 'm', 'j', 'p', 'a' ),   /* Motion-JPEG (format A) */
     QT_CODEC_TYPE_MJPB_VIDEO    = LSMASH_4CC( 'm', 'j', 'p', 'b' ),   /* Motion-JPEG (format B) */
     QT_CODEC_TYPE_PNG_VIDEO     = LSMASH_4CC( 'p', 'n', 'g', ' ' ),   /* W3C Portable Network Graphics (PNG) */
+    QT_CODEC_TYPE_RAW_VIDEO     = LSMASH_4CC( 'r', 'a', 'w', ' ' ),   /* Uncompressed RGB */
     QT_CODEC_TYPE_RLE_VIDEO     = LSMASH_4CC( 'r', 'l', 'e', ' ' ),   /* Apple animation codec */
     QT_CODEC_TYPE_RPZA_VIDEO    = LSMASH_4CC( 'r', 'p', 'z', 'a' ),   /* Apple simple video 'road pizza' compression */
     QT_CODEC_TYPE_TGA_VIDEO     = LSMASH_4CC( 't', 'g', 'a', ' ' ),   /* Truvision Targa video format */
@@ -282,6 +291,8 @@ typedef enum
     /* Other Type */
     ISOM_CODEC_TYPE_ENCS_SYSTEM = LSMASH_4CC( 'e', 'n', 'c', 's' ),   /* Encrypted Systems stream */
     ISOM_CODEC_TYPE_MP4S_SYSTEM = LSMASH_4CC( 'm', 'p', '4', 's' ),   /* MPEG-4 Systems */
+
+    LSMASH_CODEC_TYPE_RAW       = LSMASH_4CC( 'r', 'a', 'w', ' ' ),   /* Either video or audio */
 } lsmash_codec_type;
 
 typedef enum
@@ -719,7 +730,7 @@ typedef enum
     QT_CHANNEL_LAYOUT_ALAC_6_1                 = QT_CHANNEL_LAYOUT_AAC_6_1,         /* C L R Ls Rs Cs LFE */
     QT_CHANNEL_LAYOUT_ALAC_7_1                 = QT_CHANNEL_LAYOUT_MPEG_7_1_B,      /* C Lc Rc L R Ls Rs LFE */
 
-    QT_CHANNEL_LAYOUT_DISCRETE_IN_ORDER        = 147<<16,                           /* needs to be ORed with the actual number of channels */  
+    QT_CHANNEL_LAYOUT_DISCRETE_IN_ORDER        = 147<<16,                           /* needs to be ORed with the actual number of channels */
     QT_CHANNEL_LAYOUT_UNKNOWN                  = 0xffff0000,                        /* needs to be ORed with the actual number of channels */
 } lsmash_channel_layout_tag;
 
@@ -743,13 +754,6 @@ typedef enum
     ISOM_SCALING_METHOD_SLICE_X = 4,
     ISOM_SCALING_METHOD_SLICE_Y = 5,
 } lsmash_scaling_method;
-
-typedef enum
-{
-    ISOM_EDIT_MODE_NORMAL   = 1<<16,
-    ISOM_EDIT_MODE_DWELL    = 0,
-    ISOM_EDIT_MODE_EMPTY    = -1,
-} lsmash_edit_mode;
 
 typedef enum
 {
@@ -926,13 +930,14 @@ typedef enum
     ISOM_SAMPLE_RANDOM_ACCESS_TYPE_CLOSED_RAP   = 1,        /* the first sample of a closed GOP */
     ISOM_SAMPLE_RANDOM_ACCESS_TYPE_OPEN_RAP     = 2,        /* the first sample of an open GOP */
     ISOM_SAMPLE_RANDOM_ACCESS_TYPE_UNKNOWN_RAP  = 3,        /* the first sample of an open or closed GOP */
-    ISOM_SAMPLE_RANDOM_ACCESS_TYPE_RECOVERY     = 4,        /* starting point of gradual decoder refresh */
+    ISOM_SAMPLE_RANDOM_ACCESS_TYPE_POST_ROLL    = 4,        /* the post-roll starting point of random access recovery */
+    ISOM_SAMPLE_RANDOM_ACCESS_TYPE_PRE_ROLL     = 5,        /* the pre-roll ending point of random access recovery */
 
-    QT_SAMPLE_RANDOM_ACCESS_TYPE_NONE           = 0,        /* not random access point */
-    QT_SAMPLE_RANDOM_ACCESS_TYPE_SYNC           = 1,        /* sync sample */
+    QT_SAMPLE_RANDOM_ACCESS_TYPE_NONE           = 0,        /* alias of ISOM_SAMPLE_RANDOM_ACCESS_TYPE_NONE */
+    QT_SAMPLE_RANDOM_ACCESS_TYPE_SYNC           = 1,        /* alias of ISOM_SAMPLE_RANDOM_ACCESS_TYPE_SYNC */
     QT_SAMPLE_RANDOM_ACCESS_TYPE_PARTIAL_SYNC   = 2,        /* partial sync sample */
-    QT_SAMPLE_RANDOM_ACCESS_TYPE_CLOSED_RAP     = 1,        /* the first sample of a closed GOP */
-    QT_SAMPLE_RANDOM_ACCESS_TYPE_OPEN_RAP       = 2,        /* the first sample of an open GOP */
+    QT_SAMPLE_RANDOM_ACCESS_TYPE_CLOSED_RAP     = 1,        /* alias of ISOM_SAMPLE_RANDOM_ACCESS_TYPE_CLOSED_RAP */
+    QT_SAMPLE_RANDOM_ACCESS_TYPE_OPEN_RAP       = 2,        /* alias of ISOM_SAMPLE_RANDOM_ACCESS_TYPE_OPEN_RAP */
 } lsmash_random_access_type;
 
 typedef enum
@@ -996,23 +1001,176 @@ typedef enum
     ITUNES_METADATA_TYPE_CUSTOM                     = LSMASH_4CC( '-', '-', '-', '-' ),     /* Custom */
 } lsmash_itunes_metadata_type;
 
-/* public data types */
+typedef enum
+{
+    QT_FIELD_ORDERINGS_PROGRESSIVE              = 0,
+    QT_FIELD_ORDERINGS_TEMPORAL_TOP_FIRST       = 1,
+    QT_FIELD_ORDERINGS_TEMPORAL_BOTTOM_FIRST    = 6,
+    QT_FIELD_ORDERINGS_SPATIAL_FIRST_LINE_EARLY = 9,
+    QT_FIELD_ORDERINGS_SPATIAL_FIRST_LINE_LATE  = 14
+} lsmash_field_orderings;
+
+typedef enum
+{
+    QT_PIXEL_FORMAT_TYPE_1_MONOCHROME                       = 0x00000001,                           /* 1 bit indexed */
+    QT_PIXEL_FORMAT_TYPE_2_INDEXED                          = 0x00000002,                           /* 2 bit indexed */
+    QT_PIXEL_FORMAT_TYPE_4_INDEXED                          = 0x00000004,                           /* 4 bit indexed */
+    QT_PIXEL_FORMAT_TYPE_8_INDEXED                          = 0x00000008,                           /* 8 bit indexed */
+    QT_PIXEL_FORMAT_TYPE_1_INDEXED_GRAY_WHITE_IS_ZERO       = 0x00000021,                           /* 1 bit indexed gray, white is zero */
+    QT_PIXEL_FORMAT_TYPE_2_INDEXED_GRAY_WHITE_IS_ZERO       = 0x00000022,                           /* 2 bit indexed gray, white is zero */
+    QT_PIXEL_FORMAT_TYPE_4_INDEXED_GRAY_WHITE_IS_ZERO       = 0x00000024,                           /* 4 bit indexed gray, white is zero */
+    QT_PIXEL_FORMAT_TYPE_8_INDEXED_GRAY_WHITE_IS_ZERO       = 0x00000028,                           /* 8 bit indexed gray, white is zero */
+    QT_PIXEL_FORMAT_TYPE_16BE555                            = 0x00000010,                           /* 16 bit BE RGB 555 */
+    QT_PIXEL_FORMAT_TYPE_16LE555                            = LSMASH_4CC( 'L', '5', '5', '5' ),     /* 16 bit LE RGB 555 */
+    QT_PIXEL_FORMAT_TYPE_16LE5551                           = LSMASH_4CC( '5', '5', '5', '1' ),     /* 16 bit LE RGB 5551 */
+    QT_PIXEL_FORMAT_TYPE_16BE565                            = LSMASH_4CC( 'B', '5', '6', '5' ),     /* 16 bit BE RGB 565 */
+    QT_PIXEL_FORMAT_TYPE_16LE565                            = LSMASH_4CC( 'L', '5', '6', '5' ),     /* 16 bit LE RGB 565 */
+    QT_PIXEL_FORMAT_TYPE_24RGB                              = 0x00000018,                           /* 24 bit RGB */
+    QT_PIXEL_FORMAT_TYPE_24BGR                              = LSMASH_4CC( '2', '4', 'B', 'G' ),     /* 24 bit BGR */
+    QT_PIXEL_FORMAT_TYPE_32ARGB                             = 0x00000020,                           /* 32 bit ARGB */
+    QT_PIXEL_FORMAT_TYPE_32BGRA                             = LSMASH_4CC( 'B', 'G', 'R', 'A' ),     /* 32 bit BGRA */
+    QT_PIXEL_FORMAT_TYPE_32ABGR                             = LSMASH_4CC( 'A', 'B', 'G', 'R' ),     /* 32 bit ABGR */
+    QT_PIXEL_FORMAT_TYPE_32RGBA                             = LSMASH_4CC( 'R', 'G', 'B', 'A' ),     /* 32 bit RGBA */
+    QT_PIXEL_FORMAT_TYPE_64ARGB                             = LSMASH_4CC( 'b', '6', '4', 'a' ),     /* 64 bit ARGB, 16-bit big-endian samples */
+    QT_PIXEL_FORMAT_TYPE_48RGB                              = LSMASH_4CC( 'b', '4', '8', 'r' ),     /* 48 bit RGB, 16-bit big-endian samples */
+    QT_PIXEL_FORMAT_TYPE_32_ALPHA_GRAY                      = LSMASH_4CC( 'b', '3', '2', 'a' ),     /* 32 bit AlphaGray, 16-bit big-endian samples, black is zero */
+    QT_PIXEL_FORMAT_TYPE_16_GRAY                            = LSMASH_4CC( 'b', '1', '6', 'g' ),     /* 16 bit Grayscale, 16-bit big-endian samples, black is zero */
+    QT_PIXEL_FORMAT_TYPE_30RGB                              = LSMASH_4CC( 'R', '1', '0', 'k' ),     /* 30 bit RGB, 10-bit big-endian samples, 2 unused padding bits (at least significant end) */
+    QT_PIXEL_FORMAT_TYPE_422YpCbCr8                         = LSMASH_4CC( '2', 'v', 'u', 'y' ),     /* Component Y'CbCr 8-bit 4:2:2, ordered Cb Y'0 Cr Y'1 */
+    QT_PIXEL_FORMAT_TYPE_4444YpCbCrA8                       = LSMASH_4CC( 'v', '4', '0', '8' ),     /* Component Y'CbCrA 8-bit 4:4:4:4, ordered Cb Y' Cr A */
+    QT_PIXEL_FORMAT_TYPE_4444YpCbCrA8R                      = LSMASH_4CC( 'r', '4', '0', '8' ),     /* Component Y'CbCrA 8-bit 4:4:4:4, rendering format. full range alpha, zero biased YUV, ordered A Y' Cb Cr */
+    QT_PIXEL_FORMAT_TYPE_4444AYpCbCr8                       = LSMASH_4CC( 'y', '4', '0', '8' ),     /* Component Y'CbCrA 8-bit 4:4:4:4, ordered A Y' Cb Cr, full range alpha, video range Y'CbCr */
+    QT_PIXEL_FORMAT_TYPE_4444AYpCbCr16                      = LSMASH_4CC( 'y', '4', '1', '6' ),     /* Component Y'CbCrA 16-bit 4:4:4:4, ordered A Y' Cb Cr, full range alpha, video range Y'CbCr, 16-bit little-endian samples */
+    QT_PIXEL_FORMAT_TYPE_444YpCbCr8                         = LSMASH_4CC( 'v', '3', '0', '8' ),     /* Component Y'CbCr 8-bit 4:4:4 */
+    QT_PIXEL_FORMAT_TYPE_422YpCbCr16                        = LSMASH_4CC( 'v', '2', '1', '6' ),     /* Component Y'CbCr 10,12,14,16-bit 4:2:2 */
+    QT_PIXEL_FORMAT_TYPE_422YpCbCr10                        = LSMASH_4CC( 'v', '2', '1', '0' ),     /* Component Y'CbCr 10-bit 4:2:2 */
+    QT_PIXEL_FORMAT_TYPE_444YpCbCr10                        = LSMASH_4CC( 'v', '4', '1', '0' ),     /* Component Y'CbCr 10-bit 4:4:4 */
+    QT_PIXEL_FORMAT_TYPE_420YpCbCr8_PLANAR                  = LSMASH_4CC( 'y', '4', '2', '0' ),     /* Planar Component Y'CbCr 8-bit 4:2:0 */
+    QT_PIXEL_FORMAT_TYPE_420YpCbCr8_PLANAR_FULL_RANGE       = LSMASH_4CC( 'f', '4', '2', '0' ),     /* Planar Component Y'CbCr 8-bit 4:2:0, full range */
+    QT_PIXEL_FORMAT_TYPE_422YpCbCr_4A_8_BIPLANAR            = LSMASH_4CC( 'a', '2', 'v', 'y' ),     /* First plane: Video-range Component Y'CbCr 8-bit 4:2:2, ordered Cb Y'0 Cr Y'1; second plane: alpha 8-bit 0-255 */
+    QT_PIXEL_FORMAT_TYPE_420YpCbCr8_BIPLANAR_VIDEO_RANGE    = LSMASH_4CC( '4', '2', '0', 'v' ),     /* Bi-Planar Component Y'CbCr 8-bit 4:2:0, video-range (luma=[16,235] chroma=[16,240]) */
+    QT_PIXEL_FORMAT_TYPE_420YpCbCr8_BIPLANAR_FULL_RANGE     = LSMASH_4CC( '4', '2', '0', 'f' ),     /* Bi-Planar Component Y'CbCr 8-bit 4:2:0, full-range (luma=[0,255] chroma=[1,255]) */
+    QT_PIXEL_FORMAT_TYPE_422YpCbCr8_YUVS                    = LSMASH_4CC( 'y', 'u', 'v', 's' ),     /* Component Y'CbCr 8-bit 4:2:2, ordered Y'0 Cb Y'1 Cr */
+    QT_PIXEL_FORMAT_TYPE_422YpCbCr8_FULL_RANGE              = LSMASH_4CC( 'y', 'u', 'v', 'f' ),     /* Component Y'CbCr 8-bit 4:2:2, full range, ordered Y'0 Cb Y'1 Cr */
+} lsmash_pixel_format;
+
+typedef enum
+{
+    DTS_CORE_SUBSTREAM_CORE_FLAG = 0x00000001,
+    DTS_CORE_SUBSTREAM_XXCH_FLAG = 0x00000002,
+    DTS_CORE_SUBSTREAM_X96_FLAG  = 0x00000004,
+    DTS_CORE_SUBSTREAM_XCH_FLAG  = 0x00000008,
+    DTS_EXT_SUBSTREAM_CORE_FLAG  = 0x00000010,
+    DTS_EXT_SUBSTREAM_XBR_FLAG   = 0x00000020,
+    DTS_EXT_SUBSTREAM_XXCH_FLAG  = 0x00000040,
+    DTS_EXT_SUBSTREAM_X96_FLAG   = 0x00000080,
+    DTS_EXT_SUBSTREAM_LBR_FLAG   = 0x00000100,
+    DTS_EXT_SUBSTREAM_XLL_FLAG   = 0x00000200,
+} lsmash_dts_construction_flag;
+
+/* CODEC specific data types */
 typedef struct
 {
-    uint32_t complete;      /* recovery point: the identifier necessary for the recovery from its starting point to be completed */
-    uint32_t identifier;    /* the identifier for samples
-                             * If this identifier equals a certain identifier of recovery point,
-                             * then this sample is the recovery point of the earliest group in the pool. */
+    uint8_t fscod;          /* the same value as the fscod field in the AC-3 bitstream */
+    uint8_t bsid;           /* the same value as the bsid field in the AC-3 bitstream */
+    uint8_t bsmod;          /* the same value as the bsmod field in the AC-3 bitstream */
+    uint8_t acmod;          /* the same value as the acmod field in the AC-3 bitstream */
+    uint8_t lfeon;          /* the same value as the lfeon field in the AC-3 bitstream */
+    uint8_t frmsizecod;     /* the same value as the frmsizecod field in the AC-3 bitstream */
+} lsmash_ac3_specific_parameters_t;
+
+typedef struct
+{
+    uint8_t  fscod;         /* the same value as the fscod field in the independent substream */
+    uint8_t  fscod2;        /* Any user must not use this. */
+    uint8_t  bsid;          /* the same value as the bsid field in the independent substream */
+    uint8_t  bsmod;         /* the same value as the bsmod field in the independent substream
+                             * If the bsmod field is not present in the independent substream, this field shall be set to 0. */
+    uint8_t  acmod;         /* the same value as the acmod field in the independent substream */
+    uint8_t  lfeon;         /* the same value as the lfeon field in the independent substream */
+    uint8_t  num_dep_sub;   /* the number of dependent substreams that are associated with the independent substream */
+    uint16_t chan_loc;      /* channel locations of dependent substreams associated with the independent substream
+                             * This information is extracted from the chanmap field of each dependent substream. */
+} lsmash_eac3_substream_info_t;
+
+typedef struct
+{
+    uint16_t data_rate;     /* the data rate of the Enhanced AC-3 bitstream in kbit/s
+                             * If the Enhanced AC-3 stream is variable bitrate, then this value indicates the maximum data rate of the stream. */
+    uint8_t  num_ind_sub;   /* the number of independent substreams that are present in the Enhanced AC-3 bitstream
+                             * The value of this field is one less than the number of independent substreams present
+                             * and shall be in the range of 0 to 7, inclusive. */
+    lsmash_eac3_substream_info_t independent_info[8];
+} lsmash_eac3_specific_parameters_t;
+
+typedef struct
+{
+    uint32_t DTSSamplingFrequency;  /* the maximum sampling frequency stored in the compressed audio stream */
+    uint32_t maxBitrate;            /* the peak bit rate, in bits per second, of the audio elementary stream for the duration of the track,
+                                     * including the core substream (if present) and all extension substreams.
+                                     * If the stream is a constant bit rate, this parameter shall have the same value as avgBitrate.
+                                     * If the maximum bit rate is unknown, this parameter shall be set to 0. */
+    uint32_t avgBitrate;            /* the average bit rate, in bits per second, of the audio elementary stream for the duration of the track,
+                                     * including the core substream and any extension substream that may be present. */
+    uint8_t  pcmSampleDepth;        /* the bit depth of the rendered audio
+                                     * The value is 16 or 24 bits. */
+    uint8_t  FrameDuration;         /* the number of audio samples decoded in a complete audio access unit at DTSSamplingFrequency
+                                     *   0: 512, 1: 1024, 2: 2048, 3: 4096 */
+    uint8_t  StreamConstruction;    /* complete information on the existence and of location of extensions in any synchronized frame */
+    uint8_t  CoreLFEPresent;        /* the presence of an LFE channel in the core
+                                     *   0: none
+                                     *   1: LFE exists */
+    uint8_t  CoreLayout;            /* the channel layout of the core within the core substream
+                                     * If no core substream exists, this parameter shall be ignored and ChannelLayout or
+                                     * RepresentationType shall be used to determine channel configuration. */
+    uint16_t CoreSize;              /* The size of a core substream AU in bytes.
+                                     * If no core substream exists, CoreSize = 0. */
+    uint8_t  StereoDownmix;         /* the presence of an embedded stereo downmix in the stream
+                                     *   0: none
+                                     *   1: embedded downmix present */
+    uint8_t  RepresentationType;    /* This indicates special properties of the audio presentation.
+                                     *   0: Audio asset designated for mixing with another audio asset
+                                     *   2: Lt/Rt Encoded for matrix surround decoding
+                                     *   3: Audio processed for headphone playback
+                                     *   otherwise: Reserved
+                                     * If ChannelLayout != 0, this value shall be ignored. */
+    uint16_t ChannelLayout;         /* complete information on channels coded in the audio stream including core and extensions */
+    uint8_t  MultiAssetFlag;        /* This flag shall set if the stream contains more than one asset.
+                                     *   0: single asset
+                                     *   1: multiple asset
+                                     * When multiple assets exist, the remaining parameters only reflect the coding parameters of the first asset. */
+    uint8_t  LBRDurationMod;        /* This flag indicates a special case of the LBR coding bandwidth, resulting in 1/3 or 2/3 band limiting.
+                                     * If set to 1, LBR frame duration is 50 % larger than indicated in FrameDuration */
+} lsmash_dts_specific_parameters_t;
+
+/* sample data types */
+typedef struct
+{
+    uint32_t identifier;    /* the identifier of sample
+                             * If this identifier equals a certain identifier of random access recovery point,
+                             * then this sample is the random access recovery point of the earliest unestablished post-roll group. */
+    uint32_t complete;      /* the identifier of future random access recovery point, which is necessary for the recovery from its starting point to be completed
+                             * For muxing, this value is used only if random_access_type is set to ISOM_SAMPLE_RANDOM_ACCESS_TYPE_POST_ROLL.
+                             * The following is an example of use for gradual decoder refresh of H.264/AVC.
+                             *   For each sample, set 'frame_num' to the 'identifier'.
+                             *   For samples with recovery point SEI message, set ISOM_SAMPLE_RANDOM_ACCESS_TYPE_POST_ROLL to random_access_type
+                             *   and set '(frame_num + recovery_frame_cnt) % MaxFrameNum' to the 'complete'.
+                             *   The above-mentioned values are set appropriately, then L-SMASH will establish appropriate post-roll grouping. */
 } lsmash_post_roll_t;
 
 typedef struct
 {
-    uint16_t distance;      /* pre-roll distance for representing audio decoder delay derived from composition
-                             * For example, typical AAC encoding uses a transform over consecutive sets of 2048 audio samples,
-                             * applied every 1024 audio samples (MDCTs are overlapped).
-                             * For correct audio to be decoded, both transforms for any period of 1024 audio samples are needed.
-                             * For this AAC stream, therefore, shall be set to 1 (one AAC access unit).
-                             * Note: the number of priming audio sample i.e. encoder delay shall be represented by media_time in edit. */
+    uint32_t distance;      /* the distance from the previous random access point or pre-roll starting point
+                             * of the random access recovery point to this sample.
+                             * For muxing, this value is used only if random_access_type is not set to ISOM_SAMPLE_RANDOM_ACCESS_TYPE_NONE
+                             * or ISOM_SAMPLE_RANDOM_ACCESS_TYPE_POST_ROLL.
+                             * Some derived specifications forbid using pre-roll settings and use post-roll settings instead (e.g. AVC uses only post-roll).
+                             * The following is an example of pre-roll distance for representing audio decoder delay derived from composition.
+                             *   Typical AAC encoding uses a transform over consecutive sets of 2048 audio samples,
+                             *   applied every 1024 audio samples (MDCTs are overlapped).
+                             *   For correct audio to be decoded, both transforms for any period of 1024 audio samples are needed.
+                             *   For this AAC stream, therefore, 'distance' of each sample shall be set to 1 (one AAC access unit).
+                             *   Note: the number of priming audio sample i.e. encoder delay shall be represented by 'start_time' in an edit. */
 } lsmash_pre_roll_t;
 
 typedef struct
@@ -1048,6 +1206,34 @@ typedef struct
     uint32_t sample_count;
     lsmash_media_ts_t *timestamp;
 } lsmash_media_ts_list_t;
+
+/* explicit timeline map (edit)
+ * There are two types of timeline; one is the media timeline, the other is the presentation timeline (or the movie timeline).
+ * An edit maps the presentation timeline to the media timeline.
+ * Therefore, an edit can select any portion within the media and specify its playback speed.
+ * The media within the track is played through the presentation timeline, so you can construct any complex presentation from a media by edits.
+ * In the absence of any edit, there is an implicit one-to-one mapping of these timelines, and the presentation of a track starts at the beginning of the presentation.
+ * Note: any edit doesn't restrict decoding and composition. So, if a sample in an edit need to decode from a sample in outside of that edit,
+ *       the decoder shall start to decode from there but player shall not display any sample in outside of that edit. */
+#define ISOM_EDIT_MODE_NORMAL        (1<<16)
+#define ISOM_EDIT_MODE_DWELL         0
+#define ISOM_EDIT_MODE_EMPTY         -1
+#define ISOM_EDIT_DURATION_UNKNOWN32 0xffffffff
+#define ISOM_EDIT_DURATION_UNKNOWN64 0xffffffffffffffff
+
+typedef struct
+{
+    uint64_t duration;      /* the duration of this edit expressed in the movie timescale units
+                             * An edit can be used to the media within fragmented tracks.
+                             * The duration is unknown at the time of creating the initial movie because of real-time creation such as live streaming,
+                             * it is recomended the duration is set to ISOM_EDIT_DURATION_UNKNOWN32 (the maximum 32-bit unsigned integer)
+                             * or ISOM_EDIT_DURATION_UNKNOWN64 (the maximum 64-bit unsigned integer). */
+    int64_t  start_time;    /* the starting composition time within the media of this edit
+                             * If set to ISOM_EDIT_MODE_EMPTY (-1), it construct an empty edit, which doesn't select any portion within the media. */
+    int32_t  rate;          /* the relative rate at which to play the media corresponding to this edit, expressed as 16.16 fixed-point number
+                             * If set to ISOM_EDIT_MODE_NORMAL (0x00010000), there is no rate change for timeline mapping.
+                             * If set to ISOM_EDIT_MODE_DWELL (0), the media at start_time is presented for the duration. */
+} lsmash_edit_t;
 
 /* */
 typedef int (*lsmash_adhoc_remux_callback)( void* param, uint64_t done, uint64_t total );
@@ -1116,9 +1302,13 @@ typedef struct
     uint32_t par_h;                             /* horizontal factor of pixel aspect ratio */
     uint32_t par_v;                             /* vertical factor of pixel aspect ratio */
     lsmash_scaling_method scaling_method;       /* If not set, video samples are scaled into the visual presentation region to fill it. */
+    /* The folowing parameters are only available for QuickTime file formats. */
     lsmash_color_parameter primaries;
     lsmash_color_parameter transfer;
     lsmash_color_parameter matrix;
+    lsmash_field_orderings field_orderings;     /* field ordering for interlaced material */
+    lsmash_pixel_format pixel_format;           /* the native pixel format */
+    uint8_t significant_bits;                   /* the number of significant bits per component */
 } lsmash_video_summary_t;
 
 typedef struct
@@ -1244,9 +1434,11 @@ int lsmash_set_tyrant_chapter( lsmash_root_t *root, char *file_name, int add_bom
 int lsmash_create_reference_chapter_track( lsmash_root_t *root, uint32_t track_ID, char *file_name );
 int lsmash_create_object_descriptor( lsmash_root_t *root );
 
-int lsmash_create_explicit_timeline_map( lsmash_root_t *root, uint32_t track_ID, uint64_t segment_duration, int64_t media_time, int32_t media_rate );
-int lsmash_modify_explicit_timeline_map( lsmash_root_t *root, uint32_t track_ID, uint32_t entry_number, uint64_t segment_duration, int64_t media_time, int32_t media_rate );
+int lsmash_create_explicit_timeline_map( lsmash_root_t *root, uint32_t track_ID, lsmash_edit_t edit );
+int lsmash_modify_explicit_timeline_map( lsmash_root_t *root, uint32_t track_ID, uint32_t edit_number, lsmash_edit_t edit );
+int lsmash_get_explicit_timeline_map( lsmash_root_t *root, uint32_t track_ID, uint32_t edit_number, lsmash_edit_t *edit );
 int lsmash_delete_explicit_timeline_map( lsmash_root_t *root, uint32_t track_ID );
+uint32_t lsmash_count_explicit_timeline_map( lsmash_root_t *root, uint32_t track_ID );
 
 int lsmash_update_media_modification_time( lsmash_root_t *root, uint32_t track_ID );
 int lsmash_update_track_modification_time( lsmash_root_t *root, uint32_t track_ID );
@@ -1292,7 +1484,7 @@ int lsmash_set_itunes_metadata_integer( lsmash_root_t *root, lsmash_itunes_metad
 int lsmash_set_itunes_metadata_boolean( lsmash_root_t *root, lsmash_itunes_metadata_type type, lsmash_boolean_t value, char *meaning, char *name );
 
 #ifdef LSMASH_DEMUXER_ENABLED
-int lsmash_print_movie( lsmash_root_t *root );
+int lsmash_print_movie( lsmash_root_t *root, const char *filename );
 
 /* This function might output BOM on Windows. Make sure that this is the first function that outputs something to stdout. */
 int lsmash_print_chapter_list( lsmash_root_t *root );
@@ -1312,6 +1504,8 @@ int lsmash_get_closest_random_accessible_point_detail_from_media_timeline( lsmas
 uint32_t lsmash_get_sample_count_in_media_timeline( lsmash_root_t *root, uint32_t track_ID );
 uint32_t lsmash_get_max_sample_size_in_media_timeline( lsmash_root_t *root, uint32_t track_ID );
 lsmash_sample_t *lsmash_get_sample_from_media_timeline( lsmash_root_t *root, uint32_t track_ID, uint32_t sample_number );
+int lsmash_get_sample_info_from_media_timeline( lsmash_root_t *root, uint32_t track_ID, uint32_t sample_number, lsmash_sample_t *sample );
+int lsmash_get_sample_property_from_media_timeline( lsmash_root_t *root, uint32_t track_ID, uint32_t sample_number, lsmash_sample_property_t *prop );
 int lsmash_check_sample_existence_in_media_timeline( lsmash_root_t *root, uint32_t track_ID, uint32_t sample_number );
 
 lsmash_itunes_metadata_list_t *lsmash_export_itunes_metadata( lsmash_root_t *root );
@@ -1332,6 +1526,21 @@ int lsmash_summary_add_exdata( lsmash_summary_t *summary, void* exdata, uint32_t
 
 lsmash_summary_t *lsmash_create_summary( lsmash_mp4sys_stream_type stream_type );
 void lsmash_cleanup_summary( lsmash_summary_t *summary );
+
+/* AC-3 tools to make exdata (AC-3 specific info). */
+int lsmash_setup_ac3_specific_parameters_from_syncframe( lsmash_ac3_specific_parameters_t *param, uint8_t *data, uint32_t data_length );
+uint8_t *lsmash_create_ac3_specific_info( lsmash_ac3_specific_parameters_t *param, uint32_t *data_length );
+
+/* Eanhanced AC-3 tools to make exdata (Enhanced AC-3 specific info). */
+int lsmash_setup_eac3_specific_parameters_from_frame( lsmash_eac3_specific_parameters_t *param, uint8_t *data, uint32_t data_length );
+uint16_t lsmash_eac3_get_chan_loc_from_chanmap( uint16_t chanmap );
+uint8_t *lsmash_create_eac3_specific_info( lsmash_eac3_specific_parameters_t *param, uint32_t *data_length );
+
+/* DTS audio tools to make exdata (DTS specific info). */
+int lsmash_setup_dts_specific_parameters_from_frame( lsmash_dts_specific_parameters_t *param, uint8_t *data, uint32_t data_length );
+uint8_t lsmash_dts_get_stream_construction( lsmash_dts_construction_flag flags );
+uint32_t lsmash_dts_get_codingname( lsmash_dts_specific_parameters_t *param );
+uint8_t *lsmash_create_dts_specific_info( lsmash_dts_specific_parameters_t *param, uint32_t *data_length );
 
 #undef PRIVATE
 
