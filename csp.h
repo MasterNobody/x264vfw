@@ -28,21 +28,22 @@
 
 /* Colorspace type */
 #define X264VFW_CSP_MASK           0x00ff  /* */
-#define X264VFW_CSP_NONE           0x0000  /* Invalid mode     */
+#define X264VFW_CSP_NONE           0x0000  /* Invalid mode */
 #define X264VFW_CSP_I420           0x0001  /* yuv 4:2:0 planar */
-#define X264VFW_CSP_I422           0x0002  /* yuv 4:2:2 planar */
-#define X264VFW_CSP_I444           0x0003  /* yuv 4:4:4 planar */
-#define X264VFW_CSP_YV12           0x0004  /* yuv 4:2:0 planar */
-#define X264VFW_CSP_YUYV           0x0005  /* yuv 4:2:2 packed */
-#define X264VFW_CSP_UYVY           0x0006  /* yuv 4:2:2 packed */
-#define X264VFW_CSP_RGB            0x0007  /* rgb 24bits       */
-#define X264VFW_CSP_BGR            0x0008  /* bgr 24bits       */
-#define X264VFW_CSP_BGRA           0x0009  /* bgr 32bits       */
-#define X264VFW_CSP_MAX            0x0010  /* end of list */
-#define X264VFW_CSP_VFLIP          0x1000  /* */
+//#define X264VFW_CSP_I422         0x000?  /* yuv 4:2:2 planar */
+//#define X264VFW_CSP_I444         0x000?  /* yuv 4:4:4 planar */
+#define X264VFW_CSP_YV12           0x0002  /* yvu 4:2:0 planar */
+#define X264VFW_CSP_YV16           0x0003  /* yvu 4:2:2 planar */
+#define X264VFW_CSP_YV24           0x0004  /* yvu 4:4:4 planar */
+#define X264VFW_CSP_NV12           0x0005  /* yuv 4:2:0, with one y plane and one packed u+v */
+#define X264VFW_CSP_YUYV           0x0006  /* yuv 4:2:2 packed */
+#define X264VFW_CSP_UYVY           0x0007  /* yuv 4:2:2 packed */
+#define X264VFW_CSP_BGR            0x0008  /* packed bgr 24bits */
+#define X264VFW_CSP_BGRA           0x0009  /* packed bgr 32bits */
+#define X264VFW_CSP_MAX            0x000a  /* end of list */
+#define X264VFW_CSP_VFLIP          0x1000  /* the csp is vertically flipped */
 
-typedef void (*x264vfw_csp_t) ( x264_image_t *, x264_image_t *,
-                                int i_width, int i_height );
+typedef int (*x264vfw_csp_t)( x264_image_t *, x264_image_t *, int i_width, int i_height );
 
 typedef struct
 {

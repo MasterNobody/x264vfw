@@ -57,10 +57,13 @@ const named_str_t x264vfw_tune_table[COUNT_TUNE] =
 
 const named_str_t x264vfw_profile_table[COUNT_PROFILE] =
 {
-    { "Auto",     ""         },
-    { "Baseline", "baseline" },
-    { "Main",     "main"     },
-    { "High",     "high"     }
+    { "Auto",       ""         },
+    { "Baseline",   "baseline" },
+    { "Main",       "main"     },
+    { "High",       "high"     },
+    { "High 10",    "high10"   },
+    { "High 4:2:2", "high422"  },
+    { "High 4:4:4", "high444"  }
 };
 
 const named_int_t x264vfw_level_table[COUNT_LEVEL] =
@@ -81,7 +84,8 @@ const named_int_t x264vfw_level_table[COUNT_LEVEL] =
     { "4.1",  41 },
     { "4.2",  42 },
     { "5.0",  50 },
-    { "5.1",  51 }
+    { "5.1",  51 },
+    { "5.2",  52 }
 };
 
 const named_fourcc_t x264vfw_fourcc_table[COUNT_FOURCC] =
@@ -132,6 +136,15 @@ static int get_csp(BITMAPINFOHEADER *hdr)
         case FOURCC_YV12:
             return X264VFW_CSP_YV12 | i_vflip;
 
+        case FOURCC_YV16:
+            return X264VFW_CSP_YV16 | i_vflip;
+
+        case FOURCC_YV24:
+            return X264VFW_CSP_YV24 | i_vflip;
+
+        case FOURCC_NV12:
+            return X264VFW_CSP_NV12 | i_vflip;
+
         case FOURCC_YUYV:
         case FOURCC_YUY2:
             return X264VFW_CSP_YUYV | i_vflip;
@@ -155,14 +168,138 @@ static int get_csp(BITMAPINFOHEADER *hdr)
     }
 }
 
+static int choose_output_csp(int i_csp, int b_keep_input_csp)
+{
+    i_csp &= X264VFW_CSP_MASK;
+    switch (i_csp)
+    {
+        case X264VFW_CSP_I420:
+        case X264VFW_CSP_YV12:
+            return X264_CSP_I420;
+
+        //case X264VFW_CSP_I422:
+        case X264VFW_CSP_YV16:
+            return b_keep_input_csp ? X264_CSP_I422 : X264_CSP_I420;
+
+        //case X264VFW_CSP_I444:
+        case X264VFW_CSP_YV24:
+            return b_keep_input_csp ? X264_CSP_I444 : X264_CSP_I420;
+
+        case X264VFW_CSP_NV12:
+            return X264_CSP_NV12;
+
+        case X264VFW_CSP_YUYV:
+        case X264VFW_CSP_UYVY:
+            return b_keep_input_csp ? X264_CSP_I422 : X264_CSP_I420;
+
+        case X264VFW_CSP_BGR:
+            return b_keep_input_csp ? X264_CSP_BGR : X264_CSP_I420;
+
+        case X264VFW_CSP_BGRA:
+            return b_keep_input_csp ? X264_CSP_BGRA : X264_CSP_I420;
+
+        default:
+            return X264_CSP_I420;
+    }
+}
+
+static int x264vfw_img_fill(x264_image_t *img, uint8_t *ptr, int i_csp, int width, int height)
+{
+    i_csp &= X264VFW_CSP_MASK;
+    switch (i_csp)
+    {
+        case X264VFW_CSP_I420:
+        case X264VFW_CSP_YV12:
+            height = (height + 1) & ~1;
+            width = (width + 1) & ~1;
+            img->i_plane     = 3;
+            img->i_stride[0] = width;
+            img->i_stride[1] =
+            img->i_stride[2] = width / 2;
+            img->plane[0]    = ptr;
+            img->plane[1]    = img->plane[0] + img->i_stride[0] * height;
+            img->plane[2]    = img->plane[1] + img->i_stride[1] * height / 2;
+            break;
+
+        //case X264VFW_CSP_I422:
+        case X264VFW_CSP_YV16:
+            width = (width + 1) & ~1;
+            img->i_plane     = 3;
+            img->i_stride[0] = width;
+            img->i_stride[1] =
+            img->i_stride[2] = width / 2;
+            img->plane[0]    = ptr;
+            img->plane[1]    = img->plane[0] + img->i_stride[0] * height;
+            img->plane[2]    = img->plane[1] + img->i_stride[1] * height;
+            break;
+
+        //case X264VFW_CSP_I444:
+        case X264VFW_CSP_YV24:
+            img->i_plane     = 3;
+            img->i_stride[0] =
+            img->i_stride[1] =
+            img->i_stride[2] = width;
+            img->plane[0]    = ptr;
+            img->plane[1]    = img->plane[0] + img->i_stride[0] * height;
+            img->plane[2]    = img->plane[1] + img->i_stride[1] * height;
+            break;
+
+        case X264VFW_CSP_NV12:
+            height = (height + 1) & ~1;
+            width = (width + 1) & ~1;
+            img->i_plane     = 2;
+            img->i_stride[0] =
+            img->i_stride[1] = width;
+            img->plane[0]    = ptr;
+            img->plane[1]    = img->plane[0] + img->i_stride[0] * height;
+            break;
+
+        case X264VFW_CSP_YUYV:
+        case X264VFW_CSP_UYVY:
+            width = (width + 1) & ~1;
+            img->i_plane     = 1;
+            img->i_stride[0] = 2 * width;
+            img->plane[0]    = ptr;
+            break;
+
+        case X264VFW_CSP_BGR:
+            img->i_plane     = 1;
+            img->i_stride[0] = (3 * width + 3) & ~3;
+            img->plane[0]    = ptr;
+            break;
+
+        case X264VFW_CSP_BGRA:
+            img->i_plane     = 1;
+            img->i_stride[0] = 4 * width;
+            img->plane[0]    = ptr;
+            break;
+
+        default:
+            return -1;
+    }
+    return 0;
+}
+
 #if defined(HAVE_FFMPEG) && X264VFW_USE_DECODER
 static enum PixelFormat csp_to_pix_fmt(int i_csp)
 {
+    i_csp &= X264VFW_CSP_MASK;
     switch (i_csp)
     {
         case X264VFW_CSP_I420:
         case X264VFW_CSP_YV12:
             return PIX_FMT_YUV420P;
+
+        //case X264VFW_CSP_I422:
+        case X264VFW_CSP_YV16:
+            return PIX_FMT_YUV422P;
+
+        //case X264VFW_CSP_I444:
+        case X264VFW_CSP_YV24:
+            return PIX_FMT_YUV444P;
+
+        case X264VFW_CSP_NV12:
+            return PIX_FMT_NV12;
 
         case X264VFW_CSP_YUYV:
             return PIX_FMT_YUYV422;
@@ -190,9 +327,11 @@ static int x264vfw_picture_fill(AVPicture *picture, uint8_t *ptr, enum PixelForm
         case PIX_FMT_YUV420P:
         {
             int size, size2;
+            height = (height + 1) & ~1;
+            width = (width + 1) & ~1;
             picture->linesize[0] = width;
             picture->linesize[1] =
-            picture->linesize[2] = picture->linesize[0] / 2;
+            picture->linesize[2] = width / 2;
             size  = picture->linesize[0] * height;
             size2 = picture->linesize[1] * height / 2;
             picture->data[0] = ptr;
@@ -200,29 +339,134 @@ static int x264vfw_picture_fill(AVPicture *picture, uint8_t *ptr, enum PixelForm
             picture->data[2] = picture->data[1] + size2;
             return size + 2 * size2;
         }
+
+        case PIX_FMT_YUV422P:
+        {
+            int size, size2;
+            width = (width + 1) & ~1;
+            picture->linesize[0] = width;
+            picture->linesize[1] =
+            picture->linesize[2] = width / 2;
+            size  = picture->linesize[0] * height;
+            size2 = picture->linesize[1] * height;
+            picture->data[0] = ptr;
+            picture->data[1] = picture->data[0] + size;
+            picture->data[2] = picture->data[1] + size2;
+            return size + 2 * size2;
+        }
+
+        case PIX_FMT_YUV444P:
+        {
+            int size;
+            picture->linesize[0] =
+            picture->linesize[1] =
+            picture->linesize[2] = width;
+            size  = picture->linesize[0] * height;
+            picture->data[0] = ptr;
+            picture->data[1] = picture->data[0] + size;
+            picture->data[2] = picture->data[1] + size;
+            return 3 * size;
+        }
+
+        case PIX_FMT_NV12:
+        {
+            int size;
+            height = (height + 1) & ~1;
+            width = (width + 1) & ~1;
+            picture->linesize[0] =
+            picture->linesize[1] = width;
+            size  = picture->linesize[0] * height;
+            picture->data[0] = ptr;
+            picture->data[1] = picture->data[0] + size;
+            return size + size / 2;
+        }
+
         case PIX_FMT_YUYV422:
         case PIX_FMT_UYVY422:
+            width = (width + 1) & ~1;
             picture->linesize[0] = width * 2;
             picture->data[0] = ptr;
             return picture->linesize[0] * height;
+
         case PIX_FMT_BGR24:
             picture->linesize[0] = (width * 3 + 3) & ~3;
             picture->data[0] = ptr;
             return picture->linesize[0] * height;
+
         case PIX_FMT_BGRA:
             picture->linesize[0] = width * 4;
             picture->data[0] = ptr;
             return picture->linesize[0] * height;
+
         default:
             return -1;
     }
-    return 0;
 }
 
 static int x264vfw_picture_get_size(enum PixelFormat pix_fmt, int width, int height)
 {
     AVPicture dummy_pict;
     return x264vfw_picture_fill(&dummy_pict, NULL, pix_fmt, width, height);
+}
+
+static int x264vfw_picture_vflip(AVPicture *picture, enum PixelFormat pix_fmt, int width, int height)
+{
+    switch (pix_fmt)
+    {
+        // only RGB-formats can need vflip
+        case PIX_FMT_BGR24:
+        case PIX_FMT_BGRA:
+            picture->data[0] += picture->linesize[0] * (height - 1);
+            picture->linesize[0] = -picture->linesize[0];
+            break;
+
+        default:
+            return -1;
+    }
+    return 0;
+}
+
+static void x264vfw_fill_black_frame(uint8_t *ptr, enum PixelFormat pix_fmt, int picture_size)
+{
+    switch (pix_fmt)
+    {
+        case PIX_FMT_YUV420P:
+        case PIX_FMT_NV12:
+        {
+            int luma_size = picture_size * 2 / 3;
+            memset(ptr, 0x10, luma_size); /* TV Scale */
+            memset(ptr + luma_size, 0x80, picture_size - luma_size);
+            break;
+        }
+
+        case PIX_FMT_YUV422P:
+        {
+            int luma_size = picture_size / 2;
+            memset(ptr, 0x10, luma_size); /* TV Scale */
+            memset(ptr + luma_size, 0x80, picture_size - luma_size);
+            break;
+        }
+
+        case PIX_FMT_YUV444P:
+        {
+            int luma_size = picture_size / 3;
+            memset(ptr, 0x10, luma_size); /* TV Scale */
+            memset(ptr + luma_size, 0x80, picture_size - luma_size);
+            break;
+        }
+
+        case PIX_FMT_YUYV422:
+            wmemset((wchar_t *)ptr, 0x8010, picture_size / sizeof(wchar_t)); /* TV Scale */
+            break;
+
+        case PIX_FMT_UYVY422:
+            wmemset((wchar_t *)ptr, 0x1080, picture_size / sizeof(wchar_t)); /* TV Scale */
+            break;
+
+        default:
+            memset(ptr, 0x00, picture_size);
+            break;
+    }
 }
 #endif
 
@@ -574,6 +818,7 @@ static struct option long_options[] =
     { "zones",             required_argument, NULL, 0                   },
     { "qpfile",            required_argument, NULL, OPT_QPFILE          },
     { "threads",           required_argument, NULL, 0                   },
+    { "lookahead-threads", required_argument, NULL, 0                   },
     { "sliced-threads",    no_argument,       NULL, 0                   },
     { "no-sliced-threads", no_argument,       NULL, 0                   },
     { "slice-max-size",    required_argument, NULL, 0                   },
@@ -1084,14 +1329,11 @@ LRESULT x264vfw_compress_begin(CODEC *codec, BITMAPINFO *lpbiInput, BITMAPINFO *
         x264vfw_log(codec, X264_LOG_ERROR, "x264_param_default_preset failed\n");
         goto fail;
     }
-    /* Set VFW defaults for colorspace options */
-    param.vui.b_fullrange = 0; /* tv range */
-    param.vui.i_colmatrix = 2; /* undef */
 
     /* Video Properties */
     param.i_width  = lpbiInput->bmiHeader.biWidth;
     param.i_height = abs(lpbiInput->bmiHeader.biHeight);
-    param.i_csp    = X264_CSP_I420;
+    param.i_csp    = choose_output_csp(get_csp(&lpbiInput->bmiHeader), config->b_keep_input_csp);
 
     /* ICM_COMPRESS_FRAMES_INFO params */
     param.i_frame_total = codec->i_frame_total;
@@ -1191,8 +1433,12 @@ LRESULT x264vfw_compress_begin(CODEC *codec, BITMAPINFO *lpbiInput, BITMAPINFO *
     param.b_vfr_input = 0;
     param.i_timebase_num = param.i_fps_den;
     param.i_timebase_den = param.i_fps_num;
-    /* VFW currently support only YUV 4:2:0 output so explicitly change auto values for x264vfw_csp_init */
+    /* Explicitly change auto values for x264vfw_csp_init */
+    if (param.vui.b_fullrange < 0 && param.i_csp >= X264_CSP_BGR)
+        param.vui.b_fullrange = RANGE_PC;
     param.vui.b_fullrange = param.vui.b_fullrange == RANGE_PC;
+    if (param.vui.i_colmatrix < 0 && param.i_csp >= X264_CSP_BGR)
+        param.vui.i_colmatrix = 0; /* GBR */
     if (param.vui.i_colmatrix < 0)
         param.vui.i_colmatrix = 2; /* undef */
 
@@ -1286,6 +1532,7 @@ LRESULT x264vfw_compress_begin(CODEC *codec, BITMAPINFO *lpbiInput, BITMAPINFO *
 #else
     codec->b_warn_frame_loss = !codec->b_cli_output;
 #endif
+    codec->b_flush_delayed = codec->b_cli_output || param.rc.b_stat_write;
 
     /* Colorspace conversion */
     x264vfw_csp_init(&codec->csp, param.i_csp, param.vui.i_colmatrix, param.vui.b_fullrange);
@@ -1383,46 +1630,19 @@ LRESULT x264vfw_compress(CODEC *codec, ICCOMPRESS *icc)
         iWidth  = inhdr->biWidth;
         iHeight = abs(inhdr->biHeight);
 
-        switch (i_csp)
+        if (x264vfw_img_fill(&pic.img, (uint8_t *)icc->lpInput, i_csp, iWidth, iHeight) < 0)
         {
-            case X264VFW_CSP_I420:
-            case X264VFW_CSP_YV12:
-                pic.img.i_plane     = 3;
-                pic.img.i_stride[0] = iWidth;
-                pic.img.i_stride[1] =
-                pic.img.i_stride[2] = pic.img.i_stride[0] / 2;
-
-                pic.img.plane[0]    = (uint8_t *)icc->lpInput;
-                pic.img.plane[1]    = pic.img.plane[0] + pic.img.i_stride[0] * iHeight;
-                pic.img.plane[2]    = pic.img.plane[1] + pic.img.i_stride[1] * iHeight / 2;
-                break;
-
-            case X264VFW_CSP_YUYV:
-            case X264VFW_CSP_UYVY:
-                pic.img.i_plane     = 1;
-                pic.img.i_stride[0] = 2 * iWidth;
-                pic.img.plane[0]    = (uint8_t *)icc->lpInput;
-                break;
-
-            case X264VFW_CSP_BGR:
-                pic.img.i_plane     = 1;
-                pic.img.i_stride[0] = (3 * iWidth + 3) & ~3;
-                pic.img.plane[0]    = (uint8_t *)icc->lpInput;
-                break;
-
-            case X264VFW_CSP_BGRA:
-                pic.img.i_plane     = 1;
-                pic.img.i_stride[0] = 4 * iWidth;
-                pic.img.plane[0]    = (uint8_t *)icc->lpInput;
-                break;
-
-            default:
-                x264vfw_log(codec, X264_LOG_ERROR, "unknown input frame colorspace\n");
-                codec->b_encoder_error = TRUE;
-                return ICERR_BADFORMAT;
+            x264vfw_log(codec, X264_LOG_ERROR, "unknown input frame colorspace\n");
+            codec->b_encoder_error = TRUE;
+            return ICERR_BADFORMAT;
         }
 
-        codec->csp.convert[i_csp](&codec->conv_pic.img, &pic.img, iWidth, iHeight);
+        if (codec->csp.convert[i_csp](&codec->conv_pic.img, &pic.img, iWidth, iHeight) < 0)
+        {
+            x264vfw_log(codec, X264_LOG_ERROR, "colorspace conversion failed\n");
+            codec->b_encoder_error = TRUE;
+            return ICERR_ERROR;
+        }
 
         /* Support keyframe forcing */
         /* Disabled because VirtualDub incorrectly force them with "VirtualDub Hack" option */
@@ -1485,7 +1705,7 @@ LRESULT x264vfw_compress_end(CODEC *codec)
 {
     if (codec->h)
     {
-        if (!codec->b_encoder_error && codec->b_cli_output)
+        if (!codec->b_encoder_error && codec->b_flush_delayed)
         {
             x264_picture_t pic_out;
             int got_picture;
@@ -1604,7 +1824,7 @@ LRESULT x264vfw_decompress_query(CODEC *codec, BITMAPINFO *lpbiInput, BITMAPINFO
     if (i_csp == X264VFW_CSP_NONE)
         return ICERR_BADFORMAT;
 
-    pix_fmt = csp_to_pix_fmt(i_csp & X264VFW_CSP_MASK);
+    pix_fmt = csp_to_pix_fmt(i_csp);
     if (pix_fmt == PIX_FMT_NONE)
         return ICERR_BADFORMAT;
 
@@ -1633,9 +1853,10 @@ LRESULT x264vfw_decompress_begin(CODEC *codec, BITMAPINFO *lpbiInput, BITMAPINFO
     }
 
     i_csp = get_csp(&lpbiOutput->bmiHeader);
-    codec->decoder_pix_fmt = csp_to_pix_fmt(i_csp & X264VFW_CSP_MASK);
     codec->decoder_vflip = (i_csp & X264VFW_CSP_VFLIP) != 0;
-    codec->decoder_swap_UV = (i_csp & X264VFW_CSP_MASK) == X264VFW_CSP_YV12;
+    i_csp &= X264VFW_CSP_MASK;
+    codec->decoder_pix_fmt = csp_to_pix_fmt(i_csp);
+    codec->decoder_swap_UV = i_csp == X264VFW_CSP_YV12 || i_csp == X264VFW_CSP_YV16 || i_csp == X264VFW_CSP_YV24;
 
     codec->decoder = avcodec_find_decoder(CODEC_ID_H264);
     if (!codec->decoder)
@@ -1789,18 +2010,7 @@ LRESULT x264vfw_decompress(CODEC *codec, ICDECOMPRESS *icd)
     if (!got_picture)
     {
         /* Frame was decoded but delayed so we would show the BLACK-frame instead */
-        if (codec->decoder_pix_fmt == PIX_FMT_YUV420P)
-        {
-            int luma_size = picture_size * 2 / 3;
-            memset(icd->lpOutput, 0x10, luma_size); /* TV Scale */
-            memset(icd->lpOutput + luma_size, 0x80, picture_size - luma_size);
-        }
-        else if (codec->decoder_pix_fmt == PIX_FMT_YUYV422)
-            wmemset(icd->lpOutput, 0x8010, picture_size / sizeof(wchar_t)); /* TV Scale */
-        else if (codec->decoder_pix_fmt == PIX_FMT_UYVY422)
-            wmemset(icd->lpOutput, 0x1080, picture_size / sizeof(wchar_t)); /* TV Scale */
-        else
-            memset(icd->lpOutput, 0x00, picture_size);
+        x264vfw_fill_black_frame(icd->lpOutput, codec->decoder_pix_fmt, picture_size);
         //icd->lpbiOutput->biSizeImage = picture_size;
         return ICERR_OK;
     }
@@ -1823,28 +2033,11 @@ LRESULT x264vfw_decompress(CODEC *codec, ICDECOMPRESS *icd)
         picture.linesize[2] = temp_linesize;
     }
     if (codec->decoder_vflip)
-    {
-        if (picture.data[0])
+        if (x264vfw_picture_vflip(&picture, codec->decoder_pix_fmt, inhdr->biWidth, inhdr->biHeight) < 0)
         {
-            picture.data[0] += picture.linesize[0] * (inhdr->biHeight - 1);
-            picture.linesize[0] = -picture.linesize[0];
+            x264vfw_log(codec, X264_LOG_DEBUG, "x264vfw_picture_vflip failed\n");
+            return ICERR_ERROR;
         }
-        if (picture.data[1])
-        {
-            picture.data[1] += picture.linesize[1] * (inhdr->biHeight - 1);
-            picture.linesize[1] = -picture.linesize[1];
-        }
-        if (picture.data[2])
-        {
-            picture.data[2] += picture.linesize[2] * (inhdr->biHeight - 1);
-            picture.linesize[2] = -picture.linesize[2];
-        }
-        if (picture.data[3])
-        {
-            picture.data[3] += picture.linesize[3] * (inhdr->biHeight - 1);
-            picture.linesize[3] = -picture.linesize[3];
-        }
-    }
 
     if (!codec->sws)
     {

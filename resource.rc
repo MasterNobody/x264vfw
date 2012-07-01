@@ -50,6 +50,7 @@ BEGIN
     COMBOBOX        IDC_LEVEL,198,26,54,84,CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
     CONTROL         "Fast Decode",IDC_TUNE_FASTDECODE,"Button",BS_AUTOCHECKBOX | BS_LEFTTEXT | WS_TABSTOP,18,42,114,12
     CONTROL         "Zero Latency",IDC_TUNE_ZEROLATENCY,"Button",BS_AUTOCHECKBOX | BS_LEFTTEXT | WS_TABSTOP,18,58,114,12
+    CONTROL         "Keep Input Colorspace",IDC_KEEP_INPUT_CSP,"Button",BS_AUTOCHECKBOX | BS_LEFTTEXT | WS_TABSTOP,138,42,114,12
     GROUPBOX        "Rate control",IDC_STATIC,6,76,258,120
     COMBOBOX        IDC_RC_MODE,18,86,234,84,CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
     LTEXT           "IDC_RC_LABEL",IDC_RC_LABEL,18,102,114,12,SS_CENTERIMAGE
@@ -139,6 +140,7 @@ BEGIN
     IDC_LEVEL               "Specify H.264 level (as defined by Annex A)"
     IDC_TUNE_FASTDECODE     "Tune options for faster decoding (less CPU demanding) at the cost of compression efficiency"
     IDC_TUNE_ZEROLATENCY    "Tune options for minimal encoding latency (zero frame-buffering) at the cost of compression efficiency"
+    IDC_KEEP_INPUT_CSP      "Keep input colorspace subsampling format (not memory layout) untouched. With this option lossless-mode will become truly lossless not only for YUV 4:2:0 input"
     IDC_RC_MODE             "Specify bitrate distribution algorithm along the video"
     IDC_STATS_CREATE        "Create stats file with encoding statistics"
     IDC_STATS_UPDATE        "Overwrite stats file with new encoding statistics"

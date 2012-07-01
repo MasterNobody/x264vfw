@@ -2221,241 +2221,28 @@ const static mp4sys_importer_functions mp4sys_dts_importer =
     ITU-T Recommendation H.264 (03/10)
     ISO/IEC 14496-15:2010
 ***************************************************************************/
-typedef struct
-{
-    uint8_t nal_ref_idc;
-    uint8_t nal_unit_type;
-    uint8_t length;
-} h264_nalu_header_t;
-
-typedef struct
-{
-    uint16_t sar_width;
-    uint16_t sar_height;
-    uint8_t  video_full_range_flag;
-    uint8_t  colour_primaries;
-    uint8_t  transfer_characteristics;
-    uint8_t  matrix_coefficients;
-    uint32_t num_units_in_tick;
-    uint32_t time_scale;
-    uint8_t  fixed_frame_rate_flag;
-} h264_vui_t;
-
-typedef struct
-{
-    uint8_t  present;
-    uint8_t  profile_idc;
-    uint8_t  constraint_set_flags;
-    uint8_t  level_idc;
-    uint8_t  seq_parameter_set_id;
-    uint8_t  chroma_format_idc;
-    uint8_t  separate_colour_plane_flag;
-    uint8_t  ChromaArrayType;
-    uint8_t  bit_depth_luma_minus8;
-    uint8_t  bit_depth_chroma_minus8;
-    uint8_t  pic_order_cnt_type;
-    uint8_t  delta_pic_order_always_zero_flag;
-    uint8_t  num_ref_frames_in_pic_order_cnt_cycle;
-    uint8_t  frame_mbs_only_flag;
-    uint8_t  hrd_present;
-    int32_t  offset_for_non_ref_pic;
-    int32_t  offset_for_top_to_bottom_field;
-    int32_t  offset_for_ref_frame[255];
-    int64_t  ExpectedDeltaPerPicOrderCntCycle;
-    uint32_t max_num_ref_frames;
-    uint32_t log2_max_frame_num;
-    uint32_t MaxFrameNum;
-    uint32_t log2_max_pic_order_cnt_lsb;
-    uint32_t MaxPicOrderCntLsb;
-    uint32_t PicSizeInMapUnits;
-    uint32_t cropped_width;
-    uint32_t cropped_height;
-    h264_vui_t vui;
-} h264_sps_t;
-
-typedef struct
-{
-    uint8_t  present;
-    uint8_t  pic_parameter_set_id;
-    uint8_t  seq_parameter_set_id;
-    uint8_t  entropy_coding_mode_flag;
-    uint8_t  bottom_field_pic_order_in_frame_present_flag;
-    uint8_t  weighted_pred_flag;
-    uint8_t  weighted_bipred_idc;
-    uint8_t  deblocking_filter_control_present_flag;
-    uint8_t  redundant_pic_cnt_present_flag;
-    uint32_t SliceGroupChangeRate;
-} h264_pps_t;
-
-typedef struct
-{
-    uint8_t  present;
-    uint8_t  random_accessible;
-    uint32_t recovery_frame_cnt;
-} h264_sei_t;
-
-typedef struct
-{
-    uint8_t  present;
-    uint8_t  type;
-    uint8_t  pic_order_cnt_type;
-    uint8_t  nal_ref_idc;
-    uint8_t  IdrPicFlag;
-    uint8_t  pic_parameter_set_id;
-    uint8_t  field_pic_flag;
-    uint8_t  bottom_field_flag;
-    uint8_t  has_mmco5;
-    uint8_t  has_redundancy;
-    uint16_t idr_pic_id;
-    uint32_t frame_num;
-    int32_t  pic_order_cnt_lsb;
-    int32_t  delta_pic_order_cnt_bottom;
-    int32_t  delta_pic_order_cnt[2];
-} h264_slice_info_t;
-
-typedef struct
-{
-    uint8_t  type;
-    uint8_t  idr;
-    uint8_t  random_accessible;
-    uint8_t  non_bipredictive;
-    uint8_t  independent;
-    uint8_t  disposable;        /* 0: nal_ref_idc != 0, 1: otherwise */
-    uint8_t  has_redundancy;
-    uint8_t  incomplete_au_has_primary;
-    uint8_t  pic_parameter_set_id;
-    uint8_t  field_pic_flag;
-    uint8_t  bottom_field_flag;
-    /* POC */
-    uint8_t  has_mmco5;
-    uint8_t  ref_pic_has_mmco5;
-    uint8_t  ref_pic_bottom_field_flag;
-    int32_t  ref_pic_TopFieldOrderCnt;
-    int32_t  ref_pic_PicOrderCntMsb;
-    int32_t  ref_pic_PicOrderCntLsb;
-    int32_t  pic_order_cnt_lsb;
-    int32_t  delta_pic_order_cnt_bottom;
-    int32_t  delta_pic_order_cnt[2];
-    int32_t  PicOrderCnt;
-    uint32_t FrameNumOffset;
-    /* */
-    uint32_t recovery_frame_cnt;
-    uint32_t frame_num;
-    uint8_t *au;
-    uint32_t au_length;
-    uint8_t *incomplete_au;
-    uint32_t incomplete_au_length;
-    uint32_t au_number;
-} h264_picture_info_t;
-
-typedef struct
-{
-    lsmash_multiple_buffers_t *bank;
-    uint8_t *rbsp;
-    uint8_t *start;
-    uint8_t *end;
-    uint8_t *pos;
-} h264_stream_buffer_t;
+#include "h264.h"
 
 typedef struct
 {
     mp4sys_importer_status status;
-    lsmash_video_summary_t *summary;
-    h264_nalu_header_t nalu_header;
-    uint8_t prev_nalu_type;
-    uint8_t composition_reordering_present;
-    uint8_t no_more_read;
-    uint8_t first_summary;
-    h264_sps_t sps;
-    h264_pps_t pps;
-    h264_sei_t sei;
-    isom_avcC_t avcC;
-    h264_slice_info_t slice;
-    h264_picture_info_t picture;
-    lsmash_bits_t *bits;
-    h264_stream_buffer_t buffer;
-    uint64_t ebsp_head_pos;
+    h264_info_t            info;
+    h264_sps_t             first_sps;
+    lsmash_media_ts_list_t ts_list;
     uint32_t max_au_length;
     uint32_t num_undecodable;
     uint64_t last_intra_cts;
-    lsmash_media_ts_list_t ts_list;
+    uint8_t  composition_reordering_present;
 } mp4sys_h264_info_t;
-
-typedef enum
-{
-    H264_SLICE_TYPE_P    = 0,
-    H264_SLICE_TYPE_B    = 1,
-    H264_SLICE_TYPE_I    = 2,
-    H264_SLICE_TYPE_SP   = 3,
-    H264_SLICE_TYPE_SI   = 4
-} h264_slice_type;
-
-typedef enum
-{
-    H264_PICTURE_TYPE_I           = 0,
-    H264_PICTURE_TYPE_I_P         = 1,
-    H264_PICTURE_TYPE_I_P_B       = 2,
-    H264_PICTURE_TYPE_SI          = 3,
-    H264_PICTURE_TYPE_SI_SP       = 4,
-    H264_PICTURE_TYPE_I_SI        = 5,
-    H264_PICTURE_TYPE_I_SI_P_SP   = 6,
-    H264_PICTURE_TYPE_I_SI_P_SP_B = 7,
-    H264_PICTURE_TYPE_NONE        = 8,
-} h264_picture_type;
 
 static void mp4sys_remove_h264_info( mp4sys_h264_info_t *info )
 {
     if( !info )
         return;
-    lsmash_remove_list( info->avcC.sequenceParameterSets,   isom_remove_avcC_ps );
-    lsmash_remove_list( info->avcC.pictureParameterSets,    isom_remove_avcC_ps );
-    lsmash_remove_list( info->avcC.sequenceParameterSetExt, isom_remove_avcC_ps );
-    lsmash_bits_adhoc_cleanup( info->bits );
-    lsmash_destroy_multiple_buffers( info->buffer.bank );
+    h264_cleanup_parser( &info->info );
     if( info->ts_list.timestamp )
         free( info->ts_list.timestamp );
     free( info );
-}
-
-static mp4sys_h264_info_t *mp4sys_create_h264_info( void )
-{
-#define H264_DEFAULT_BUFFER_SIZE (1<<16)
-    mp4sys_h264_info_t *info = lsmash_malloc_zero( sizeof(mp4sys_h264_info_t) );
-    if( !info )
-        return NULL;
-    info->bits = lsmash_bits_adhoc_create();
-    if( !info->bits )
-    {
-        mp4sys_remove_h264_info( info );
-        return NULL;
-    }
-    isom_avcC_t *avcC = &info->avcC;
-    avcC->type = ISOM_BOX_TYPE_AVCC;
-    avcC->sequenceParameterSets = lsmash_create_entry_list();
-    if( !avcC->sequenceParameterSets )
-    {
-        mp4sys_remove_h264_info( info );
-        return NULL;
-    }
-    avcC->pictureParameterSets = lsmash_create_entry_list();
-    if( !avcC->pictureParameterSets )
-    {
-        mp4sys_remove_h264_info( info );
-        return NULL;
-    }
-    h264_stream_buffer_t *buffer = &info->buffer;
-    buffer->bank = lsmash_create_multiple_buffers( 4, H264_DEFAULT_BUFFER_SIZE );
-    if( !buffer->bank )
-    {
-        mp4sys_remove_h264_info( info );
-        return NULL;
-    }
-    buffer->start               = lsmash_withdraw_buffer( buffer->bank, 1 );
-    buffer->rbsp                = lsmash_withdraw_buffer( buffer->bank, 2 );
-    info->picture.au            = lsmash_withdraw_buffer( buffer->bank, 3 );
-    info->picture.incomplete_au = lsmash_withdraw_buffer( buffer->bank, 4 );
-    return info;
-#undef H264_DEFAULT_BUFFER_SIZE
 }
 
 static void mp4sys_h264_cleanup( mp4sys_importer_t *importer )
@@ -2464,1288 +2251,13 @@ static void mp4sys_h264_cleanup( mp4sys_importer_t *importer )
         mp4sys_remove_h264_info( importer->info );
 }
 
-static inline uint64_t h264_get_codeNum( lsmash_bits_t *bits )
-{
-    uint32_t leadingZeroBits = 0;
-    for( int b = 0; !b; leadingZeroBits++ )
-        b = lsmash_bits_get( bits, 1 );
-    --leadingZeroBits;
-    return ((uint64_t)1 << leadingZeroBits) - 1 + lsmash_bits_get( bits, leadingZeroBits );
-}
-
-static inline uint64_t h264_decode_exp_golomb_ue( uint64_t codeNum )
-{
-    return codeNum;
-}
-
-static inline int64_t h264_decode_exp_golomb_se( uint64_t codeNum )
-{
-    if( codeNum & 1 )
-        return (int64_t)((codeNum >> 1) + 1);
-    return -1 * (int64_t)(codeNum >> 1);
-}
-
-static uint64_t h264_get_exp_golomb_ue( lsmash_bits_t *bits )
-{
-    uint64_t codeNum = h264_get_codeNum( bits );
-    return h264_decode_exp_golomb_ue( codeNum );
-}
-
-static uint64_t h264_get_exp_golomb_se( lsmash_bits_t *bits )
-{
-    uint64_t codeNum = h264_get_codeNum( bits );
-    return h264_decode_exp_golomb_se( codeNum );
-}
-
-/* Convert EBSP (Encapsulated Byte Sequence Packets) to RBSP (Raw Byte Sequence Packets). */
-static void h264_remove_emulation_prevention( uint8_t *src, uint64_t src_length, uint8_t **p_dst )
-{
-    uint8_t *src_end = src + src_length;
-    uint8_t *dst = *p_dst;
-    while( src < src_end )
-        if( ((src + 2) < src_end) && !src[0] && !src[1] && (src[2] == 0x03) )
-        {
-            *dst++ = *src++;
-            *dst++ = *src++;
-            src++;  /* Skip emulation_prevention_three_byte (0x03). */
-        }
-        else
-            *dst++ = *src++;
-    *p_dst = dst;
-}
-
-
-#define IF_INVALID_VALUE( x ) if( x )
-#define IF_EXCEED_INT32( x ) if( (x) < INT32_MIN || (x) > INT32_MAX )
-
-static int h264_check_more_rbsp_data( lsmash_bits_t *bits )
-{
-    lsmash_bs_t *bs = bits->bs;
-    if( bs->pos < bs->store && !(bits->store == 0 && (bs->store == bs->pos + 1)) )
-        return 1;       /* rbsp_trailing_bits will be placed at the next or later byte.
-                         * Note: bs->pos points at the next byte if bits->store isn't empty. */
-    if( bits->store == 0 )
-    {
-        if( bs->store == bs->pos + 1 )
-            return bs->data[ bs->pos ] != 0x80;
-        /* No rbsp_trailing_bits is present in RBSP data. */
-        bs->error = 1;
-        return 0;
-    }
-    /* Check whether remainder of bits is identical to rbsp_trailing_bits. */
-    uint8_t remainder_bits = bits->cache & ~(~0U << bits->store);
-    uint8_t rbsp_trailing_bits = 1U << (bits->store - 1);
-    return remainder_bits != rbsp_trailing_bits;
-}
-
-static int h264_check_nalu_header( h264_nalu_header_t *nalu_header, uint8_t **p_buf_pos, int use_long_start_code )
-{
-    uint8_t *buf_pos = *p_buf_pos;
-    uint8_t forbidden_zero_bit =                              (*buf_pos >> 7) & 0x01;
-    uint8_t nal_ref_idc        = nalu_header->nal_ref_idc   = (*buf_pos >> 5) & 0x03;
-    uint8_t nal_unit_type      = nalu_header->nal_unit_type =  *buf_pos       & 0x1f;
-    nalu_header->length = 1;
-    *p_buf_pos = buf_pos + nalu_header->length;
-    if( nal_unit_type == 14 || nal_unit_type == 20 )
-        return -1;      /* We don't support yet. */
-    IF_INVALID_VALUE( forbidden_zero_bit )
-        return -1;
-    /* SPS and PPS require long start code (0x00000001).
-     * Also AU delimiter requires it too because this type of NALU shall be the first NALU of any AU if present. */
-    IF_INVALID_VALUE( !use_long_start_code && (nal_unit_type == 7 || nal_unit_type == 8 || nal_unit_type == 9) )
-        return -1;
-    if( nal_ref_idc )
-    {
-        /* nal_ref_idc shall be equal to 0 for all NALUs having nal_unit_type equal to 6, 9, 10, 11, or 12. */
-        IF_INVALID_VALUE( nal_unit_type == 6 || nal_unit_type == 9 || nal_unit_type == 10 || nal_unit_type == 11 || nal_unit_type == 12 )
-            return -1;
-    }
-    else
-        /* nal_ref_idc shall not be equal to 0 for NALUs with nal_unit_type equal to 5. */
-        IF_INVALID_VALUE( nal_unit_type == 5 )
-            return -1;
-    return 0;
-}
-
-static int h264_parse_scaling_list( lsmash_bits_t *bits, int sizeOfScalingList )
-{
-    /* scaling_list( scalingList, sizeOfScalingList, useDefaultScalingMatrixFlag ) */
-    int nextScale = 8;
-    for( int i = 0; i < sizeOfScalingList; i++ )
-    {
-        int64_t delta_scale = h264_get_exp_golomb_se( bits );
-        IF_INVALID_VALUE( delta_scale < -128 || delta_scale > 127 )
-            return -1;
-        nextScale = (nextScale + delta_scale + 256) % 256;
-        if( nextScale == 0 )
-            break;
-    }
-    return 0;
-}
-
-static int h264_parse_hrd_parameters( lsmash_bits_t *bits )
-{
-    /* hrd_parameters() */
-    uint64_t cpb_cnt_minus1 = h264_get_exp_golomb_ue( bits );
-    IF_INVALID_VALUE( cpb_cnt_minus1 > 31 )
-        return -1;
-    lsmash_bits_get( bits, 4 );     /* bit_rate_scale */
-    lsmash_bits_get( bits, 4 );     /* cpb_size_scale */
-    for( uint64_t SchedSelIdx = 0; SchedSelIdx <= cpb_cnt_minus1; SchedSelIdx++ )
-    {
-        h264_get_exp_golomb_ue( bits );     /* bit_rate_value_minus1[ SchedSelIdx ] */
-        h264_get_exp_golomb_ue( bits );     /* cpb_size_value_minus1[ SchedSelIdx ] */
-        lsmash_bits_get( bits, 1 );         /* cbr_flag             [ SchedSelIdx ] */
-    }
-    lsmash_bits_get( bits, 5 );     /* initial_cpb_removal_delay_length_minus1 */
-    lsmash_bits_get( bits, 5 );     /* cpb_removal_delay_length_minus1 */
-    lsmash_bits_get( bits, 5 );     /* dpb_output_delay_length_minus1 */
-    lsmash_bits_get( bits, 5 );     /* time_offset_length */
-    return 0;
-}
-
-static int h264_parse_sps_nalu( lsmash_bits_t *bits, h264_sps_t *sps, h264_nalu_header_t *nalu_header,
-                                uint8_t *rbsp_buffer, uint8_t *ebsp, uint64_t ebsp_size )
-{
-    uint8_t *rbsp_start = rbsp_buffer;
-    h264_remove_emulation_prevention( ebsp, ebsp_size, &rbsp_buffer );
-    uint64_t rbsp_length = rbsp_buffer - rbsp_start;
-    if( lsmash_bits_import_data( bits, rbsp_start, rbsp_length ) )
-        return -1;
-    memset( sps, 0, sizeof(h264_sps_t) );
-    /* seq_parameter_set_data() */
-    sps->profile_idc = lsmash_bits_get( bits, 8 );
-    sps->constraint_set_flags = lsmash_bits_get( bits, 8 );
-    sps->level_idc = lsmash_bits_get( bits, 8 );
-    uint64_t seq_parameter_set_id = h264_get_exp_golomb_ue( bits );
-    IF_INVALID_VALUE( seq_parameter_set_id > 31 )
-        return -1;
-    sps->seq_parameter_set_id = seq_parameter_set_id;
-    if( sps->profile_idc == 100 || sps->profile_idc == 110 || sps->profile_idc == 122
-     || sps->profile_idc == 244 || sps->profile_idc == 44  || sps->profile_idc == 83
-     || sps->profile_idc == 86  || sps->profile_idc == 118 || sps->profile_idc == 128 )
-    {
-        sps->chroma_format_idc = h264_get_exp_golomb_ue( bits );
-        if( sps->chroma_format_idc == 3 )
-            sps->separate_colour_plane_flag = lsmash_bits_get( bits, 1 );
-        uint64_t bit_depth_luma_minus8 = h264_get_exp_golomb_ue( bits );
-        IF_INVALID_VALUE( bit_depth_luma_minus8 > 6 )
-            return -1;
-        uint64_t bit_depth_chroma_minus8 = h264_get_exp_golomb_ue( bits );
-        IF_INVALID_VALUE( bit_depth_chroma_minus8 > 6 )
-            return -1;
-        sps->bit_depth_luma_minus8   = bit_depth_luma_minus8;
-        sps->bit_depth_chroma_minus8 = bit_depth_chroma_minus8;
-        lsmash_bits_get( bits, 1 );         /* qpprime_y_zero_transform_bypass_flag */
-        if( lsmash_bits_get( bits, 1 ) )    /* seq_scaling_matrix_present_flag */
-        {
-            int num_loops = sps->chroma_format_idc != 3 ? 8 : 12;
-            for( int i = 0; i < num_loops; i++ )
-                if( lsmash_bits_get( bits, 1 )          /* seq_scaling_list_present_flag[i] */
-                 && h264_parse_scaling_list( bits, i < 6 ? 16 : 64 ) )
-                        return -1;
-        }
-    }
-    else
-    {
-        sps->chroma_format_idc          = 1;
-        sps->separate_colour_plane_flag = 0;
-        sps->bit_depth_luma_minus8      = 0;
-        sps->bit_depth_chroma_minus8    = 0;
-    }
-    sps->ChromaArrayType = sps->separate_colour_plane_flag ? 0 : sps->chroma_format_idc;
-    uint64_t log2_max_frame_num_minus4 = h264_get_exp_golomb_ue( bits );
-    IF_INVALID_VALUE( log2_max_frame_num_minus4 > 12 )
-        return -1;
-    sps->log2_max_frame_num = log2_max_frame_num_minus4 + 4;
-    sps->MaxFrameNum = 1 << sps->log2_max_frame_num;
-    uint64_t pic_order_cnt_type = h264_get_exp_golomb_ue( bits );
-    IF_INVALID_VALUE( pic_order_cnt_type > 2 )
-        return -1;
-    sps->pic_order_cnt_type = pic_order_cnt_type;
-    if( sps->pic_order_cnt_type == 0 )
-    {
-        uint64_t log2_max_pic_order_cnt_lsb_minus4 = h264_get_exp_golomb_ue( bits );
-        IF_INVALID_VALUE( log2_max_pic_order_cnt_lsb_minus4 > 12 )
-            return -1;
-        sps->log2_max_pic_order_cnt_lsb = log2_max_pic_order_cnt_lsb_minus4 + 4;
-        sps->MaxPicOrderCntLsb = 1 << sps->log2_max_pic_order_cnt_lsb;
-    }
-    else if( sps->pic_order_cnt_type == 1 )
-    {
-        sps->delta_pic_order_always_zero_flag = lsmash_bits_get( bits, 1 );
-        int64_t max_value =  ((uint64_t)1 << 31) - 1;
-        int64_t min_value = -((uint64_t)1 << 31) + 1;
-        int64_t offset_for_non_ref_pic = h264_get_exp_golomb_se( bits );
-        if( offset_for_non_ref_pic < min_value || offset_for_non_ref_pic > max_value )
-            return -1;
-        sps->offset_for_non_ref_pic = offset_for_non_ref_pic;
-        int64_t offset_for_top_to_bottom_field = h264_get_exp_golomb_se( bits );
-        if( offset_for_top_to_bottom_field < min_value || offset_for_top_to_bottom_field > max_value )
-            return -1;
-        sps->offset_for_top_to_bottom_field = offset_for_top_to_bottom_field;
-        uint64_t num_ref_frames_in_pic_order_cnt_cycle = h264_get_exp_golomb_ue( bits );
-        IF_INVALID_VALUE( num_ref_frames_in_pic_order_cnt_cycle > 255 )
-            return -1;
-        sps->num_ref_frames_in_pic_order_cnt_cycle = num_ref_frames_in_pic_order_cnt_cycle;
-        sps->ExpectedDeltaPerPicOrderCntCycle = 0;
-        for( int i = 0; i < num_ref_frames_in_pic_order_cnt_cycle; i++ )
-        {
-            int64_t offset_for_ref_frame = h264_get_exp_golomb_se( bits );
-            if( offset_for_ref_frame < min_value || offset_for_ref_frame > max_value )
-                return -1;
-            sps->offset_for_ref_frame[i] = offset_for_ref_frame;
-            sps->ExpectedDeltaPerPicOrderCntCycle += offset_for_ref_frame;
-        }
-    }
-    sps->max_num_ref_frames = h264_get_exp_golomb_ue( bits );
-    lsmash_bits_get( bits, 1 );         /* gaps_in_frame_num_value_allowed_flag */
-    uint64_t pic_width_in_mbs_minus1        = h264_get_exp_golomb_ue( bits );
-    uint64_t pic_height_in_map_units_minus1 = h264_get_exp_golomb_ue( bits );
-    sps->frame_mbs_only_flag = lsmash_bits_get( bits, 1 );
-    if( !sps->frame_mbs_only_flag )
-        lsmash_bits_get( bits, 1 );     /* mb_adaptive_frame_field_flag */
-    lsmash_bits_get( bits, 1 );         /* direct_8x8_inference_flag */
-    uint64_t PicWidthInMbs       = pic_width_in_mbs_minus1        + 1;
-    uint64_t PicHeightInMapUnits = pic_height_in_map_units_minus1 + 1;
-    sps->PicSizeInMapUnits = PicWidthInMbs * PicHeightInMapUnits;
-    sps->cropped_width  = PicWidthInMbs * 16;
-    sps->cropped_height = (2 - sps->frame_mbs_only_flag) * PicHeightInMapUnits * 16;
-    if( lsmash_bits_get( bits, 1 ) )    /* frame_cropping_flag */
-    {
-        uint8_t CropUnitX;
-        uint8_t CropUnitY;
-        if( sps->ChromaArrayType == 0 )
-        {
-            CropUnitX = 1;
-            CropUnitY = 2 - sps->frame_mbs_only_flag;
-        }
-        else
-        {
-            static const int SubWidthC [] = { 0, 2, 2, 1 };
-            static const int SubHeightC[] = { 0, 2, 1, 1 };
-            CropUnitX = SubWidthC [ sps->chroma_format_idc ];
-            CropUnitY = SubHeightC[ sps->chroma_format_idc ] * (2 - sps->frame_mbs_only_flag);
-        }
-        uint64_t frame_crop_left_offset   = h264_get_exp_golomb_ue( bits );
-        uint64_t frame_crop_right_offset  = h264_get_exp_golomb_ue( bits );
-        uint64_t frame_crop_top_offset    = h264_get_exp_golomb_ue( bits );
-        uint64_t frame_crop_bottom_offset = h264_get_exp_golomb_ue( bits );
-        sps->cropped_width  -= (frame_crop_left_offset + frame_crop_right_offset)  * CropUnitX;
-        sps->cropped_height -= (frame_crop_top_offset  + frame_crop_bottom_offset) * CropUnitY;
-    }
-    if( lsmash_bits_get( bits, 1 ) )    /* vui_parameters_present_flag */
-    {
-        /* vui_parameters() */
-        if( lsmash_bits_get( bits, 1 ) )        /* aspect_ratio_info_present_flag */
-        {
-            uint8_t aspect_ratio_idc = lsmash_bits_get( bits, 8 );
-            if( aspect_ratio_idc == 255 )
-            {
-                /* Extended_SAR */
-                sps->vui.sar_width  = lsmash_bits_get( bits, 16 );
-                sps->vui.sar_height = lsmash_bits_get( bits, 16 );
-            }
-            else
-            {
-                static const struct
-                {
-                    uint16_t sar_width;
-                    uint16_t sar_height;
-                } pre_defined_sar[]
-                    = {
-                        {  0,  0 }, {  1,  1 }, { 12, 11 }, {  10, 11 }, { 16, 11 },
-                        { 40, 33 }, { 24, 11 }, { 20, 11 }, {  32, 11 }, { 80, 33 },
-                        { 18, 11 }, { 15, 11 }, { 64, 33 }, { 160, 99 }, {  4,  3 },
-                        {  3,  2 }, {  2,  1 }
-                      };
-                if( aspect_ratio_idc < (sizeof(pre_defined_sar) / sizeof(pre_defined_sar[0])) )
-                {
-                    sps->vui.sar_width  = pre_defined_sar[ aspect_ratio_idc ].sar_width;
-                    sps->vui.sar_height = pre_defined_sar[ aspect_ratio_idc ].sar_height;
-                }
-                else
-                {
-                    /* Behavior when unknown aspect_ratio_idc is detected is not specified in the specification. */
-                    sps->vui.sar_width  = 0;
-                    sps->vui.sar_height = 0;
-                }
-            }
-        }
-        if( lsmash_bits_get( bits, 1 ) )        /* overscan_info_present_flag */
-            lsmash_bits_get( bits, 1 );         /* overscan_appropriate_flag */
-        if( lsmash_bits_get( bits, 1 ) )        /* video_signal_type_present_flag */
-        {
-            lsmash_bits_get( bits, 3 );         /* video_format */
-            sps->vui.video_full_range_flag = lsmash_bits_get( bits, 1 );
-            if( lsmash_bits_get( bits, 1 ) )    /* colour_description_present_flag */
-            {
-                sps->vui.colour_primaries         = lsmash_bits_get( bits, 8 );
-                sps->vui.transfer_characteristics = lsmash_bits_get( bits, 8 );
-                sps->vui.matrix_coefficients      = lsmash_bits_get( bits, 8 );
-            }
-        }
-        if( lsmash_bits_get( bits, 1 ) )        /* chroma_loc_info_present_flag */
-        {
-            h264_get_exp_golomb_ue( bits );     /* chroma_sample_loc_type_top_field */
-            h264_get_exp_golomb_ue( bits );     /* chroma_sample_loc_type_bottom_field */
-        }
-        if( lsmash_bits_get( bits, 1 ) )        /* timing_info_present_flag */
-        {
-            sps->vui.num_units_in_tick     = lsmash_bits_get( bits, 32 );
-            sps->vui.time_scale            = lsmash_bits_get( bits, 32 );
-            sps->vui.fixed_frame_rate_flag = lsmash_bits_get( bits, 1 );
-        }
-        int nal_hrd_parameters_present_flag = lsmash_bits_get( bits, 1 );
-        if( nal_hrd_parameters_present_flag
-         && h264_parse_hrd_parameters( bits ) )
-            return -1;
-        int vcl_hrd_parameters_present_flag = lsmash_bits_get( bits, 1 );
-        if( vcl_hrd_parameters_present_flag
-         && h264_parse_hrd_parameters( bits ) )
-            return -1;
-        if( nal_hrd_parameters_present_flag || vcl_hrd_parameters_present_flag )
-        {
-            sps->hrd_present = 1;
-            lsmash_bits_get( bits, 1 );         /* low_delay_hrd_flag */
-        }
-        lsmash_bits_get( bits, 1 );             /* pic_struct_present_flag */
-        if( lsmash_bits_get( bits, 1 ) )        /* bitstream_restriction_flag */
-        {
-            lsmash_bits_get( bits, 1 );         /* motion_vectors_over_pic_boundaries_flag */
-            h264_get_exp_golomb_ue( bits );     /* max_bytes_per_pic_denom */
-            h264_get_exp_golomb_ue( bits );     /* max_bits_per_mb_denom */
-            h264_get_exp_golomb_ue( bits );     /* log2_max_mv_length_horizontal */
-            h264_get_exp_golomb_ue( bits );     /* log2_max_mv_length_vertical */
-            h264_get_exp_golomb_ue( bits );     /* num_reorder_frames */
-            h264_get_exp_golomb_ue( bits );     /* max_dec_frame_buffering */
-        }
-    }
-    else
-    {
-        sps->vui.video_full_range_flag = 0;
-        sps->vui.num_units_in_tick     = 1;
-        sps->vui.time_scale            = 50;
-        sps->vui.fixed_frame_rate_flag = 0;
-    }
-    /* rbsp_trailing_bits() */
-    IF_INVALID_VALUE( !lsmash_bits_get( bits, 1 ) )     /* rbsp_stop_one_bit */
-        return -1;
-    lsmash_bits_empty( bits );
-    return bits->bs->error ? -1 : 0;
-}
-
-static int h264_parse_pps_nalu( lsmash_bits_t *bits, h264_sps_t *sps, h264_pps_t *pps, h264_nalu_header_t *nalu_header,
-                                uint8_t *rbsp_buffer, uint8_t *ebsp, uint64_t ebsp_size )
-{
-    if( !sps )
-        return -1;
-    uint8_t *rbsp_start = rbsp_buffer;
-    h264_remove_emulation_prevention( ebsp, ebsp_size, &rbsp_buffer );
-    uint64_t rbsp_length = rbsp_buffer - rbsp_start;
-    if( lsmash_bits_import_data( bits, rbsp_start, rbsp_length ) )
-        return -1;
-    memset( pps, 0, sizeof(h264_pps_t) );
-    /* pic_parameter_set_rbsp */
-    uint64_t pic_parameter_set_id = h264_get_exp_golomb_ue( bits );
-    IF_INVALID_VALUE( pic_parameter_set_id > 255 )
-        return -1;
-    pps->pic_parameter_set_id = pic_parameter_set_id;
-    uint64_t seq_parameter_set_id = h264_get_exp_golomb_ue( bits );
-    IF_INVALID_VALUE( seq_parameter_set_id > 31 )
-        return -1;
-    pps->seq_parameter_set_id = seq_parameter_set_id;
-    pps->entropy_coding_mode_flag = lsmash_bits_get( bits, 1 );
-    pps->bottom_field_pic_order_in_frame_present_flag = lsmash_bits_get( bits, 1 );
-    uint64_t num_slice_groups_minus1 = h264_get_exp_golomb_ue( bits );
-    if( num_slice_groups_minus1 )        /* num_slice_groups_minus1 */
-    {
-        uint64_t slice_group_map_type = h264_get_exp_golomb_ue( bits );
-        IF_INVALID_VALUE( slice_group_map_type > 6 )
-            return -1;
-        if( slice_group_map_type == 0 )
-            for( uint64_t iGroup = 0; iGroup <= num_slice_groups_minus1; iGroup++ )
-                h264_get_exp_golomb_ue( bits );     /* run_length_minus1[ iGroup ] */
-        else if( slice_group_map_type == 2 )
-            for( uint64_t iGroup = 0; iGroup < num_slice_groups_minus1; iGroup++ )
-            {
-                h264_get_exp_golomb_ue( bits );     /* top_left    [ iGroup ] */
-                h264_get_exp_golomb_ue( bits );     /* bottom_right[ iGroup ] */
-            }
-        else if( slice_group_map_type == 3
-              || slice_group_map_type == 4
-              || slice_group_map_type == 5 )
-        {
-            lsmash_bits_get( bits, 1 );         /* slice_group_change_direction_flag */
-            uint64_t slice_group_change_rate_minus1 = h264_get_exp_golomb_ue( bits );
-            IF_INVALID_VALUE( slice_group_change_rate_minus1 > (sps->PicSizeInMapUnits - 1) )
-                return -1;
-            pps->SliceGroupChangeRate = slice_group_change_rate_minus1 + 1;
-        }
-        else if( slice_group_map_type == 6 )
-        {
-            uint64_t pic_size_in_map_units_minus1 = h264_get_exp_golomb_ue( bits );
-            /* slice_group_id_length = ceil( log2( num_slice_groups_minus1 + 1 ) ); */
-            uint64_t slice_group_id_length;
-            for( slice_group_id_length = 1; num_slice_groups_minus1 >> slice_group_id_length; slice_group_id_length++ );
-            for( uint64_t i = 0; i <= pic_size_in_map_units_minus1; i++ )
-                /* slice_group_id */
-                IF_INVALID_VALUE( lsmash_bits_get( bits, slice_group_id_length ) > num_slice_groups_minus1 )
-                    return -1;
-        }
-    }
-    h264_get_exp_golomb_ue( bits );     /* num_ref_idx_l0_default_active_minus1 */
-    h264_get_exp_golomb_ue( bits );     /* num_ref_idx_l1_default_active_minus1 */
-    pps->weighted_pred_flag  = lsmash_bits_get( bits, 1 );
-    pps->weighted_bipred_idc = lsmash_bits_get( bits, 2 );
-    h264_get_exp_golomb_se( bits );     /* pic_init_qp_minus26 */
-    h264_get_exp_golomb_se( bits );     /* pic_init_qs_minus26 */
-    h264_get_exp_golomb_se( bits );     /* chroma_qp_index_offset */
-    pps->deblocking_filter_control_present_flag = lsmash_bits_get( bits, 1 );
-    lsmash_bits_get( bits, 1 );         /* constrained_intra_pred_flag */
-    pps->redundant_pic_cnt_present_flag = lsmash_bits_get( bits, 1 );
-    if( h264_check_more_rbsp_data( bits ) )
-    {
-        int transform_8x8_mode_flag = lsmash_bits_get( bits, 1 );
-        if( lsmash_bits_get( bits, 1 ) )        /* pic_scaling_matrix_present_flag */
-        {
-            int num_loops = 6 + (sps->chroma_format_idc != 3 ? 2 : 6) * transform_8x8_mode_flag;
-            for( int i = 0; i < num_loops; i++ )
-                if( lsmash_bits_get( bits, 1 )          /* pic_scaling_list_present_flag[i] */
-                 && h264_parse_scaling_list( bits, i < 6 ? 16 : 64 ) )
-                        return -1;
-        }
-        h264_get_exp_golomb_se( bits );         /* second_chroma_qp_index_offset */
-    }
-    /* rbsp_trailing_bits() */
-    IF_INVALID_VALUE( !lsmash_bits_get( bits, 1 ) )     /* rbsp_stop_one_bit */
-        return -1;
-    lsmash_bits_empty( bits );
-    return bits->bs->error ? -1 : 0;
-}
-
-static int h264_parse_sei_nalu( lsmash_bits_t *bits, h264_sei_t *sei, h264_nalu_header_t *nalu_header,
-                                uint8_t *rbsp_buffer, uint8_t *ebsp, uint64_t ebsp_size )
-{
-    uint8_t *rbsp_start = rbsp_buffer;
-    h264_remove_emulation_prevention( ebsp, ebsp_size, &rbsp_buffer );
-    uint64_t rbsp_length = rbsp_buffer - rbsp_start;
-    if( lsmash_bits_import_data( bits, rbsp_start, rbsp_length ) )
-        return -1;
-    uint64_t rbsp_pos = 0;
-    do
-    {
-        /* sei_message() */
-        uint32_t payloadType = 0;
-        for( uint8_t temp = lsmash_bits_get( bits, 8 ); ; temp = lsmash_bits_get( bits, 8 ) )
-        {
-            /* 0xff     : ff_byte
-             * otherwise: last_payload_type_byte */
-            payloadType += temp;
-            ++rbsp_pos;
-            if( temp != 0xff )
-                break;
-        }
-        uint32_t payloadSize = 0;
-        for( uint8_t temp = lsmash_bits_get( bits, 8 ); ; temp = lsmash_bits_get( bits, 8 ) )
-        {
-            /* 0xff     : ff_byte
-             * otherwise: last_payload_size_byte */
-            payloadSize += temp;
-            ++rbsp_pos;
-            if( temp != 0xff )
-                break;
-        }
-        if( payloadType == 3 )
-        {
-            /* filler_payload
-             * AVC file format is forbidden to contain this. */
-            return -1;
-        }
-        else if( payloadType == 6 )
-        {
-            /* recovery_point */
-            sei->present            = 1;
-            sei->random_accessible  = 1;
-            sei->recovery_frame_cnt = h264_get_exp_golomb_ue( bits );
-            lsmash_bits_get( bits, 1 );     /* exact_match_flag */
-            lsmash_bits_get( bits, 1 );     /* broken_link_flag */
-            lsmash_bits_get( bits, 2 );     /* changing_slice_group_idc */
-        }
-        else
-            lsmash_bits_get( bits, payloadSize * 8 );
-        lsmash_bits_get_align( bits );
-        rbsp_pos += payloadSize;
-    } while( *(rbsp_start + rbsp_pos) != 0x80 );        /* All SEI messages are byte aligned at their end.
-                                                         * Therefore, 0x80 shall be rbsp_trailing_bits(). */
-    lsmash_bits_empty( bits );
-    return bits->bs->error ? -1 : 0;
-}
-
-static int h264_parse_slice_header( lsmash_bits_t *bits, h264_sps_t *sps, h264_pps_t *pps,
-                                    h264_slice_info_t *slice, h264_nalu_header_t *nalu_header )
-{
-    memset( slice, 0, sizeof(h264_slice_info_t) );
-    slice->pic_order_cnt_type = sps->pic_order_cnt_type;
-    slice->nal_ref_idc = nalu_header->nal_ref_idc;
-    slice->IdrPicFlag = (nalu_header->nal_unit_type == 5);
-    /* slice_header() */
-    h264_get_exp_golomb_ue( bits );     /* first_mb_in_slice */
-    uint8_t slice_type = slice->type = h264_get_exp_golomb_ue( bits );
-    IF_INVALID_VALUE( (uint64_t)slice->type > 9 )
-        return -1;
-    if( slice_type > 4 )
-        slice_type = slice->type -= 5;
-    IF_INVALID_VALUE( (slice->IdrPicFlag || sps->max_num_ref_frames == 0) && slice_type != 2 && slice_type != 4 )
-        return -1;
-    slice->pic_parameter_set_id = h264_get_exp_golomb_ue( bits );
-    if( sps->separate_colour_plane_flag )
-        lsmash_bits_get( bits, 2 );     /* colour_plane_id */
-    uint64_t frame_num = lsmash_bits_get( bits, sps->log2_max_frame_num );
-    IF_INVALID_VALUE( frame_num >= (1 << sps->log2_max_frame_num) || (slice->IdrPicFlag && frame_num) )
-        return -1;
-    slice->frame_num = frame_num;
-    if( !sps->frame_mbs_only_flag )
-    {
-        slice->field_pic_flag = lsmash_bits_get( bits, 1 );
-        if( slice->field_pic_flag )
-            slice->bottom_field_flag = lsmash_bits_get( bits, 1 );
-    }
-    if( slice->IdrPicFlag )
-    {
-        uint64_t idr_pic_id = h264_get_exp_golomb_ue( bits );
-        IF_INVALID_VALUE( idr_pic_id > 65535 )
-            return -1;
-        slice->idr_pic_id = idr_pic_id;
-    }
-    if( sps->pic_order_cnt_type == 0 )
-    {
-        uint64_t pic_order_cnt_lsb = lsmash_bits_get( bits, sps->log2_max_pic_order_cnt_lsb );
-        IF_INVALID_VALUE( pic_order_cnt_lsb >= sps->MaxPicOrderCntLsb )
-            return -1;
-        slice->pic_order_cnt_lsb = pic_order_cnt_lsb;
-        if( pps->bottom_field_pic_order_in_frame_present_flag && !slice->field_pic_flag )
-            slice->delta_pic_order_cnt_bottom = h264_get_exp_golomb_se( bits );
-    }
-    else if( sps->pic_order_cnt_type == 1 && !sps->delta_pic_order_always_zero_flag )
-    {
-        slice->delta_pic_order_cnt[0] = h264_get_exp_golomb_se( bits );
-        if( pps->bottom_field_pic_order_in_frame_present_flag && !slice->field_pic_flag )
-            slice->delta_pic_order_cnt[1] = h264_get_exp_golomb_se( bits );
-    }
-    if( pps->redundant_pic_cnt_present_flag )
-    {
-        uint64_t redundant_pic_cnt = h264_get_exp_golomb_ue( bits );
-        IF_INVALID_VALUE( redundant_pic_cnt > 127 )
-            return -1;
-        slice->has_redundancy = !!redundant_pic_cnt;
-    }
-    if( slice_type == H264_SLICE_TYPE_B )
-        lsmash_bits_get( bits, 1 );
-    uint64_t num_ref_idx_l0_active_minus1 = 0;
-    uint64_t num_ref_idx_l1_active_minus1 = 0;
-    if( slice_type == H264_SLICE_TYPE_P || slice_type == H264_SLICE_TYPE_SP || slice_type == H264_SLICE_TYPE_B )
-    {
-        if( lsmash_bits_get( bits, 1 ) )            /* num_ref_idx_active_override_flag */
-        {
-            num_ref_idx_l0_active_minus1 = h264_get_exp_golomb_ue( bits );
-            IF_INVALID_VALUE( num_ref_idx_l0_active_minus1 > 31 )
-                return -1;
-            if( slice_type == H264_SLICE_TYPE_B )
-            {
-                num_ref_idx_l1_active_minus1 = h264_get_exp_golomb_ue( bits );
-                IF_INVALID_VALUE( num_ref_idx_l1_active_minus1 > 31 )
-                    return -1;
-            }
-        }
-    }
-    if( nalu_header->nal_unit_type == 20 )
-    {
-        return -1;      /* No support of MVC yet */
-#if 0
-        /* ref_pic_list_mvc_modification() */
-        if( slice_type == H264_SLICE_TYPE_P || slice_type == H264_SLICE_TYPE_B || slice_type == H264_SLICE_TYPE_SP )
-        {
-            if( lsmash_bits_get( bits, 1 ) )        /* (S)P: ref_pic_list_modification_flag_l0
-                                                     *    B: ref_pic_list_modification_flag_l1 */
-            {
-                uint64_t modification_of_pic_nums_idc;
-                do
-                {
-                    modification_of_pic_nums_idc = h264_get_exp_golomb_ue( bits );
-#if 0
-                    if( modification_of_pic_nums_idc == 0 || modification_of_pic_nums_idc == 1 )
-                        h264_get_exp_golomb_ue( bits );     /* abs_diff_pic_num_minus1 */
-                    else if( modification_of_pic_nums_idc == 2 )
-                        h264_get_exp_golomb_ue( bits );     /* long_term_pic_num */
-                    else if( modification_of_pic_nums_idc == 4 || modification_of_pic_nums_idc == 5 )
-                        h264_get_exp_golomb_ue( bits );     /* abs_diff_view_idx_minus1 */
-#else
-                    if( modification_of_pic_nums_idc != 3 )
-                        h264_get_exp_golomb_ue( bits );     /* abs_diff_pic_num_minus1, long_term_pic_num or abs_diff_view_idx_minus1 */
-#endif
-                } while( modification_of_pic_nums_idc != 3 );
-        }
-#endif
-    }
-    else
-    {
-        /* ref_pic_list_modification() */
-        if( slice_type == H264_SLICE_TYPE_P || slice_type == H264_SLICE_TYPE_B || slice_type == H264_SLICE_TYPE_SP )
-        {
-            if( lsmash_bits_get( bits, 1 ) )        /* (S)P: ref_pic_list_modification_flag_l0
-                                                     *    B: ref_pic_list_modification_flag_l1 */
-            {
-                uint64_t modification_of_pic_nums_idc;
-                do
-                {
-                    modification_of_pic_nums_idc = h264_get_exp_golomb_ue( bits );
-#if 0
-                    if( modification_of_pic_nums_idc == 0 || modification_of_pic_nums_idc == 1 )
-                        h264_get_exp_golomb_ue( bits );     /* abs_diff_pic_num_minus1 */
-                    else if( modification_of_pic_nums_idc == 2 )
-                        h264_get_exp_golomb_ue( bits );     /* long_term_pic_num */
-#else
-                    if( modification_of_pic_nums_idc != 3 )
-                        h264_get_exp_golomb_ue( bits );     /* abs_diff_pic_num_minus1 or long_term_pic_num */
-#endif
-                } while( modification_of_pic_nums_idc != 3 );
-            }
-        }
-    }
-    if( (pps->weighted_pred_flag && (slice_type == H264_SLICE_TYPE_P || slice_type == H264_SLICE_TYPE_SP))
-     || (pps->weighted_bipred_idc == 1 && slice_type == H264_SLICE_TYPE_B) )
-    {
-        /* pred_weight_table() */
-        h264_get_exp_golomb_ue( bits );         /* luma_log2_weight_denom */
-        if( sps->ChromaArrayType )
-            h264_get_exp_golomb_ue( bits );     /* chroma_log2_weight_denom */
-        for( uint8_t i = 0; i <= num_ref_idx_l0_active_minus1; i++ )
-        {
-            if( lsmash_bits_get( bits, 1 ) )    /* luma_weight_l0_flag */
-            {
-                h264_get_exp_golomb_se( bits );     /* luma_weight_l0[i] */
-                h264_get_exp_golomb_se( bits );     /* luma_offset_l0[i] */
-            }
-            if( sps->ChromaArrayType
-             && lsmash_bits_get( bits, 1 )      /* chroma_weight_l0_flag */ )
-                for( int j = 0; j < 2; j++ )
-                {
-                    h264_get_exp_golomb_se( bits );     /* chroma_weight_l0[i][j]*/
-                    h264_get_exp_golomb_se( bits );     /* chroma_offset_l0[i][j] */
-                }
-        }
-        if( slice_type == H264_SLICE_TYPE_B )
-            for( uint8_t i = 0; i <= num_ref_idx_l1_active_minus1; i++ )
-            {
-                if( lsmash_bits_get( bits, 1 ) )    /* luma_weight_l1_flag */
-                {
-                    h264_get_exp_golomb_se( bits );     /* luma_weight_l1[i] */
-                    h264_get_exp_golomb_se( bits );     /* luma_offset_l1[i] */
-                }
-                if( sps->ChromaArrayType
-                 && lsmash_bits_get( bits, 1 )      /* chroma_weight_l1_flag */ )
-                    for( int j = 0; j < 2; j++ )
-                    {
-                        h264_get_exp_golomb_se( bits );     /* chroma_weight_l1[i][j]*/
-                        h264_get_exp_golomb_se( bits );     /* chroma_offset_l1[i][j] */
-                    }
-            }
-    }
-    if( !nalu_header->nal_ref_idc )
-    {
-        /* dec_ref_pic_marking() */
-        if( slice->IdrPicFlag )
-        {
-            lsmash_bits_get( bits, 1 );     /* no_output_of_prior_pics_flag */
-            lsmash_bits_get( bits, 1 );     /* long_term_reference_flag */
-        }
-        else if( lsmash_bits_get( bits, 1 ) )       /* adaptive_ref_pic_marking_mode_flag */
-        {
-            uint64_t memory_management_control_operation;
-            do
-            {
-                memory_management_control_operation = h264_get_exp_golomb_ue( bits );
-                if( memory_management_control_operation )
-                {
-                    if( memory_management_control_operation == 5 )
-                        slice->has_mmco5 = 1;
-                    h264_get_exp_golomb_ue( bits );
-                }
-            } while( memory_management_control_operation );
-        }
-    }
-#if 0   /* We needn't read more.
-         * Skip slice_id (only in slice_data_partition_a_layer_rbsp( )), slice_data() and rbsp_slice_trailing_bits(). */
-    if( pps->entropy_coding_mode_flag && slice_type != H264_SLICE_TYPE_I && slice_type != H264_SLICE_TYPE_SI )
-        h264_get_exp_golomb_ue( bits );     /* cabac_init_idc */
-    h264_get_exp_golomb_se( bits );         /* slice_qp_delta */
-    if( slice_type == H264_SLICE_TYPE_SP || slice_type == H264_SLICE_TYPE_SI )
-    {
-        if( slice_type == H264_SLICE_TYPE_SP )
-            lsmash_bits_get( bits, 1 );     /* sp_for_switch_flag */
-        h264_get_exp_golomb_se( bits );     /* slice_qs_delta */
-    }
-    if( pps->deblocking_filter_control_present_flag
-     && h264_get_exp_golomb_ue( bits ) != 1 /* disable_deblocking_filter_idc */ )
-    {
-        int64_t slice_alpha_c0_offset_div2 = h264_get_exp_golomb_se( bits );
-        IF_INVALID_VALUE( slice_alpha_c0_offset_div2 < -6 || slice_alpha_c0_offset_div2 > 6 )
-            return -1;
-        int64_t slice_beta_offset_div2     = h264_get_exp_golomb_se( bits );
-        IF_INVALID_VALUE( slice_beta_offset_div2     < -6 || slice_beta_offset_div2     > 6 )
-            return -1;
-    }
-    if( pps->num_slice_groups_minus1
-    && (slice_group_map_type == 3 || slice_group_map_type == 4 || slice_group_map_type == 5) )
-    {
-        uint64_t slice_group_change_cycle_length = ceil( log( sps->PicSizeInMapUnits / pps->SliceGroupChangeRate + 1 ) / 0.693147180559945 );
-        uint64_t slice_group_change_cycle = lsmash_bits_get( bits, slice_group_change_cycle_length );
-        IF_INVALID_VALUE( slice_group_change_cycle > (uint64_t)ceil( sps->PicSizeInMapUnits / pps->SliceGroupChangeRate ) )
-            return -1;
-    }
-#endif
-    lsmash_bits_empty( bits );
-    return bits->bs->error ? -1 : 0;
-}
-
-static int h264_parse_slice( lsmash_bits_t *bits, h264_sps_t *sps, h264_pps_t *pps,
-                             h264_slice_info_t *slice, h264_nalu_header_t *nalu_header,
-                             uint8_t *rbsp_buffer, uint8_t *ebsp, uint64_t ebsp_size )
-{
-    if( !sps || !pps )
-        return -1;      /* This would occur when the stream starts from non-IDR picture. */
-    uint8_t *rbsp_start = rbsp_buffer;
-    h264_remove_emulation_prevention( ebsp, ebsp_size, &rbsp_buffer );
-    uint64_t rbsp_length = rbsp_buffer - rbsp_start;
-    if( lsmash_bits_import_data( bits, rbsp_start, rbsp_length ) )
-        return -1;
-    if( nalu_header->nal_unit_type != 3 && nalu_header->nal_unit_type != 4 )
-        return h264_parse_slice_header( bits, sps, pps, slice, nalu_header );
-    /* slice_data_partition_b_layer_rbsp() or slice_data_partition_c_layer_rbsp() */
-    h264_get_exp_golomb_ue( bits );     /* slice_id */
-    if( sps->separate_colour_plane_flag )
-        lsmash_bits_get( bits, 2 );     /* colour_plane_id */
-    if( pps->redundant_pic_cnt_present_flag )
-    {
-        uint64_t redundant_pic_cnt = h264_get_exp_golomb_ue( bits );
-        IF_INVALID_VALUE( redundant_pic_cnt > 127 )
-            return -1;
-        slice->has_redundancy = !!redundant_pic_cnt;
-    }
-    /* Skip slice_data() and rbsp_slice_trailing_bits(). */
-    lsmash_bits_empty( bits );
-    return bits->bs->error ? -1 : 0;
-}
-
-static int h264_calculate_poc( h264_sps_t *sps, h264_picture_info_t *picture, h264_picture_info_t *prev_picture )
-{
-#define H264_POC_DEBUG 0
-#if H264_POC_DEBUG
-    fprintf( stderr, "PictureOrderCount\n" );
-#endif
-    int64_t TopFieldOrderCnt    = 0;
-    int64_t BottomFieldOrderCnt = 0;
-    if( sps->pic_order_cnt_type == 0 )
-    {
-        int32_t prevPicOrderCntMsb;
-        int32_t prevPicOrderCntLsb;
-        if( picture->idr )
-        {
-            prevPicOrderCntMsb = 0;
-            prevPicOrderCntLsb = 0;
-        }
-        else if( prev_picture->ref_pic_has_mmco5 )
-        {
-            prevPicOrderCntMsb = 0;
-            prevPicOrderCntLsb = prev_picture->ref_pic_bottom_field_flag ? 0 : prev_picture->ref_pic_TopFieldOrderCnt;
-        }
-        else
-        {
-            prevPicOrderCntMsb = prev_picture->ref_pic_PicOrderCntMsb;
-            prevPicOrderCntLsb = prev_picture->ref_pic_PicOrderCntLsb;
-        }
-        int64_t PicOrderCntMsb;
-        int32_t pic_order_cnt_lsb = picture->pic_order_cnt_lsb;
-        uint64_t MaxPicOrderCntLsb = sps->MaxPicOrderCntLsb;
-        if( (pic_order_cnt_lsb < prevPicOrderCntLsb)
-         && ((prevPicOrderCntLsb - pic_order_cnt_lsb) >= (MaxPicOrderCntLsb / 2)) )
-            PicOrderCntMsb = prevPicOrderCntMsb + MaxPicOrderCntLsb;
-        else if( (pic_order_cnt_lsb > prevPicOrderCntLsb)
-         && ((pic_order_cnt_lsb - prevPicOrderCntLsb) > (MaxPicOrderCntLsb / 2)) )
-            PicOrderCntMsb = prevPicOrderCntMsb - MaxPicOrderCntLsb;
-        else
-            PicOrderCntMsb = prevPicOrderCntMsb;
-        IF_EXCEED_INT32( PicOrderCntMsb )
-            return -1;
-        BottomFieldOrderCnt = TopFieldOrderCnt = PicOrderCntMsb + pic_order_cnt_lsb;
-        if( !picture->field_pic_flag )
-            BottomFieldOrderCnt += picture->delta_pic_order_cnt_bottom;
-        IF_EXCEED_INT32( TopFieldOrderCnt )
-            return -1;
-        IF_EXCEED_INT32( BottomFieldOrderCnt )
-            return -1;
-        if( !picture->disposable )
-        {
-            picture->ref_pic_has_mmco5         = picture->has_mmco5;
-            picture->ref_pic_bottom_field_flag = picture->bottom_field_flag;
-            picture->ref_pic_TopFieldOrderCnt  = TopFieldOrderCnt;
-            picture->ref_pic_PicOrderCntMsb    = PicOrderCntMsb;
-            picture->ref_pic_PicOrderCntLsb    = pic_order_cnt_lsb;
-        }
-#if H264_POC_DEBUG
-        fprintf( stderr, "    prevPicOrderCntMsb: %"PRId32"\n", prevPicOrderCntMsb );
-        fprintf( stderr, "    prevPicOrderCntLsb: %"PRId32"\n", prevPicOrderCntLsb );
-        fprintf( stderr, "    PicOrderCntMsb: %"PRId64"\n", PicOrderCntMsb );
-        fprintf( stderr, "    pic_order_cnt_lsb: %"PRId32"\n", pic_order_cnt_lsb );
-        fprintf( stderr, "    MaxPicOrderCntLsb: %"PRIu64"\n", MaxPicOrderCntLsb );
-#endif
-    }
-    else if( sps->pic_order_cnt_type == 1 )
-    {
-        uint32_t frame_num = picture->frame_num;
-        uint32_t prevFrameNum = prev_picture->frame_num;
-        uint32_t prevFrameNumOffset = prev_picture->has_mmco5 ? 0 : prev_picture->FrameNumOffset;
-        uint64_t FrameNumOffset = picture->idr ? 0 : prevFrameNumOffset + (prevFrameNum > frame_num ? sps->MaxFrameNum : 0);
-        IF_INVALID_VALUE( FrameNumOffset > INT32_MAX )
-            return -1;
-        int64_t expectedPicOrderCnt;
-        if( sps->num_ref_frames_in_pic_order_cnt_cycle )
-        {
-            uint64_t absFrameNum = FrameNumOffset + frame_num;
-            absFrameNum -= picture->disposable && absFrameNum > 0;
-            if( absFrameNum )
-            {
-                uint64_t picOrderCntCycleCnt       = (absFrameNum - 1) / sps->num_ref_frames_in_pic_order_cnt_cycle;
-                uint8_t frameNumInPicOrderCntCycle = (absFrameNum - 1) % sps->num_ref_frames_in_pic_order_cnt_cycle;
-                expectedPicOrderCnt = picOrderCntCycleCnt * sps->ExpectedDeltaPerPicOrderCntCycle;
-                for( uint8_t i = 0; i <= frameNumInPicOrderCntCycle; i++ )
-                    expectedPicOrderCnt += sps->offset_for_ref_frame[i];
-            }
-            else
-                expectedPicOrderCnt = 0;
-        }
-        else
-            expectedPicOrderCnt = 0;
-        if( picture->disposable )
-            expectedPicOrderCnt += sps->offset_for_non_ref_pic;
-        TopFieldOrderCnt    = expectedPicOrderCnt + picture->delta_pic_order_cnt[0];
-        BottomFieldOrderCnt = TopFieldOrderCnt + sps->offset_for_top_to_bottom_field;
-        if( !picture->field_pic_flag )
-            BottomFieldOrderCnt += picture->delta_pic_order_cnt[1];
-        IF_EXCEED_INT32( TopFieldOrderCnt )
-            return -1;
-        IF_EXCEED_INT32( BottomFieldOrderCnt )
-            return -1;
-        picture->FrameNumOffset = FrameNumOffset;
-    }
-    else if( sps->pic_order_cnt_type == 2 )
-    {
-        uint32_t frame_num = picture->frame_num;
-        uint32_t prevFrameNum = prev_picture->frame_num;
-        int32_t prevFrameNumOffset = prev_picture->has_mmco5 ? 0 : prev_picture->FrameNumOffset;
-        int64_t FrameNumOffset;
-        int64_t tempPicOrderCnt;
-        if( picture->idr )
-        {
-            FrameNumOffset  = 0;
-            tempPicOrderCnt = 0;
-        }
-        else
-        {
-            FrameNumOffset  = prevFrameNumOffset + (prevFrameNum > frame_num ? sps->MaxFrameNum : 0);
-            tempPicOrderCnt = 2 * (FrameNumOffset + frame_num) - picture->disposable;
-            IF_EXCEED_INT32( FrameNumOffset )
-                return -1;
-            IF_EXCEED_INT32( tempPicOrderCnt )
-                return -1;
-        }
-        BottomFieldOrderCnt = TopFieldOrderCnt = tempPicOrderCnt;
-        picture->FrameNumOffset = FrameNumOffset;
-    }
-    if( !picture->field_pic_flag )
-        picture->PicOrderCnt = LSMASH_MIN( TopFieldOrderCnt, BottomFieldOrderCnt );
-    else
-        picture->PicOrderCnt = picture->bottom_field_flag ? BottomFieldOrderCnt : TopFieldOrderCnt;
-#if H264_POC_DEBUG
-    if( picture->field_pic_flag )
-    {
-        if( !picture->bottom_field_flag )
-            fprintf( stderr, "    TopFieldOrderCnt: %"PRId64"\n", TopFieldOrderCnt );
-        else
-            fprintf( stderr, "    BottomFieldOrderCnt: %"PRId64"\n", BottomFieldOrderCnt );
-    }
-    fprintf( stderr, "    POC: %"PRId32"\n", picture->PicOrderCnt );
-#endif
-    return 0;
-}
-
-static inline void h264_compare_parameter_set( lsmash_entry_list_t *parameter_sets, uint8_t *ps_nalu, uint16_t ps_nalu_length, int *same_ps )
-{
-    if( !parameter_sets->head )
-        return;
-    isom_avcC_ps_entry_t *ps = (isom_avcC_ps_entry_t *)parameter_sets->head->data;
-    if( ps && (ps->parameterSetLength == ps_nalu_length) )
-        *same_ps = !memcmp( ps->parameterSetNALUnit, ps_nalu, ps_nalu_length );
-}
-
-#define H264_NALU_LENGTH_SIZE 4     /* We always use 4 bytes length. */
-
-static uint8_t *h264_create_avcC( isom_avcC_t *avcC, uint32_t *exdata_length )
-{
-    lsmash_bs_t *bs = lsmash_bs_create( NULL );
-    if( !bs )
-        return NULL;
-    lsmash_bs_put_be32( bs, avcC->size );
-    lsmash_bs_put_be32( bs, avcC->type );
-    lsmash_bs_put_byte( bs, avcC->configurationVersion );
-    lsmash_bs_put_byte( bs, avcC->AVCProfileIndication );
-    lsmash_bs_put_byte( bs, avcC->profile_compatibility );
-    lsmash_bs_put_byte( bs, avcC->AVCLevelIndication );
-    lsmash_bs_put_byte( bs, avcC->lengthSizeMinusOne | 0xfc );
-    lsmash_bs_put_byte( bs, avcC->numOfSequenceParameterSets | 0xe0 );
-    isom_avcC_ps_entry_t *ps = (isom_avcC_ps_entry_t *)avcC->sequenceParameterSets->head->data;
-    if( !ps )
-    {
-        lsmash_bs_cleanup( bs );
-        return NULL;
-    }
-    lsmash_bs_put_be16( bs, ps->parameterSetLength );
-    lsmash_bs_put_bytes( bs, ps->parameterSetLength, ps->parameterSetNALUnit );
-    lsmash_bs_put_byte( bs, avcC->numOfPictureParameterSets );
-    ps = (isom_avcC_ps_entry_t *)avcC->pictureParameterSets->head->data;
-    if( !ps )
-    {
-        lsmash_bs_cleanup( bs );
-        return NULL;
-    }
-    lsmash_bs_put_be16( bs, ps->parameterSetLength );
-    lsmash_bs_put_bytes( bs, ps->parameterSetLength, ps->parameterSetNALUnit );
-    if( ISOM_REQUIRES_AVCC_EXTENSION( avcC->AVCProfileIndication ) )
-    {
-        lsmash_bs_put_byte( bs, avcC->chroma_format | 0xfc );
-        lsmash_bs_put_byte( bs, avcC->bit_depth_luma_minus8 | 0xf8 );
-        lsmash_bs_put_byte( bs, avcC->bit_depth_chroma_minus8 | 0xf8 );
-        lsmash_bs_put_byte( bs, avcC->numOfSequenceParameterSetExt );
-        /* No SequenceParameterSetExt */
-    }
-    uint8_t *exdata = lsmash_bs_export_data( bs, exdata_length );
-    lsmash_bs_cleanup( bs );
-    /* Update box size. */
-    exdata[0] = (*exdata_length >> 24) & 0xff;
-    exdata[1] = (*exdata_length >> 16) & 0xff;
-    exdata[2] = (*exdata_length >>  8) & 0xff;
-    exdata[3] =  *exdata_length        & 0xff;
-    return exdata;
-}
-
-static int h264_create_summary( mp4sys_h264_info_t *info, uint8_t *rbsp_buffer, int probe,
-                                h264_nalu_header_t *sps_nalu_header,
-                                uint8_t *sps_nalu, uint16_t sps_nalu_length,
-                                h264_nalu_header_t *pps_nalu_header,
-                                uint8_t *pps_nalu, uint16_t pps_nalu_length )
-{
-    assert( info );
-    isom_avcC_t *avcC = &info->avcC;
-    int same_sps = 0;
-    int same_pps = 0;
-    if( sps_nalu )
-    {
-        h264_compare_parameter_set( avcC->sequenceParameterSets, sps_nalu, sps_nalu_length, &same_sps );
-        if( !same_sps )
-        {
-            if( h264_parse_sps_nalu( info->bits, &info->sps, sps_nalu_header, rbsp_buffer,
-                                     sps_nalu + sps_nalu_header->length, sps_nalu_length - sps_nalu_header->length ) )
-                return -1;
-            if( !probe || !info->sps.present )
-            {
-                h264_sps_t *sps = &info->sps;
-                avcC->configurationVersion       = 1;
-                avcC->AVCProfileIndication       = sps->profile_idc;
-                avcC->profile_compatibility      = sps->constraint_set_flags;
-                avcC->AVCLevelIndication         = sps->level_idc;
-                avcC->lengthSizeMinusOne         = H264_NALU_LENGTH_SIZE - 1;
-                avcC->numOfSequenceParameterSets = 1;
-                avcC->chroma_format              = sps->chroma_format_idc;
-                avcC->bit_depth_luma_minus8      = sps->bit_depth_luma_minus8;
-                avcC->bit_depth_chroma_minus8    = sps->bit_depth_chroma_minus8;
-                lsmash_remove_entries( avcC->sequenceParameterSets, isom_remove_avcC_ps );
-                isom_avcC_ps_entry_t *ps = malloc( sizeof(isom_avcC_ps_entry_t) );
-                if( !ps )
-                    return -1;
-                ps->parameterSetNALUnit = lsmash_memdup( sps_nalu, sps_nalu_length );
-                if( !ps->parameterSetNALUnit )
-                {
-                    free( ps );
-                    return -1;
-                }
-                ps->parameterSetLength = sps_nalu_length;
-                if( lsmash_add_entry( avcC->sequenceParameterSets, ps ) )
-                {
-                    free( ps->parameterSetNALUnit );
-                    free( ps );
-                    return -1;
-                }
-                info->sps.present = 1;
-            }
-        }
-    }
-    if( pps_nalu )
-    {
-        h264_compare_parameter_set( avcC->pictureParameterSets, pps_nalu, pps_nalu_length, &same_pps );
-        if( !same_pps )
-        {
-            if( h264_parse_pps_nalu( info->bits, &info->sps, &info->pps, pps_nalu_header, rbsp_buffer,
-                                     pps_nalu + pps_nalu_header->length, pps_nalu_length - pps_nalu_header->length ) )
-                return -1;
-            if( !probe || !info->pps.present )
-            {
-                avcC->numOfPictureParameterSets = 1;
-                lsmash_remove_entries( avcC->pictureParameterSets, isom_remove_avcC_ps );
-                isom_avcC_ps_entry_t *ps = malloc( sizeof(isom_avcC_ps_entry_t) );
-                if( !ps )
-                    return -1;
-                ps->parameterSetNALUnit = lsmash_memdup( pps_nalu, pps_nalu_length );
-                if( !ps->parameterSetNALUnit )
-                {
-                    free( ps );
-                    return -1;
-                }
-                ps->parameterSetLength = pps_nalu_length;
-                if( lsmash_add_entry( avcC->pictureParameterSets, ps ) )
-                {
-                    free( ps->parameterSetNALUnit );
-                    free( ps );
-                    return -1;
-                }
-                info->pps.present = 1;
-            }
-        }
-    }
-    /* Create summary when SPS, PPS and no summary are present even if probe is true.
-     * Skip to create a new summary when detecting the first summary if probe is true, i.e. we hold the first summary. */
-    if( !info->sps.present || !info->pps.present || (probe && info->summary) )
-        return 0;
-    if( !probe && ((!sps_nalu && pps_nalu && same_pps) || (!pps_nalu && sps_nalu && same_sps)) )
-        return 0;
-    h264_sps_t *sps = &info->sps;
-    h264_pps_t *pps = &info->pps;
-    if( sps->seq_parameter_set_id != pps->seq_parameter_set_id )
-        return 0;       /* No support yet */
-    lsmash_video_summary_t *summary;
-    if( info->summary )
-    {
-        summary = info->summary;
-        if( summary->exdata )
-            free( summary->exdata );
-        summary->exdata = NULL;
-        info->first_summary = 0;
-    }
-    else
-    {
-        summary = (lsmash_video_summary_t *)lsmash_create_summary( MP4SYS_STREAM_TYPE_VisualStream );
-        if( !summary )
-            return -1;
-        info->summary = summary;
-        info->first_summary = 1;
-    }
-    /* Update summary here.
-     * max_au_length is set at the last of mp4sys_h264_probe function. */
-    summary->exdata = h264_create_avcC( avcC, &summary->exdata_length );
-    if( !summary->exdata )
-    {
-        lsmash_remove_list( avcC->sequenceParameterSets,   isom_remove_avcC_ps );
-        lsmash_remove_list( avcC->pictureParameterSets,    isom_remove_avcC_ps );
-        lsmash_remove_list( avcC->sequenceParameterSetExt, isom_remove_avcC_ps );
-        lsmash_cleanup_summary( (lsmash_summary_t *)summary );
-        info->summary = NULL;
-        return -1;
-    }
-    summary->sample_type            = ISOM_CODEC_TYPE_AVC1_VIDEO;
-    summary->object_type_indication = MP4SYS_OBJECT_TYPE_Visual_H264_ISO_14496_10;
-    summary->timescale              = sps->vui.time_scale;
-    summary->timebase               = sps->vui.num_units_in_tick;
-    summary->full_range             = sps->vui.video_full_range_flag;
-    summary->vfr                    = !sps->vui.fixed_frame_rate_flag;
-    summary->width                  = sps->cropped_width;
-    summary->height                 = sps->cropped_height;
-    summary->par_h                  = sps->vui.sar_width;
-    summary->par_v                  = sps->vui.sar_height;
-    summary->primaries              = sps->vui.colour_primaries;
-    summary->transfer               = sps->vui.transfer_characteristics;
-    summary->matrix                 = sps->vui.matrix_coefficients;
-    return 0;
-}
-
-static inline void h264_update_picture_type( h264_picture_info_t *picture, h264_slice_info_t *slice )
-{
-    if( picture->type == H264_PICTURE_TYPE_I_P )
-    {
-        if( slice->type == H264_SLICE_TYPE_B )
-            picture->type = H264_PICTURE_TYPE_I_P_B;
-        else if( slice->type == H264_SLICE_TYPE_SI || slice->type == H264_SLICE_TYPE_SP )
-            picture->type = H264_PICTURE_TYPE_I_SI_P_SP;
-    }
-    else if( picture->type == H264_PICTURE_TYPE_I_P_B )
-    {
-        if( slice->type != H264_SLICE_TYPE_P && slice->type != H264_SLICE_TYPE_B && slice->type != H264_SLICE_TYPE_I )
-            picture->type = H264_PICTURE_TYPE_I_SI_P_SP_B;
-    }
-    else if( picture->type == H264_PICTURE_TYPE_I )
-    {
-        if( slice->type == H264_SLICE_TYPE_P )
-            picture->type = H264_PICTURE_TYPE_I_P;
-        else if( slice->type == H264_SLICE_TYPE_B )
-            picture->type = H264_PICTURE_TYPE_I_P_B;
-        else if( slice->type == H264_SLICE_TYPE_SI )
-            picture->type = H264_PICTURE_TYPE_I_SI;
-        else if( slice->type == H264_SLICE_TYPE_SP )
-            picture->type = H264_PICTURE_TYPE_I_SI_P_SP;
-    }
-    else if( picture->type == H264_PICTURE_TYPE_SI_SP )
-    {
-        if( slice->type == H264_SLICE_TYPE_P || slice->type == H264_SLICE_TYPE_I )
-            picture->type = H264_PICTURE_TYPE_I_SI_P_SP;
-        else if( slice->type == H264_SLICE_TYPE_B )
-            picture->type = H264_PICTURE_TYPE_I_SI_P_SP_B;
-    }
-    else if( picture->type == H264_PICTURE_TYPE_SI )
-    {
-        if( slice->type == H264_SLICE_TYPE_P )
-            picture->type = H264_PICTURE_TYPE_I_SI_P_SP;
-        else if( slice->type == H264_SLICE_TYPE_B )
-            picture->type = H264_PICTURE_TYPE_I_SI_P_SP_B;
-        else if( slice->type != H264_SLICE_TYPE_I )
-            picture->type = H264_PICTURE_TYPE_I_SI;
-        else if( slice->type == H264_SLICE_TYPE_SP )
-            picture->type = H264_PICTURE_TYPE_SI_SP;
-    }
-    else if( picture->type == H264_PICTURE_TYPE_I_SI )
-    {
-        if( slice->type == H264_SLICE_TYPE_P || slice->type == H264_SLICE_TYPE_SP )
-            picture->type = H264_PICTURE_TYPE_I_SI_P_SP;
-        else if( slice->type == H264_SLICE_TYPE_B )
-            picture->type = H264_PICTURE_TYPE_I_SI_P_SP_B;
-    }
-    else if( picture->type == H264_PICTURE_TYPE_I_SI_P_SP )
-    {
-        if( slice->type == H264_SLICE_TYPE_B )
-            picture->type = H264_PICTURE_TYPE_I_SI_P_SP_B;
-    }
-    else if( picture->type == H264_PICTURE_TYPE_NONE )
-    {
-        if( slice->type == H264_SLICE_TYPE_P )
-            picture->type = H264_PICTURE_TYPE_I_P;
-        else if( slice->type == H264_SLICE_TYPE_B )
-            picture->type = H264_PICTURE_TYPE_I_P_B;
-        else if( slice->type == H264_SLICE_TYPE_I )
-            picture->type = H264_PICTURE_TYPE_I;
-        else if( slice->type == H264_SLICE_TYPE_SI )
-            picture->type = H264_PICTURE_TYPE_SI;
-        else if( slice->type == H264_SLICE_TYPE_SP )
-            picture->type = H264_PICTURE_TYPE_SI_SP;
-    }
-#if 0
-    fprintf( stderr, "Picture type = %s\n", picture->type == H264_PICTURE_TYPE_I_P        ? "P"
-                                          : picture->type == H264_PICTURE_TYPE_I_P_B      ? "B"
-                                          : picture->type == H264_PICTURE_TYPE_I          ? "I"
-                                          : picture->type == H264_PICTURE_TYPE_SI         ? "SI"
-                                          : picture->type == H264_PICTURE_TYPE_I_SI       ? "SI"
-                                          :                                                 "SP" );
-#endif
-}
-
-/* Shall be called at least once per picture. */
-static void h264_update_picture_info_for_slice( h264_picture_info_t *picture, h264_slice_info_t *slice )
-{
-    picture->has_mmco5                 |= slice->has_mmco5;
-    picture->has_redundancy            |= slice->has_redundancy;
-    picture->incomplete_au_has_primary |= !slice->has_redundancy;
-    h264_update_picture_type( picture, slice );
-    slice->present = 0;     /* Discard this slice info. */
-}
-
-/* Shall be called exactly once per picture. */
-static void h264_update_picture_info( h264_picture_info_t *picture, h264_slice_info_t *slice, h264_sei_t *sei )
-{
-    picture->frame_num                  = slice->frame_num;
-    picture->pic_order_cnt_lsb          = slice->pic_order_cnt_lsb;
-    picture->delta_pic_order_cnt_bottom = slice->delta_pic_order_cnt_bottom;
-    picture->delta_pic_order_cnt[0]     = slice->delta_pic_order_cnt[0];
-    picture->delta_pic_order_cnt[1]     = slice->delta_pic_order_cnt[1];
-    picture->field_pic_flag             = slice->field_pic_flag;
-    picture->bottom_field_flag          = slice->bottom_field_flag;
-    picture->idr                        = slice->IdrPicFlag;
-    picture->pic_parameter_set_id       = slice->pic_parameter_set_id;
-    picture->disposable                 = (slice->nal_ref_idc == 0);
-    picture->random_accessible          = slice->IdrPicFlag;
-    h264_update_picture_info_for_slice( picture, slice );
-    picture->independent      = picture->type == H264_PICTURE_TYPE_I || picture->type == H264_PICTURE_TYPE_I_SI;
-    picture->non_bipredictive = picture->type != H264_PICTURE_TYPE_I_P_B && picture->type != H264_PICTURE_TYPE_I_SI_P_SP_B;
-    if( sei->present )
-    {
-        picture->random_accessible |= sei->random_accessible;
-        picture->recovery_frame_cnt = sei->recovery_frame_cnt;
-        sei->present = 0;
-    }
-}
-
-static inline int h264_find_au_delimit_by_slice_info( h264_slice_info_t *slice, h264_slice_info_t *prev_slice )
-{
-    if( slice->frame_num                    != prev_slice->frame_num
-     || ((slice->pic_order_cnt_type == 0    && prev_slice->pic_order_cnt_type == 0)
-      && (slice->pic_order_cnt_lsb          != prev_slice->pic_order_cnt_lsb
-      ||  slice->delta_pic_order_cnt_bottom != prev_slice->delta_pic_order_cnt_bottom))
-     || ((slice->pic_order_cnt_type == 1    && prev_slice->pic_order_cnt_type == 1)
-      && (slice->delta_pic_order_cnt[0]     != prev_slice->delta_pic_order_cnt[0]
-      ||  slice->delta_pic_order_cnt[1]     != prev_slice->delta_pic_order_cnt[1]))
-     || slice->field_pic_flag               != prev_slice->field_pic_flag
-     || slice->bottom_field_flag            != prev_slice->bottom_field_flag
-     || slice->IdrPicFlag                   != prev_slice->IdrPicFlag
-     || slice->pic_parameter_set_id         != prev_slice->pic_parameter_set_id
-     || ((slice->nal_ref_idc == 0           || prev_slice->nal_ref_idc == 0)
-      && (slice->nal_ref_idc                != prev_slice->nal_ref_idc))
-     || (slice->IdrPicFlag == 1             && prev_slice->IdrPicFlag == 1
-      && slice->idr_pic_id                  != prev_slice->idr_pic_id) )
-        return 1;
-    return 0;
-}
-
-static inline int h264_find_au_delimit_by_nalu_type( uint8_t nalu_type, uint8_t prev_nalu_type )
-{
-    return ((nalu_type >= 6 && nalu_type <= 9) || (nalu_type >= 14 && nalu_type <= 18))
-        && ((prev_nalu_type >= 1 && prev_nalu_type <= 5) || prev_nalu_type == 12 || prev_nalu_type == 19);
-}
-
-static int h264_supplement_buffer( h264_stream_buffer_t *buffer, h264_picture_info_t *picture, uint32_t size )
-{
-    uint32_t buffer_pos_offset   = buffer->pos - buffer->start;
-    uint32_t buffer_valid_length = buffer->end - buffer->start;
-    lsmash_multiple_buffers_t *bank = lsmash_resize_multiple_buffers( buffer->bank, size );
-    if( !bank )
-        return -1;
-    buffer->bank           = bank;
-    buffer->start          = lsmash_withdraw_buffer( bank, 1 );
-    buffer->rbsp           = lsmash_withdraw_buffer( bank, 2 );
-    picture->au            = lsmash_withdraw_buffer( bank, 3 );
-    picture->incomplete_au = lsmash_withdraw_buffer( bank, 4 );
-    buffer->pos = buffer->start + buffer_pos_offset;
-    buffer->end = buffer->start + buffer_valid_length;
-    return 0;
-}
-
-static inline int h264_check_next_short_start_code( uint8_t *buf_pos, uint8_t *buf_end )
-{
-    return ((buf_pos + 2) < buf_end) && !buf_pos[0] && !buf_pos[1] && (buf_pos[2] == 0x01);
-}
-
-static void h264_check_buffer_shortage( mp4sys_h264_info_t *info, FILE *stream, uint32_t anticipation_bytes )
+static uint32_t h264_update_buffer_from_stream( h264_info_t *info, void *src, uint32_t anticipation_bytes )
 {
     h264_stream_buffer_t *buffer = &info->buffer;
     assert( anticipation_bytes < buffer->bank->buffer_size );
-    if( info->no_more_read )
-        return;
     uint32_t remainder_bytes = buffer->end - buffer->pos;
+    if( info->no_more_read )
+        return remainder_bytes;
     if( remainder_bytes <= anticipation_bytes )
     {
         /* Move unused data to the head of buffer. */
@@ -3753,10 +2265,45 @@ static void h264_check_buffer_shortage( mp4sys_h264_info_t *info, FILE *stream, 
             *(buffer->start + i) = *(buffer->pos + i);
         /* Read and store the next data into the buffer.
          * Move the position of buffer on the head. */
+        FILE *stream = (FILE *)src;
         uint32_t read_size = fread( buffer->start + remainder_bytes, 1, buffer->bank->buffer_size - remainder_bytes, stream );
+        remainder_bytes += read_size;
         buffer->pos = buffer->start;
-        buffer->end = buffer->start + remainder_bytes + read_size;
+        buffer->end = buffer->start + remainder_bytes;
         info->no_more_read = read_size == 0 ? feof( stream ) : 0;
+    }
+    return remainder_bytes;
+}
+
+static mp4sys_h264_info_t *mp4sys_create_h264_info( void )
+{
+    mp4sys_h264_info_t *info = lsmash_malloc_zero( sizeof(mp4sys_h264_info_t) );
+    if( !info )
+        return NULL;
+    if( h264_setup_parser( &info->info, 0, h264_update_buffer_from_stream ) )
+    {
+        mp4sys_remove_h264_info( info );
+        return NULL;
+    }
+    return info;
+}
+
+static int h264_process_parameter_set( h264_info_t *info, lsmash_h264_parameter_set_type ps_type,
+                                       uint16_t nalu_header_length, uint64_t ebsp_length, int probe )
+{
+    h264_stream_buffer_t *buffer = &info->buffer;
+    if( probe )
+        return h264_try_to_append_parameter_set( info, ps_type, buffer->pos, nalu_header_length + ebsp_length );
+    switch( ps_type )
+    {
+        case H264_PARAMETER_SET_TYPE_SPS :
+            return h264_parse_sps_nalu( info->bits, &info->sps, buffer->rbsp, buffer->pos + nalu_header_length, ebsp_length, 0 );
+        case H264_PARAMETER_SET_TYPE_PPS :
+            return h264_parse_pps_nalu( info->bits, &info->sps, &info->pps, buffer->rbsp, buffer->pos + nalu_header_length, ebsp_length );
+        case H264_PARAMETER_SET_TYPE_SPSEXT :
+            return 0;
+        default :
+            return -1;
     }
 }
 
@@ -3776,23 +2323,23 @@ static void h264_append_nalu_to_au( h264_picture_info_t *picture, uint8_t *src_n
 {
     if( !probe )
     {
-        uint8_t *dst_nalu = picture->incomplete_au + picture->incomplete_au_length + H264_NALU_LENGTH_SIZE;
-        for( int i = H264_NALU_LENGTH_SIZE; i; i-- )
+        uint8_t *dst_nalu = picture->incomplete_au + picture->incomplete_au_length + H264_DEFAULT_NALU_LENGTH_SIZE;
+        for( int i = H264_DEFAULT_NALU_LENGTH_SIZE; i; i-- )
             *(dst_nalu - i) = (nalu_length >> ((i - 1) * 8)) & 0xff;
         memcpy( dst_nalu, src_nalu, nalu_length );
     }
     /* Note: picture->incomplete_au_length shall be 0 immediately after AU has completed.
      * Therefore, possible_au_length in h264_get_access_unit_internal() can't be used here
      * to avoid increasing AU length monotonously through the entire stream. */
-    picture->incomplete_au_length += H264_NALU_LENGTH_SIZE + nalu_length;
+    picture->incomplete_au_length += H264_DEFAULT_NALU_LENGTH_SIZE + nalu_length;
 }
 
 static inline void h264_get_au_internal_end( mp4sys_h264_info_t *info, h264_picture_info_t *picture, h264_nalu_header_t *nalu_header, int no_more_buf )
 {
-    info->status = info->no_more_read && no_more_buf && (picture->incomplete_au_length == 0)
+    info->status = info->info.no_more_read && no_more_buf && (picture->incomplete_au_length == 0)
                  ? MP4SYS_IMPORTER_EOF
                  : MP4SYS_IMPORTER_OK;
-    info->nalu_header = *nalu_header;
+    info->info.nalu_header = *nalu_header;
 }
 
 static int h264_get_au_internal_succeeded( mp4sys_h264_info_t *info, h264_picture_info_t *picture, h264_nalu_header_t *nalu_header, int no_more_buf )
@@ -3810,14 +2357,14 @@ static int h264_get_au_internal_failed( mp4sys_h264_info_t *info, h264_picture_i
     return -1;
 }
 
-
 /* If probe equals 0, don't get the actual data (EBPS) of an access unit and only parse NALU.
  * Currently, you can get AU of AVC video elemental stream only, not AVC parameter set elemental stream defined in 14496-15. */
-static int h264_get_access_unit_internal( mp4sys_importer_t *importer, mp4sys_h264_info_t *info, uint32_t track_number, int probe )
+static int h264_get_access_unit_internal( mp4sys_importer_t *importer, int probe )
 {
-#define H264_SHORT_START_CODE_LENGTH 3
-    h264_slice_info_t *slice       = &info->slice;
-    h264_picture_info_t *picture   = &info->picture;
+    mp4sys_h264_info_t *importer_info = (mp4sys_h264_info_t *)importer->info;
+    h264_info_t          *info     = &importer_info->info;
+    h264_slice_info_t    *slice    = &info->slice;
+    h264_picture_info_t  *picture  = &info->picture;
     h264_stream_buffer_t *buffer   = &info->buffer;
     h264_nalu_header_t nalu_header = info->nalu_header;
     uint64_t consecutive_zero_byte_count = 0;
@@ -3832,7 +2379,7 @@ static int h264_get_access_unit_internal( mp4sys_importer_t *importer, mp4sys_h2
     picture->has_redundancy     = 0;
     while( 1 )
     {
-        h264_check_buffer_shortage( info, importer->stream, 2 );
+        buffer->update( info, importer->stream, 2 );
         no_more_buf = buffer->pos >= buffer->end;
         int no_more = info->no_more_read && no_more_buf;
         if( !h264_check_next_short_start_code( buffer->pos, buffer->end ) && !no_more )
@@ -3850,7 +2397,7 @@ static int h264_get_access_unit_internal( mp4sys_importer_t *importer, mp4sys_h2
              * This NALU already has been appended into the latest access unit and parsed. */
             h264_update_picture_info( picture, slice, &info->sei );
             h264_complete_au( picture, probe );
-            return h264_get_au_internal_succeeded( info, picture, &nalu_header, no_more_buf );
+            return h264_get_au_internal_succeeded( importer->info, picture, &nalu_header, no_more_buf );
         }
         uint64_t next_nalu_head_pos = info->ebsp_head_pos + ebsp_length + !no_more * H264_SHORT_START_CODE_LENGTH;
         uint8_t *next_short_start_code_pos = buffer->pos;       /* Memorize position of short start code of the next NALU in buffer.
@@ -3874,7 +2421,7 @@ static int h264_get_access_unit_internal( mp4sys_importer_t *importer, mp4sys_h2
             /* We don't support streams with both filler and HRD yet.
              * Otherwise, just skip filler because elemental streams defined in 14496-15 are forbidden to use filler. */
             if( info->sps.hrd_present )
-                return h264_get_au_internal_failed( info, picture, &nalu_header, no_more_buf, complete_au );
+                return h264_get_au_internal_failed( importer->info, picture, &nalu_header, no_more_buf, complete_au );
         }
         else if( (nalu_type >= 1 && nalu_type <= 13) || nalu_type == 19 )
         {
@@ -3883,11 +2430,11 @@ static int h264_get_access_unit_internal( mp4sys_importer_t *importer, mp4sys_h2
              * We don't support SVC and MVC elemental stream defined in 14496-15 yet. */
             ebsp_length -= consecutive_zero_byte_count;     /* Any EBSP doesn't have zero bytes at the end. */
             uint64_t nalu_length = nalu_header.length + ebsp_length;
-            uint64_t possible_au_length = picture->incomplete_au_length + H264_NALU_LENGTH_SIZE + nalu_length;
+            uint64_t possible_au_length = picture->incomplete_au_length + H264_DEFAULT_NALU_LENGTH_SIZE + nalu_length;
             if( buffer->bank->buffer_size < possible_au_length )
             {
                 if( h264_supplement_buffer( buffer, picture, 2 * possible_au_length ) )
-                    return h264_get_au_internal_failed( info, picture, &nalu_header, no_more_buf, complete_au );
+                    return h264_get_au_internal_failed( importer->info, picture, &nalu_header, no_more_buf, complete_au );
                 next_short_start_code_pos = buffer->pos;
             }
             /* Move to the first byte of the current NALU. */
@@ -3899,7 +2446,7 @@ static int h264_get_access_unit_internal( mp4sys_importer_t *importer, mp4sys_h2
                 buffer->pos = buffer->start;
                 buffer->end = buffer->start + nalu_length;
                 if( read_fail )
-                    return h264_get_au_internal_failed( info, picture, &nalu_header, no_more_buf, complete_au );
+                    return h264_get_au_internal_failed( importer->info, picture, &nalu_header, no_more_buf, complete_au );
 #if 0
                 if( probe )
                     fprintf( stderr, "    ----Read Back\n" );
@@ -3914,7 +2461,7 @@ static int h264_get_access_unit_internal( mp4sys_importer_t *importer, mp4sys_h2
                 if( h264_parse_slice( info->bits, &info->sps, &info->pps,
                                       slice, &nalu_header, buffer->rbsp,
                                       buffer->pos + nalu_header.length, ebsp_length ) )
-                    return h264_get_au_internal_failed( info, picture, &nalu_header, no_more_buf, complete_au );
+                    return h264_get_au_internal_failed( importer->info, picture, &nalu_header, no_more_buf, complete_au );
                 if( prev_slice.present )
                 {
                     /* Check whether the AU that contains the previous VCL NALU completed or not. */
@@ -3943,28 +2490,27 @@ static int h264_get_access_unit_internal( mp4sys_importer_t *importer, mp4sys_h2
                     complete_au = h264_complete_au( picture, probe );
                 switch( nalu_type )
                 {
-                    case 6 :    /* SEI */
-                        if( h264_parse_sei_nalu( info->bits, &info->sei, &nalu_header,
-                                                 buffer->rbsp, buffer->pos + nalu_header.length, ebsp_length ) )
-                            return h264_get_au_internal_failed( info, picture, &nalu_header, no_more_buf, complete_au );
+                    case 6 :    /* Supplemental Enhancement Information */
+                        if( h264_parse_sei_nalu( info->bits, &info->sei, buffer->rbsp, buffer->pos + nalu_header.length, ebsp_length ) )
+                            return h264_get_au_internal_failed( importer->info, picture, &nalu_header, no_more_buf, complete_au );
                         h264_append_nalu_to_au( picture, buffer->pos, nalu_length, probe );
                         break;
-                    case 7 :    /* SPS */
-                        if( h264_create_summary( info, buffer->rbsp, probe,
-                                                 &nalu_header, buffer->pos, nalu_length,
-                                                 NULL, NULL, 0 ) )
-                            return h264_get_au_internal_failed( info, picture, &nalu_header, no_more_buf, complete_au );
+                    case 7 :    /* Sequence Parameter Set */
+                        if( h264_process_parameter_set( info, H264_PARAMETER_SET_TYPE_SPS, nalu_header.length, ebsp_length, probe ) )
+                            return h264_get_au_internal_failed( importer->info, picture, &nalu_header, no_more_buf, complete_au );
+                        if( probe && !importer_info->first_sps.present )
+                            importer_info->first_sps = info->sps;
                         break;
-                    case 8 :    /* PPS */
-                        if( h264_create_summary( info, buffer->rbsp, probe,
-                                                 NULL, NULL, 0,
-                                                 &nalu_header, buffer->pos, nalu_length ) )
-                            return h264_get_au_internal_failed( info, picture, &nalu_header, no_more_buf, complete_au );
+                    case 8 :    /* Picture Parameter Set */
+                        if( h264_process_parameter_set( info, H264_PARAMETER_SET_TYPE_PPS, nalu_header.length, ebsp_length, probe ) )
+                            return h264_get_au_internal_failed( importer->info, picture, &nalu_header, no_more_buf, complete_au );
                         break;
                     case 9 :    /* We drop access unit delimiters. */
                         break;
-                    case 13 :   /* We don't support sequence parameter set extension yet. */
-                        return h264_get_au_internal_failed( info, picture, &nalu_header, no_more_buf, complete_au );
+                    case 13 :   /* Sequence Parameter Set Extension */
+                        if( h264_process_parameter_set( info, H264_PARAMETER_SET_TYPE_SPSEXT, nalu_header.length, ebsp_length, probe ) )
+                            return h264_get_au_internal_failed( importer->info, picture, &nalu_header, no_more_buf, complete_au );
+                        break;
                     default :
                         h264_append_nalu_to_au( picture, buffer->pos, nalu_length, probe );
                         break;
@@ -3981,7 +2527,7 @@ static int h264_get_access_unit_internal( mp4sys_importer_t *importer, mp4sys_h2
         else
             buffer->pos = next_short_start_code_pos + H264_SHORT_START_CODE_LENGTH;
         info->prev_nalu_type = nalu_type;
-        h264_check_buffer_shortage( info, importer->stream, 0 );
+        buffer->update( info, importer->stream, 0 );
         no_more_buf = buffer->pos >= buffer->end;
         ebsp_length = 0;
         no_more = info->no_more_read && no_more_buf;
@@ -3989,7 +2535,7 @@ static int h264_get_access_unit_internal( mp4sys_importer_t *importer, mp4sys_h2
         {
             /* Check the next NALU header. */
             if( h264_check_nalu_header( &nalu_header, &buffer->pos, !!consecutive_zero_byte_count ) )
-                return h264_get_au_internal_failed( info, picture, &nalu_header, no_more_buf, complete_au );
+                return h264_get_au_internal_failed( importer->info, picture, &nalu_header, no_more_buf, complete_au );
             info->ebsp_head_pos = next_nalu_head_pos + nalu_header.length;
         }
         /* If there is no more data in the stream, and flushed chunk of NALUs, flush it as complete AU here. */
@@ -3997,16 +2543,13 @@ static int h264_get_access_unit_internal( mp4sys_importer_t *importer, mp4sys_h2
         {
             h264_update_picture_info( picture, slice, &info->sei );
             h264_complete_au( picture, probe );
-            return h264_get_au_internal_succeeded( info, picture, &nalu_header, no_more_buf );
+            return h264_get_au_internal_succeeded( importer->info, picture, &nalu_header, no_more_buf );
         }
         if( complete_au )
-            return h264_get_au_internal_succeeded( info, picture, &nalu_header, no_more_buf );
+            return h264_get_au_internal_succeeded( importer->info, picture, &nalu_header, no_more_buf );
         consecutive_zero_byte_count = 0;
     }
-#undef H264_SHORT_START_CODE_LENGTH
 }
-
-#undef H264_NALU_LENGTH_SIZE
 
 static int mp4sys_h264_get_accessunit( mp4sys_importer_t *importer, uint32_t track_number, lsmash_sample_t *buffered_sample )
 {
@@ -4014,44 +2557,33 @@ static int mp4sys_h264_get_accessunit( mp4sys_importer_t *importer, uint32_t tra
         return -1;
     if( !importer->info || track_number != 1 )
         return -1;
-    mp4sys_h264_info_t *info = (mp4sys_h264_info_t *)importer->info;
-    mp4sys_importer_status current_status = info->status;
-    if( current_status == MP4SYS_IMPORTER_ERROR || buffered_sample->length < info->max_au_length )
+    mp4sys_h264_info_t *importer_info = (mp4sys_h264_info_t *)importer->info;
+    h264_info_t *info = &importer_info->info;
+    mp4sys_importer_status current_status = importer_info->status;
+    if( current_status == MP4SYS_IMPORTER_ERROR || buffered_sample->length < importer_info->max_au_length )
         return -1;
     if( current_status == MP4SYS_IMPORTER_EOF )
     {
         buffered_sample->length = 0;
         return 0;
     }
-    if( info->summary && !info->first_summary )
+    if( h264_get_access_unit_internal( importer, 0 ) )
     {
-        current_status = MP4SYS_IMPORTER_CHANGE;
-        /* Summaries may be not active immediately because we can't get any corresponding AU at once.
-         * The first summary will be an only exception of this. */
-        lsmash_entry_t* entry = lsmash_get_entry( importer->summaries, track_number );
-        if( !entry || !entry->data )
-            return -1;
-        lsmash_cleanup_summary( entry->data );
-        entry->data = info->summary;
-        info->summary = NULL;
-    }
-    if( h264_get_access_unit_internal( importer, info, track_number, 0 ) )
-    {
-        info->status = MP4SYS_IMPORTER_ERROR;
+        importer_info->status = MP4SYS_IMPORTER_ERROR;
         return -1;
     }
     h264_sps_t *sps = &info->sps;
     h264_picture_info_t *picture = &info->picture;
-    buffered_sample->dts = info->ts_list.timestamp[picture->au_number - 1].dts;
-    buffered_sample->cts = info->ts_list.timestamp[picture->au_number - 1].cts;
-    if( picture->au_number < info->num_undecodable )
+    buffered_sample->dts = importer_info->ts_list.timestamp[picture->au_number - 1].dts;
+    buffered_sample->cts = importer_info->ts_list.timestamp[picture->au_number - 1].cts;
+    if( picture->au_number < importer_info->num_undecodable )
         buffered_sample->prop.leading = ISOM_SAMPLE_IS_UNDECODABLE_LEADING;
     else
-        buffered_sample->prop.leading = picture->non_bipredictive || buffered_sample->cts >= info->last_intra_cts
+        buffered_sample->prop.leading = picture->independent || buffered_sample->cts >= importer_info->last_intra_cts
                                       ? ISOM_SAMPLE_IS_NOT_LEADING : ISOM_SAMPLE_IS_UNDECODABLE_LEADING;
     if( picture->independent )
-        info->last_intra_cts = buffered_sample->cts;
-    if( info->composition_reordering_present && !picture->disposable && !picture->idr )
+        importer_info->last_intra_cts = buffered_sample->cts;
+    if( importer_info->composition_reordering_present && !picture->disposable && !picture->idr )
         buffered_sample->prop.allow_earlier = QT_SAMPLE_EARLIER_PTS_ALLOWED;
     buffered_sample->prop.independent = picture->independent    ? ISOM_SAMPLE_IS_INDEPENDENT : ISOM_SAMPLE_IS_NOT_INDEPENDENT;
     buffered_sample->prop.disposable  = picture->disposable     ? ISOM_SAMPLE_IS_DISPOSABLE  : ISOM_SAMPLE_IS_NOT_DISPOSABLE;
@@ -4071,8 +2603,40 @@ static int mp4sys_h264_get_accessunit( mp4sys_importer_t *importer, uint32_t tra
     }
     buffered_sample->length = picture->au_length;
     memcpy( buffered_sample->data, picture->au, picture->au_length );
-    /* Return 1 if a new summary is detected. */
-    return current_status == MP4SYS_IMPORTER_CHANGE;
+    return current_status;
+}
+
+static lsmash_video_summary_t *h264_create_summary( h264_info_t *info, h264_sps_t *sps, uint32_t max_au_length )
+{
+    lsmash_h264_specific_parameters_t *param = &info->avcC_param;
+    if( !info->sps.present || !info->pps.present )
+        return NULL;
+    lsmash_video_summary_t *summary = (lsmash_video_summary_t *)lsmash_create_summary( MP4SYS_STREAM_TYPE_VisualStream );
+    if( !summary )
+        return NULL;
+    /* Update summary here.
+     * max_au_length is set at the last of mp4sys_h264_probe function. */
+    summary->exdata = lsmash_create_h264_specific_info( param, &summary->exdata_length );
+    if( !summary->exdata )
+    {
+        lsmash_cleanup_summary( (lsmash_summary_t *)summary );
+        return NULL;
+    }
+    summary->sample_type            = ISOM_CODEC_TYPE_AVC1_VIDEO;
+    summary->object_type_indication = MP4SYS_OBJECT_TYPE_Visual_H264_ISO_14496_10;
+    summary->max_au_length          = max_au_length;
+    summary->timescale              = sps->vui.time_scale;
+    summary->timebase               = sps->vui.num_units_in_tick;
+    summary->full_range             = sps->vui.video_full_range_flag;
+    summary->vfr                    = !sps->vui.fixed_frame_rate_flag;
+    summary->width                  = sps->cropped_width;
+    summary->height                 = sps->cropped_height;
+    summary->par_h                  = sps->vui.sar_width;
+    summary->par_v                  = sps->vui.sar_height;
+    summary->primaries              = sps->vui.colour_primaries;
+    summary->transfer               = sps->vui.transfer_characteristics;
+    summary->matrix                 = sps->vui.matrix_coefficients;
+    return summary;
 }
 
 static int mp4sys_h264_probe( mp4sys_importer_t *importer )
@@ -4081,9 +2645,10 @@ static int mp4sys_h264_probe( mp4sys_importer_t *importer )
 #define H264_LONG_START_CODE_LENGTH 4
 #define H264_CHECK_NEXT_LONG_START_CODE( x ) (!(x)[0] && !(x)[1] && !(x)[2] && ((x)[3] == 0x01))
     /* Find the first start code. */
-    mp4sys_h264_info_t *info = mp4sys_create_h264_info();
-    if( !info )
+    mp4sys_h264_info_t *importer_info = mp4sys_create_h264_info();
+    if( !importer_info )
         return -1;
+    h264_info_t *info = &importer_info->info;
     h264_stream_buffer_t *buffer = &info->buffer;
     buffer->pos = buffer->start;
     buffer->end = buffer->start + fread( buffer->start, 1, buffer->bank->buffer_size, importer->stream );
@@ -4091,7 +2656,7 @@ static int mp4sys_h264_probe( mp4sys_importer_t *importer )
     while( 1 )
     {
         /* Invalid if encountered any value of non-zero before the first start code. */
-        IF_INVALID_VALUE( *buffer->pos )
+        if( *buffer->pos )
             goto fail;
         /* The first NALU of an AU in decoding order shall have long start code (0x00000001). */
         if( H264_CHECK_NEXT_LONG_START_CODE( buffer->pos ) )
@@ -4102,16 +2667,16 @@ static int mp4sys_h264_probe( mp4sys_importer_t *importer )
         ++ buffer->pos;
     }
     /* OK. It seems the stream has a long start code of H.264. */
-    importer->info = info;
+    importer->info = importer_info;
     buffer->pos += H264_LONG_START_CODE_LENGTH;
-    h264_check_buffer_shortage( info, importer->stream, 0 );
+    buffer->update( info, importer->stream, 0 );
     h264_nalu_header_t first_nalu_header;
     if( h264_check_nalu_header( &first_nalu_header, &buffer->pos, 1 ) )
         goto fail;
     if( buffer->pos >= buffer->end )
         goto fail;  /* It seems the stream ends at the first incomplete access unit. */
     uint64_t first_ebsp_head_pos = buffer->pos - buffer->start;     /* EBSP doesn't include NALU header. */
-    info->status        = MP4SYS_IMPORTER_OK;
+    importer_info->status = MP4SYS_IMPORTER_OK;
     info->nalu_header   = first_nalu_header;
     info->ebsp_head_pos = first_ebsp_head_pos;
     /* Parse all NALU in the stream for preparation of calculating timestamps. */
@@ -4121,13 +2686,13 @@ static int mp4sys_h264_probe( mp4sys_importer_t *importer )
         goto fail;
     uint32_t num_access_units = 0;
     fprintf( stderr, "Analyzing stream as H.264\r" );
-    while( info->status != MP4SYS_IMPORTER_EOF )
+    while( importer_info->status != MP4SYS_IMPORTER_EOF )
     {
 #if 0
         fprintf( stderr, "Analyzing stream as H.264: %"PRIu32"\n", num_access_units + 1 );
 #endif
         h264_picture_info_t prev_picture = info->picture;
-        if( h264_get_access_unit_internal( importer, info, 0, 1 )
+        if( h264_get_access_unit_internal( importer, 1 )
          || h264_calculate_poc( &info->sps, &info->picture, &prev_picture ) )
         {
             free( poc );
@@ -4146,10 +2711,11 @@ static int mp4sys_h264_probe( mp4sys_importer_t *importer )
             poc_alloc = alloc;
         }
         poc[num_access_units++] = info->picture.PicOrderCnt;
-        info->max_au_length = LSMASH_MAX( info->picture.au_length, info->max_au_length );
+        importer_info->max_au_length = LSMASH_MAX( info->picture.au_length, importer_info->max_au_length );
     }
     fprintf( stderr, "                                                                               \r" );
-    if( !info->summary || lsmash_add_entry( importer->summaries, info->summary ) )
+    lsmash_video_summary_t *summary = h264_create_summary( info, &importer_info->first_sps, importer_info->max_au_length );
+    if( !summary || lsmash_add_entry( importer->summaries, summary ) )
     {
         free( poc );
         goto fail;
@@ -4165,7 +2731,7 @@ static int mp4sys_h264_probe( mp4sys_importer_t *importer )
     {
         if( poc[i] == 0 )
             break;
-        ++ info->num_undecodable;
+        ++ importer_info->num_undecodable;
     }
     /* Deduplicate POCs. */
     int64_t  poc_offset            = 0;
@@ -4272,36 +2838,33 @@ static int mp4sys_h264_probe( mp4sys_importer_t *importer )
                  i, poc[i], timestamp[i].dts, timestamp[i].cts );
 #endif
     free( poc );
-    info->ts_list.sample_count           = num_access_units;
-    info->ts_list.timestamp              = timestamp;
-    info->composition_reordering_present = !!max_composition_delay;
+    importer_info->ts_list.sample_count           = num_access_units;
+    importer_info->ts_list.timestamp              = timestamp;
+    importer_info->composition_reordering_present = !!max_composition_delay;
     /* Go back to EBSP of the first NALU. */
     lsmash_fseek( importer->stream, first_ebsp_head_pos, SEEK_SET );
-    info->status                 = MP4SYS_IMPORTER_OK;
-    info->nalu_header            = first_nalu_header;
-    info->prev_nalu_type         = 0;
-    info->no_more_read           = 0;
-    info->first_summary          = 0;
-    info->summary->max_au_length = info->max_au_length;
-    info->summary                = NULL;
-    buffer->pos                  = buffer->start;
-    buffer->end                  = buffer->start + fread( buffer->start, 1, buffer->bank->buffer_size, importer->stream );
-    info->ebsp_head_pos          = first_ebsp_head_pos;
-    uint8_t *temp_au             = info->picture.au;
-    uint8_t *temp_incomplete_au  = info->picture.incomplete_au;
+    importer_info->status       = MP4SYS_IMPORTER_OK;
+    info->nalu_header           = first_nalu_header;
+    info->prev_nalu_type        = 0;
+    info->no_more_read          = 0;
+    buffer->pos                 = buffer->start;
+    buffer->end                 = buffer->start + fread( buffer->start, 1, buffer->bank->buffer_size, importer->stream );
+    info->ebsp_head_pos         = first_ebsp_head_pos;
+    uint8_t *temp_au            = info->picture.au;
+    uint8_t *temp_incomplete_au = info->picture.incomplete_au;
     memset( &info->picture, 0, sizeof(h264_picture_info_t) );
     info->picture.au            = temp_au;
     info->picture.incomplete_au = temp_incomplete_au;
     memset( &info->slice, 0, sizeof(h264_slice_info_t) );
     memset( &info->sps, 0, sizeof(h264_sps_t) );
     memset( &info->pps, 0, sizeof(h264_pps_t) );
-    lsmash_remove_entries( info->avcC.sequenceParameterSets,   isom_remove_avcC_ps );
-    lsmash_remove_entries( info->avcC.pictureParameterSets,    isom_remove_avcC_ps );
-    lsmash_remove_entries( info->avcC.sequenceParameterSetExt, isom_remove_avcC_ps );
-    importer->info = info;
+    lsmash_remove_entries( info->avcC_param.sequenceParameterSets,   isom_remove_avcC_ps );
+    lsmash_remove_entries( info->avcC_param.pictureParameterSets,    isom_remove_avcC_ps );
+    lsmash_remove_entries( info->avcC_param.sequenceParameterSetExt, isom_remove_avcC_ps );
     return 0;
 fail:
-    mp4sys_remove_h264_info( info );
+    mp4sys_remove_h264_info( importer_info );
+    importer->info = NULL;
     lsmash_remove_entries( importer->summaries, lsmash_cleanup_summary );
     return -1;
 #undef H264_MAX_NUM_REORDER_FRAMES
@@ -4336,176 +2899,28 @@ const static mp4sys_importer_functions mp4sys_h264_importer =
     SMPTE 421M-2006
     SMPTE RP 2025-2007
 ***************************************************************************/
-
-typedef struct
-{
-    uint8_t hrd_num_leaky_buckets;
-} vc1_hrd_param_t;
-
-typedef struct
-{
-    uint8_t  present;
-    uint8_t  profile;
-    uint8_t  level;
-    uint8_t  colordiff_format;      /* currently 4:2:0 only */
-    uint8_t  interlace;
-    uint8_t  color_prim;
-    uint8_t  transfer_char;
-    uint8_t  matrix_coef;
-    uint8_t  hrd_param_flag;
-    uint8_t  aspect_width;
-    uint8_t  aspect_height;
-    uint8_t  framerate_flag;
-    uint32_t framerate_numerator;
-    uint32_t framerate_denominator;
-    uint16_t max_coded_width;
-    uint16_t max_coded_height;
-    uint16_t disp_horiz_size;
-    uint16_t disp_vert_size;
-    vc1_hrd_param_t hrd_param;
-    uint8_t *ebdu;
-    uint32_t length;
-} vc1_sequence_header_t;
-
-typedef struct
-{
-    uint8_t  present;
-    uint8_t  closed_entry_point;
-    uint8_t *ebdu;
-    uint32_t length;
-} vc1_entry_point_t;
-
-typedef struct
-{
-    uint8_t present;
-    uint8_t frame_coding_mode;
-    uint8_t type;
-    uint8_t closed_gop;
-    uint8_t start_of_sequence;
-    uint8_t random_accessible;
-} vc1_picture_info_t;
-
-typedef struct
-{
-    uint8_t  random_accessible;
-    uint8_t  closed_gop;
-    uint8_t  independent;
-    uint8_t  non_bipredictive;
-    uint8_t  disposable;
-    uint8_t *data;
-    uint32_t data_length;
-    uint8_t *incomplete_data;
-    uint32_t incomplete_data_length;
-    uint32_t number;
-} vc1_access_unit_t;
-
-typedef struct
-{
-    lsmash_multiple_buffers_t *bank;
-    uint8_t *rbdu;
-    uint8_t *start;
-    uint8_t *end;
-    uint8_t *pos;
-} vc1_stream_buffer_t;
+#include "vc1.h"
 
 typedef struct
 {
     mp4sys_importer_status status;
-    lsmash_video_summary_t *summary;
-    uint8_t bdu_type;
-    uint8_t prev_bdu_type;
-    uint8_t no_more_read;
-    uint8_t composition_reordering_present;
-    uint8_t slice_present;
-    uint8_t multiple_sequence;
-    uint8_t multiple_entry_point;
-    vc1_sequence_header_t first_sequence;
-    vc1_sequence_header_t sequence;
-    vc1_entry_point_t first_entry_point;
-    vc1_entry_point_t entry_point;
-    vc1_picture_info_t next_picture;
-    vc1_access_unit_t access_unit;
-    lsmash_bits_t *bits;
-    vc1_stream_buffer_t buffer;
-    uint64_t ebdu_head_pos;
+    vc1_info_t             info;
+    vc1_sequence_header_t  first_sequence;
+    lsmash_media_ts_list_t ts_list;
+    uint8_t  composition_reordering_present;
     uint32_t max_au_length;
     uint32_t num_undecodable;
     uint64_t last_ref_intra_cts;
-    lsmash_media_ts_list_t ts_list;
 } mp4sys_vc1_info_t;
-
-#define VC1_START_CODE_PREFIX_LENGTH 3      /* 0x000001 */
-#define VC1_START_CODE_SUFFIX_LENGTH 1      /* BDU type */
-#define VC1_START_CODE_LENGTH (VC1_START_CODE_PREFIX_LENGTH + VC1_START_CODE_SUFFIX_LENGTH)     /* = 4 */
-
-typedef enum
-{
-    VC1_ADVANCED_PICTURE_TYPE_P       = 0x0,        /* 0b0 */
-    VC1_ADVANCED_PICTURE_TYPE_B       = 0x2,        /* 0b10 */
-    VC1_ADVANCED_PICTURE_TYPE_I       = 0x6,        /* 0b110 */
-    VC1_ADVANCED_PICTURE_TYPE_BI      = 0xE,        /* 0b1110 */
-    VC1_ADVANCED_PICTURE_TYPE_SKIPPED = 0xF,        /* 0b1111 */
-} vc1_picture_type;
-
-typedef enum
-{
-    VC1_ADVANCED_FIELD_PICTURE_TYPE_II   = 0x0,     /* 0b000 */
-    VC1_ADVANCED_FIELD_PICTURE_TYPE_IP   = 0x1,     /* 0b001 */
-    VC1_ADVANCED_FIELD_PICTURE_TYPE_PI   = 0x2,     /* 0b010 */
-    VC1_ADVANCED_FIELD_PICTURE_TYPE_PP   = 0x3,     /* 0b011 */
-    VC1_ADVANCED_FIELD_PICTURE_TYPE_BB   = 0x4,     /* 0b100 */
-    VC1_ADVANCED_FIELD_PICTURE_TYPE_BBI  = 0x5,     /* 0b101 */
-    VC1_ADVANCED_FIELD_PICTURE_TYPE_BIB  = 0x6,     /* 0b110 */
-    VC1_ADVANCED_FIELD_PICTURE_TYPE_BIBI = 0x7,     /* 0b111 */
-} vc1_field_picture_type;
-
-typedef enum
-{
-    VC1_FRAME_CODING_MODE_PROGRESSIVE     = 0x0,    /* 0b0 */
-    VC1_FRAME_CODING_MODE_FRAME_INTERLACE = 0x2,    /* 0b10 */
-    VC1_FRAME_CODING_MODE_FIELD_INTERLACE = 0x3,    /* 0b11 */
-} vc1_frame_coding_mode;
-
-#define MP4SYS_VC1_DEFAULT_BUFFER_SIZE (1<<16)
 
 static void mp4sys_remove_vc1_info( mp4sys_vc1_info_t *info )
 {
     if( !info )
         return;
-    lsmash_bits_adhoc_cleanup( info->bits );
-    lsmash_destroy_multiple_buffers( info->buffer.bank );
+    vc1_cleanup_parser( &info->info );
     if( info->ts_list.timestamp )
         free( info->ts_list.timestamp );
-    if( info->sequence.ebdu )
-        free( info->sequence.ebdu );
-    if( info->entry_point.ebdu )
-        free( info->entry_point.ebdu );
     free( info );
-}
-
-static mp4sys_vc1_info_t *mp4sys_create_vc1_info( void )
-{
-    mp4sys_vc1_info_t *info = lsmash_malloc_zero( sizeof(mp4sys_vc1_info_t) );
-    if( !info )
-        return NULL;
-    info->bits = lsmash_bits_adhoc_create();
-    if( !info->bits )
-    {
-        mp4sys_remove_vc1_info( info );
-        return NULL;
-    }
-    vc1_stream_buffer_t *buffer = &info->buffer;
-    buffer->bank = lsmash_create_multiple_buffers( 4, MP4SYS_VC1_DEFAULT_BUFFER_SIZE );
-    if( !buffer->bank )
-    {
-        mp4sys_remove_vc1_info( info );
-        return NULL;
-    }
-    buffer->start                     = lsmash_withdraw_buffer( buffer->bank, 1 );
-    buffer->rbdu                      = lsmash_withdraw_buffer( buffer->bank, 2 );
-    info->access_unit.data            = lsmash_withdraw_buffer( buffer->bank, 3 );
-    info->access_unit.incomplete_data = lsmash_withdraw_buffer( buffer->bank, 4 );
-    return info;
 }
 
 static void mp4sys_vc1_cleanup( mp4sys_importer_t *importer )
@@ -4514,311 +2929,13 @@ static void mp4sys_vc1_cleanup( mp4sys_importer_t *importer )
         mp4sys_remove_vc1_info( importer->info );
 }
 
-/* Convert EBDU (Encapsulated Byte Data Unit) to RBDU (Raw Byte Data Unit). */
-static void vc1_remove_emulation_prevention( uint8_t *src, uint64_t src_length, uint8_t **p_dst )
-{
-    uint8_t *src_end = src + src_length;
-    uint8_t *dst = *p_dst;
-    while( src < src_end )
-        if( ((src + 2) < src_end) && !src[0] && !src[1] && (src[2] == 0x03) )
-        {
-            *dst++ = *src++;
-            *dst++ = *src++;
-            src++;  /* Skip emulation_prevention_three_byte (0x03). */
-        }
-        else
-            *dst++ = *src++;
-    *p_dst = dst;
-}
-
-static int vc1_bits_import_rbdu_from_ebdu( lsmash_bits_t *bits, uint8_t *rbdu_buffer, uint8_t *ebdu, uint64_t ebdu_length )
-{
-    uint8_t *rbdu_start = rbdu_buffer;
-    vc1_remove_emulation_prevention( ebdu + VC1_START_CODE_LENGTH, ebdu_length - VC1_START_CODE_LENGTH, &rbdu_buffer );
-    uint64_t rbdu_length = rbdu_buffer - rbdu_start;
-    return lsmash_bits_import_data( bits, rbdu_start, rbdu_length );
-}
-
-static void vc1_parse_hrd_param( lsmash_bits_t *bits, vc1_hrd_param_t *hrd_param )
-{
-    hrd_param->hrd_num_leaky_buckets = lsmash_bits_get( bits, 5 );
-    lsmash_bits_get( bits, 4 );     /* bitrate_exponent */
-    lsmash_bits_get( bits, 4 );     /* buffer_size_exponent */
-    for( uint8_t i = 0; i < hrd_param->hrd_num_leaky_buckets; i++ )
-    {
-        lsmash_bits_get( bits, 16 );    /* hrd_rate */
-        lsmash_bits_get( bits, 16 );    /* hrd_buffer */
-    }
-}
-
-static int vc1_parse_sequence_header( mp4sys_vc1_info_t *info, uint8_t *ebdu, uint64_t ebdu_length, int probe )
-{
-    lsmash_bits_t *bits = info->bits;
-    vc1_sequence_header_t *sequence = &info->sequence;
-    if( vc1_bits_import_rbdu_from_ebdu( bits, info->buffer.rbdu, ebdu, ebdu_length ) )
-        return -1;
-    memset( sequence, 0, sizeof(vc1_sequence_header_t) );
-    sequence->profile          = lsmash_bits_get( bits, 2 );
-    if( sequence->profile != 3 )
-        return -1;      /* SMPTE Reserved */
-    sequence->level            = lsmash_bits_get( bits, 3 );
-    if( sequence->level > 4 )
-        return -1;      /* SMPTE Reserved */
-    sequence->colordiff_format = lsmash_bits_get( bits, 2 );
-    if( sequence->colordiff_format != 1 )
-        return -1;      /* SMPTE Reserved */
-    lsmash_bits_get( bits, 9 );     /* frmrtq_postproc (3)
-                                     * bitrtq_postproc (5)
-                                     * postproc_flag   (1) */
-    sequence->max_coded_width  = lsmash_bits_get( bits, 12 );
-    sequence->max_coded_height = lsmash_bits_get( bits, 12 );
-    lsmash_bits_get( bits, 1 );     /* pulldown */
-    sequence->interlace        = lsmash_bits_get( bits, 1 );
-    lsmash_bits_get( bits, 4 );     /* tfcntrflag  (1)
-                                     * finterpflag (1)
-                                     * reserved    (1)
-                                     * psf         (1) */
-    if( lsmash_bits_get( bits, 1 ) )    /* display_ext */
-    {
-        sequence->disp_horiz_size = lsmash_bits_get( bits, 14 ) + 1;
-        sequence->disp_vert_size  = lsmash_bits_get( bits, 14 ) + 1;
-        if( lsmash_bits_get( bits, 1 ) )    /* aspect_ratio_flag */
-        {
-            uint8_t aspect_ratio = lsmash_bits_get( bits, 4 );
-            if( aspect_ratio == 15 )
-            {
-                sequence->aspect_width  = lsmash_bits_get( bits, 8 ) + 1;   /* aspect_horiz_size */
-                sequence->aspect_height = lsmash_bits_get( bits, 8 ) + 1;   /* aspect_vert_size */
-            }
-            else
-            {
-                static const struct
-                {
-                    uint32_t aspect_width;
-                    uint32_t aspect_height;
-                } vc1_aspect_ratio[15] =
-                    {
-                        {  0,  0 }, {  1,  1 }, { 12, 11 }, { 10, 11 }, { 16, 11 }, { 40, 33 }, {  24, 11 },
-                        { 20, 11 }, { 32, 11 }, { 80, 33 }, { 18, 11 }, { 15, 11 }, { 64, 33 }, { 160, 99 },
-                        {  0,  0 }  /* SMPTE Reserved */
-                    };
-                sequence->aspect_width  = vc1_aspect_ratio[ aspect_ratio ].aspect_width;
-                sequence->aspect_height = vc1_aspect_ratio[ aspect_ratio ].aspect_height;
-            }
-        }
-        sequence->framerate_flag = lsmash_bits_get( bits, 1 );
-        if( sequence->framerate_flag )
-        {
-            if( lsmash_bits_get( bits, 1 ) )    /* framerateind */
-            {
-                sequence->framerate_numerator   = lsmash_bits_get( bits, 16 ) + 1;
-                sequence->framerate_denominator = 32;
-            }
-            else
-            {
-                static const uint32_t vc1_frameratenr_table[8] = { 0, 24, 25, 30, 50, 60, 48, 72 };
-                uint8_t frameratenr = lsmash_bits_get( bits, 8 );
-                if( frameratenr == 0 || frameratenr > 7 )
-                    return -1;
-                uint8_t frameratedr = lsmash_bits_get( bits, 4 );
-                if( frameratedr != 1 && frameratedr != 2 )
-                    return -1;
-                if( frameratedr == 1 )
-                {
-                    sequence->framerate_numerator = vc1_frameratenr_table[ frameratenr ];
-                    sequence->framerate_denominator = 1;
-                }
-                else
-                {
-                    sequence->framerate_numerator = vc1_frameratenr_table[ frameratenr ] * 1000;
-                    sequence->framerate_denominator = 1001;
-                }
-            }
-        }
-        if( lsmash_bits_get( bits, 1 ) )    /* color_format_flag */
-        {
-            sequence->color_prim    = lsmash_bits_get( bits, 8 );
-            sequence->transfer_char = lsmash_bits_get( bits, 8 );
-            sequence->matrix_coef   = lsmash_bits_get( bits, 8 );
-        }
-        sequence->hrd_param_flag = lsmash_bits_get( bits, 1 );
-        if( sequence->hrd_param_flag )
-            vc1_parse_hrd_param( bits, &sequence->hrd_param );
-    }
-    /* '1' and stuffing bits ('0's) */
-    IF_INVALID_VALUE( !lsmash_bits_get( bits, 1 ) )
-        return -1;
-    lsmash_bits_empty( bits );
-    /* Preparation for creating VC1SpecificBox */
-    if( probe )
-    {
-        vc1_sequence_header_t *first_sequence = &info->first_sequence;
-        if( !first_sequence->present )
-        {
-            sequence->ebdu = malloc( ebdu_length );
-            if( !sequence->ebdu )
-                return -1;
-            memcpy( sequence->ebdu, ebdu, ebdu_length );
-            sequence->length = ebdu_length;
-            sequence->present = 1;
-            *first_sequence = *sequence;
-        }
-        else if( first_sequence->ebdu && (first_sequence->length == ebdu_length) )
-            info->multiple_sequence |= !!memcmp( ebdu, first_sequence->ebdu, ebdu_length );
-    }
-    return bits->bs->error ? -1 : 0;
-}
-
-static int vc1_parse_entry_point_header( mp4sys_vc1_info_t *info, uint8_t *ebdu, uint64_t ebdu_length, int probe )
-{
-    lsmash_bits_t *bits = info->bits;
-    vc1_sequence_header_t *sequence = &info->sequence;
-    vc1_entry_point_t *entry_point = &info->entry_point;
-    if( vc1_bits_import_rbdu_from_ebdu( bits, info->buffer.rbdu, ebdu, ebdu_length ) )
-        return -1;
-    memset( entry_point, 0, sizeof(vc1_entry_point_t) );
-    uint8_t broken_link_flag = lsmash_bits_get( bits, 1 );          /* 0: no concatenation between the current and the previous entry points
-                                                                     * 1: concatenated and needed to discard B-pictures */
-    entry_point->closed_entry_point = lsmash_bits_get( bits, 1 );   /* 0: Open RAP, 1: Closed RAP */
-    if( broken_link_flag && entry_point->closed_entry_point )
-        return -1;  /* invalid combination */
-    lsmash_bits_get( bits, 4 );         /* panscan_flag (1)
-                                         * refdist_flag (1)
-                                         * loopfilter   (1)
-                                         * fastuvmc     (1) */
-    uint8_t extended_mv = lsmash_bits_get( bits, 1 );
-    lsmash_bits_get( bits, 6 );         /* dquant       (2)
-                                         * vstransform  (1)
-                                         * overlap      (1)
-                                         * quantizer    (2) */
-    if( sequence->hrd_param_flag )
-        for( uint8_t i = 0; i < sequence->hrd_param.hrd_num_leaky_buckets; i++ )
-            lsmash_bits_get( bits, 8 ); /* hrd_full */
-    /* Decide coded size here.
-     * The correct formula is defined in Amendment 2:2011 to SMPTE ST 421M:2006.
-     * Don't use the formula specified in SMPTE 421M-2006. */
-    uint16_t coded_width;
-    uint16_t coded_height;
-    if( lsmash_bits_get( bits, 1 ) )    /* coded_size_flag */
-    {
-        coded_width  = lsmash_bits_get( bits, 12 );
-        coded_height = lsmash_bits_get( bits, 12 );
-    }
-    else
-    {
-        coded_width  = sequence->max_coded_width;
-        coded_height = sequence->max_coded_height;
-    }
-    coded_width  = 2 * (coded_width  + 1);  /* corrected */
-    coded_height = 2 * (coded_height + 1);  /* corrected */
-    if( sequence->disp_horiz_size == 0 || sequence->disp_vert_size == 0 )
-    {
-        sequence->disp_horiz_size = coded_width;
-        sequence->disp_vert_size  = coded_height;
-    }
-    /* */
-    if( extended_mv )
-        lsmash_bits_get( bits, 1 );     /* extended_dmv */
-    if( lsmash_bits_get( bits, 1 ) )    /* range_mapy_flag */
-        lsmash_bits_get( bits, 3 );     /* range_mapy */
-    if( lsmash_bits_get( bits, 1 ) )    /* range_mapuv_flag */
-        lsmash_bits_get( bits, 3 );     /* range_mapuv */
-    /* '1' and stuffing bits ('0's) */
-    IF_INVALID_VALUE( !lsmash_bits_get( bits, 1 ) )
-        return -1;
-    lsmash_bits_empty( bits );
-    /* Preparation for creating VC1SpecificBox */
-    if( probe )
-    {
-        vc1_entry_point_t *first_entry_point = &info->first_entry_point;
-        if( !first_entry_point->present )
-        {
-            entry_point->ebdu = malloc( ebdu_length );
-            if( !entry_point->ebdu )
-                return -1;
-            memcpy( entry_point->ebdu, ebdu, ebdu_length );
-            entry_point->length = ebdu_length;
-            entry_point->present = 1;
-            *first_entry_point = *entry_point;
-        }
-        else if( first_entry_point->ebdu && (first_entry_point->length == ebdu_length) )
-            info->multiple_entry_point |= !!memcmp( ebdu, first_entry_point->ebdu, ebdu_length );
-    }
-    return bits->bs->error ? -1 : 0;
-}
-
-static inline uint8_t vc1_get_vlc( lsmash_bits_t *bits, int length )
-{
-    uint8_t value = 0;
-    for( int i = 0; i < length; i++ )
-        if( lsmash_bits_get( bits, 1 ) )
-            value = (value << 1) | 1;
-        else
-        {
-            value = value << 1;
-            break;
-        }
-    return value;
-}
-
-static int vc1_parse_advanced_picture( lsmash_bits_t *bits,
-                                       vc1_sequence_header_t *sequence, vc1_picture_info_t *picture,
-                                       uint8_t *rbdu_buffer, uint8_t *ebdu, uint64_t ebdu_length )
-{
-    if( vc1_bits_import_rbdu_from_ebdu( bits, rbdu_buffer, ebdu, ebdu_length ) )
-        return -1;
-    if( sequence->interlace )
-        picture->frame_coding_mode = vc1_get_vlc( bits, 2 );
-    else
-        picture->frame_coding_mode = 0;
-    if( picture->frame_coding_mode != 0x3 )
-        picture->type = vc1_get_vlc( bits, 4 );         /* ptype (variable length) */
-    else
-        picture->type = lsmash_bits_get( bits, 3 );     /* fptype (3) */
-    picture->present = 1;
-    lsmash_bits_empty( bits );
-    return bits->bs->error ? -1 : 0;
-}
-
-static int vc1_supplement_buffer( vc1_stream_buffer_t *buffer, vc1_access_unit_t *access_unit, uint32_t size )
-{
-    uint32_t buffer_pos_offset   = buffer->pos - buffer->start;
-    uint32_t buffer_valid_length = buffer->end - buffer->start;
-    lsmash_multiple_buffers_t *bank = lsmash_resize_multiple_buffers( buffer->bank, size );
-    if( !bank )
-        return -1;
-    buffer->bank                 = bank;
-    buffer->start                = lsmash_withdraw_buffer( bank, 1 );
-    buffer->rbdu                 = lsmash_withdraw_buffer( bank, 2 );
-    access_unit->data            = lsmash_withdraw_buffer( bank, 3 );
-    access_unit->incomplete_data = lsmash_withdraw_buffer( bank, 4 );
-    buffer->pos = buffer->start + buffer_pos_offset;
-    buffer->end = buffer->start + buffer_valid_length;
-    return 0;
-}
-
-static inline int vc1_check_next_start_code_prefix( uint8_t *buf_pos, uint8_t *buf_end )
-{
-    return ((buf_pos + 2) < buf_end) && !buf_pos[0] && !buf_pos[1] && (buf_pos[2] == 0x01);
-}
-
-static inline int vc1_check_next_start_code_suffix( uint8_t *p_bdu_type, uint8_t **p_start_code_suffix )
-{
-    uint8_t bdu_type = **p_start_code_suffix;
-    if( (bdu_type >= 0x00 && bdu_type <= 0x09) || (bdu_type >= 0x20 && bdu_type <= 0xFF) )
-        return -1;      /* SMPTE reserved or forbidden value */
-    *p_bdu_type = bdu_type;
-    ++ *p_start_code_suffix;
-    return 0;
-}
-
-static void vc1_check_buffer_shortage( mp4sys_vc1_info_t *info, FILE *stream, uint32_t anticipation_bytes )
+static uint32_t vc1_update_buffer_from_stream( vc1_info_t *info, void *src, uint32_t anticipation_bytes )
 {
     vc1_stream_buffer_t *buffer = &info->buffer;
     assert( anticipation_bytes < buffer->bank->buffer_size );
-    if( info->no_more_read )
-        return;
     uint32_t remainder_bytes = buffer->end - buffer->pos;
+    if( info->no_more_read )
+        return remainder_bytes;
     if( remainder_bytes <= anticipation_bytes )
     {
         /* Move unused data to the head of buffer. */
@@ -4826,67 +2943,38 @@ static void vc1_check_buffer_shortage( mp4sys_vc1_info_t *info, FILE *stream, ui
             *(buffer->start + i) = *(buffer->pos + i);
         /* Read and store the next data into the buffer.
          * Move the position of buffer on the head. */
+        FILE *stream = (FILE *)src;
         uint32_t read_size = fread( buffer->start + remainder_bytes, 1, buffer->bank->buffer_size - remainder_bytes, stream );
+        remainder_bytes += read_size;
         buffer->pos = buffer->start;
-        buffer->end = buffer->start + remainder_bytes + read_size;
+        buffer->end = buffer->start + remainder_bytes;
         info->no_more_read = read_size == 0 ? feof( stream ) : 0;
     }
+    return remainder_bytes;
 }
 
-static inline int vc1_find_au_delimit_by_bdu_type( uint8_t bdu_type, uint8_t prev_bdu_type )
+static mp4sys_vc1_info_t *mp4sys_create_vc1_info( void )
 {
-    /* In any access unit, EBDU with smaller least significant 8-bits of BDU type doesn't precede EBDU with larger one.
-     * Therefore, the condition: (bdu_type 0xF) > (prev_bdu_type & 0xF) is more precisely.
-     * No two or more frame start codes shall be in the same access unit. */
-    return bdu_type > prev_bdu_type || (bdu_type == 0x0D && prev_bdu_type == 0x0D);
-}
-
-static inline void vc1_update_au_property( vc1_access_unit_t *access_unit, vc1_picture_info_t *picture )
-{
-    access_unit->random_accessible = picture->random_accessible;
-    access_unit->closed_gop        = picture->closed_gop;
-    /* I-picture
-     *      Be coded using information only from itself. (independent)
-     *      All the macroblocks in an I-picture are intra-coded.
-     * P-picture
-     *      Be coded using motion compensated prediction from past reference fields or frame.
-     *      Can contain macroblocks that are inter-coded (i.e. coded using prediction) and macroblocks that are intra-coded.
-     * B-picture
-     *      Be coded using motion compensated prediction from past and/or future reference fields or frames. (bi-predictive)
-     *      Cannot be used for predicting any other picture. (disposable)
-     * BI-picture
-     *      All the macroblocks in BI-picture are intra-coded. (independent)
-     *      Cannot be used for predicting any other picture. (disposable) */
-    if( picture->frame_coding_mode == 0x3 )
+    mp4sys_vc1_info_t *info = lsmash_malloc_zero( sizeof(mp4sys_vc1_info_t) );
+    if( !info )
+        return NULL;
+    if( vc1_setup_parser( &info->info, 0, vc1_update_buffer_from_stream ) )
     {
-        /* field interlace */
-        access_unit->independent      = picture->type == VC1_ADVANCED_FIELD_PICTURE_TYPE_II || picture->type == VC1_ADVANCED_FIELD_PICTURE_TYPE_BIBI;
-        access_unit->non_bipredictive = picture->type <  VC1_ADVANCED_FIELD_PICTURE_TYPE_BB || picture->type == VC1_ADVANCED_FIELD_PICTURE_TYPE_BIBI;
-        access_unit->disposable       = picture->type >= VC1_ADVANCED_FIELD_PICTURE_TYPE_BB;
+        mp4sys_remove_vc1_info( info );
+        return NULL;
     }
-    else
-    {
-        /* frame progressive/interlace */
-        access_unit->independent      = picture->type == VC1_ADVANCED_PICTURE_TYPE_I || picture->type == VC1_ADVANCED_PICTURE_TYPE_BI;
-        access_unit->non_bipredictive = picture->type != VC1_ADVANCED_PICTURE_TYPE_B;
-        access_unit->disposable       = picture->type == VC1_ADVANCED_PICTURE_TYPE_B || picture->type == VC1_ADVANCED_PICTURE_TYPE_BI;
-    }
-    picture->present           = 0;
-    picture->type              = 0;
-    picture->closed_gop        = 0;
-    picture->start_of_sequence = 0;
-    picture->random_accessible = 0;
+    return info;
 }
 
-static inline int vc1_complete_au( vc1_access_unit_t *access_unit, vc1_picture_info_t *next_picture, int probe )
+static inline int vc1_complete_au( vc1_access_unit_t *access_unit, vc1_picture_info_t *picture, int probe )
 {
-    if( !next_picture->present )
+    if( !picture->present )
         return 0;
     if( !probe )
         memcpy( access_unit->data, access_unit->incomplete_data, access_unit->incomplete_data_length );
     access_unit->data_length = access_unit->incomplete_data_length;
     access_unit->incomplete_data_length = 0;
-    vc1_update_au_property( access_unit, next_picture );
+    vc1_update_au_property( access_unit, picture );
     return 1;
 }
 
@@ -4902,10 +2990,10 @@ static inline void vc1_append_ebdu_to_au( vc1_access_unit_t *access_unit, uint8_
 
 static inline void vc1_get_au_internal_end( mp4sys_vc1_info_t *info, vc1_access_unit_t *access_unit, uint8_t bdu_type, int no_more_buf )
 {
-    info->status = info->no_more_read && no_more_buf && (access_unit->incomplete_data_length == 0)
+    info->status = info->info.no_more_read && no_more_buf && (access_unit->incomplete_data_length == 0)
                  ? MP4SYS_IMPORTER_EOF
                  : MP4SYS_IMPORTER_OK;
-    info->bdu_type = bdu_type;
+    info->info.bdu_type = bdu_type;
 }
 
 static int vc1_get_au_internal_succeeded( mp4sys_vc1_info_t *info, vc1_access_unit_t *access_unit, uint8_t bdu_type, int no_more_buf )
@@ -4923,10 +3011,12 @@ static int vc1_get_au_internal_failed( mp4sys_vc1_info_t *info, vc1_access_unit_
     return -1;
 }
 
-static int vc1_get_access_unit_internal( mp4sys_importer_t *importer, mp4sys_vc1_info_t *info, uint32_t track_number, int probe )
+static int vc1_get_access_unit_internal( mp4sys_importer_t *importer, int probe )
 {
-    vc1_stream_buffer_t *buffer       = &info->buffer;
-    vc1_access_unit_t   *access_unit  = &info->access_unit;
+    mp4sys_vc1_info_t   *importer_info = (mp4sys_vc1_info_t *)importer->info;
+    vc1_info_t          *info          = &importer_info->info;
+    vc1_stream_buffer_t *buffer        = &info->buffer;
+    vc1_access_unit_t   *access_unit   = &info->access_unit;
     uint8_t  bdu_type = info->bdu_type;
     uint64_t consecutive_zero_byte_count = 0;
     uint64_t ebdu_length = 0;
@@ -4935,7 +3025,7 @@ static int vc1_get_access_unit_internal( mp4sys_importer_t *importer, mp4sys_vc1
     access_unit->data_length = 0;
     while( 1 )
     {
-        vc1_check_buffer_shortage( info, importer->stream, 2 );
+        buffer->update( info, importer->stream, 2 );
         no_more_buf = buffer->pos >= buffer->end;
         int no_more = info->no_more_read && no_more_buf;
         if( !vc1_check_next_start_code_prefix( buffer->pos, buffer->end ) && !no_more )
@@ -4951,8 +3041,8 @@ static int vc1_get_access_unit_internal( mp4sys_importer_t *importer, mp4sys_vc1
         {
             /* For the last EBDU.
              * This EBDU already has been appended into the latest access unit and parsed. */
-            vc1_complete_au( access_unit, &info->next_picture, probe );
-            return vc1_get_au_internal_succeeded( info, access_unit, bdu_type, no_more_buf );
+            vc1_complete_au( access_unit, &info->picture, probe );
+            return vc1_get_au_internal_succeeded( importer->info, access_unit, bdu_type, no_more_buf );
         }
         ebdu_length += VC1_START_CODE_LENGTH;
         uint64_t next_scs_file_offset = info->ebdu_head_pos + ebdu_length + !no_more * VC1_START_CODE_PREFIX_LENGTH;
@@ -4978,7 +3068,7 @@ static int vc1_get_access_unit_internal( mp4sys_importer_t *importer, mp4sys_vc1
             if( buffer->bank->buffer_size < possible_au_length )
             {
                 if( vc1_supplement_buffer( buffer, access_unit, 2 * possible_au_length ) )
-                    return vc1_get_au_internal_failed( info, access_unit, bdu_type, no_more_buf, complete_au );
+                    return vc1_get_au_internal_failed( importer->info, access_unit, bdu_type, no_more_buf, complete_au );
                 next_ebdu_pos = buffer->pos;
             }
             /* Move to the first byte of the current EBDU. */
@@ -4990,7 +3080,7 @@ static int vc1_get_access_unit_internal( mp4sys_importer_t *importer, mp4sys_vc1
                 buffer->pos = buffer->start;
                 buffer->end = buffer->start + ebdu_length;
                 if( read_fail )
-                    return vc1_get_au_internal_failed( info, access_unit, bdu_type, no_more_buf, complete_au );
+                    return vc1_get_au_internal_failed( importer->info, access_unit, bdu_type, no_more_buf, complete_au );
 #if 0
                 if( probe )
                     fprintf( stderr, "    ----Read Back\n" );
@@ -5001,7 +3091,7 @@ static int vc1_get_access_unit_internal( mp4sys_importer_t *importer, mp4sys_vc1
             /* Complete the current access unit if encountered delimiter of current access unit. */
             if( vc1_find_au_delimit_by_bdu_type( bdu_type, info->prev_bdu_type ) )
                 /* The last video coded EBDU belongs to the access unit you want at this time. */
-                complete_au = vc1_complete_au( access_unit, &info->next_picture, probe );
+                complete_au = vc1_complete_au( access_unit, &info->picture, probe );
             /* Process EBDU by its BDU type and append it to access unit. */
             switch( bdu_type )
             {
@@ -5018,9 +3108,9 @@ static int vc1_get_access_unit_internal( mp4sys_importer_t *importer, mp4sys_vc1
                              * For the Progressive or Frame Interlace mode, shall signal the beginning of a new video frame.
                              * For the Field Interlace mode, shall signal the beginning of a sequence of two independently coded video fields.
                              * [FRM_SC][PIC_L][[FLD_SC][PIC_L] (optional)][[SLC_SC][SLC_L] (optional)] ...  */
-                    if( vc1_parse_advanced_picture( info->bits, &info->sequence, &info->next_picture, buffer->rbdu,
+                    if( vc1_parse_advanced_picture( info->bits, &info->sequence, &info->picture, buffer->rbdu,
                                                     buffer->pos, ebdu_length ) )
-                        return vc1_get_au_internal_failed( info, access_unit, bdu_type, no_more_buf, complete_au );
+                        return vc1_get_au_internal_failed( importer->info, access_unit, bdu_type, no_more_buf, complete_au );
                 case 0x0C : /* Field
                              * Shall only be used for Field Interlaced frames
                              * and shall only be used to signal the beginning of the second field of the frame.
@@ -5032,7 +3122,7 @@ static int vc1_get_access_unit_internal( mp4sys_importer_t *importer, mp4sys_vc1
                              * Shall not be used for start code of the first slice of an interlace field coded picture.
                              * [FRM_SC][PIC_L][[FLD_SC][PIC_L] (optional)][SLC_SC][SLC_L][[SLC_SC][SLC_L] (optional)] ...
                              * Slice layer may repeat frame header. We just ignore it. */
-                    info->slice_present = 1;
+                    info->dvc1_param.slice_present = 1;
                     break;
                 case 0x0E : /* Entry-point header
                              * Entry-point indicates the direct followed frame is a start of group of frames.
@@ -5043,15 +3133,19 @@ static int vc1_get_access_unit_internal( mp4sys_importer_t *importer, mp4sys_vc1
                              *   2. I/I-picture, I/P-picture, or P/I-picture - field interlace
                              * [[SEQ_SC][SEQ_L] (optional)][EP_SC][EP_L][FRM_SC][PIC_L] ... */
                     if( vc1_parse_entry_point_header( info, buffer->pos, ebdu_length, probe ) )
-                        return vc1_get_au_internal_failed( info, access_unit, bdu_type, no_more_buf, complete_au );
-                    info->next_picture.closed_gop        = info->entry_point.closed_entry_point;
-                    info->next_picture.random_accessible = info->multiple_sequence ? info->next_picture.start_of_sequence : 1;
+                        return vc1_get_au_internal_failed( importer->info, access_unit, bdu_type, no_more_buf, complete_au );
+                    /* Signal random access type of the frame that follows this entry-point header. */
+                    info->picture.closed_gop        = info->entry_point.closed_entry_point;
+                    info->picture.random_accessible = info->dvc1_param.multiple_sequence ? info->picture.start_of_sequence : 1;
                     break;
                 case 0x0F : /* Sequence header
                              * [SEQ_SC][SEQ_L][EP_SC][EP_L][FRM_SC][PIC_L] ... */
                     if( vc1_parse_sequence_header( info, buffer->pos, ebdu_length, probe ) )
-                        return vc1_get_au_internal_failed( info, access_unit, bdu_type, no_more_buf, complete_au );
-                    info->next_picture.start_of_sequence = 1;
+                        return vc1_get_au_internal_failed( importer->info, access_unit, bdu_type, no_more_buf, complete_au );
+                    /* The frame that is the first frame after this sequence header shall be a random accessible point. */
+                    info->picture.start_of_sequence = 1;
+                    if( probe && !importer_info->first_sequence.present )
+                        importer_info->first_sequence = info->sequence;
                     break;
                 default :   /* End-of-sequence (0x0A) */
                     break;
@@ -5059,7 +3153,7 @@ static int vc1_get_access_unit_internal( mp4sys_importer_t *importer, mp4sys_vc1
             vc1_append_ebdu_to_au( access_unit, buffer->pos, ebdu_length, probe );
         }
         else    /* We don't support other BDU types such as user data yet. */
-            return vc1_get_au_internal_failed( info, access_unit, bdu_type, no_more_buf, complete_au );
+            return vc1_get_au_internal_failed( importer->info, access_unit, bdu_type, no_more_buf, complete_au );
         /* Move to the first byte of the next start code suffix. */
         if( read_back )
         {
@@ -5070,7 +3164,7 @@ static int vc1_get_access_unit_internal( mp4sys_importer_t *importer, mp4sys_vc1
         else
             buffer->pos = next_ebdu_pos + VC1_START_CODE_PREFIX_LENGTH;
         info->prev_bdu_type = bdu_type;
-        vc1_check_buffer_shortage( info, importer->stream, 0 );
+        buffer->update( info, importer->stream, 0 );
         no_more_buf = buffer->pos >= buffer->end;
         ebdu_length = 0;
         no_more = info->no_more_read && no_more_buf;
@@ -5078,17 +3172,17 @@ static int vc1_get_access_unit_internal( mp4sys_importer_t *importer, mp4sys_vc1
         {
             /* Check the next BDU type. */
             if( vc1_check_next_start_code_suffix( &bdu_type, &buffer->pos ) )
-                return vc1_get_au_internal_failed( info, access_unit, bdu_type, no_more_buf, complete_au );
+                return vc1_get_au_internal_failed( importer->info, access_unit, bdu_type, no_more_buf, complete_au );
             info->ebdu_head_pos = next_scs_file_offset - VC1_START_CODE_PREFIX_LENGTH;
         }
         /* If there is no more data in the stream, and flushed chunk of EBDUs, flush it as complete AU here. */
         else if( access_unit->incomplete_data_length && access_unit->data_length == 0 )
         {
-            vc1_complete_au( access_unit, &info->next_picture, probe );
-            return vc1_get_au_internal_succeeded( info, access_unit, bdu_type, no_more_buf );
+            vc1_complete_au( access_unit, &info->picture, probe );
+            return vc1_get_au_internal_succeeded( importer->info, access_unit, bdu_type, no_more_buf );
         }
         if( complete_au )
-            return vc1_get_au_internal_succeeded( info, access_unit, bdu_type, no_more_buf );
+            return vc1_get_au_internal_succeeded( importer->info, access_unit, bdu_type, no_more_buf );
         consecutive_zero_byte_count = 0;
     }
 }
@@ -5099,30 +3193,29 @@ static int mp4sys_vc1_get_accessunit( mp4sys_importer_t *importer, uint32_t trac
         return -1;
     if( !importer->info || track_number != 1 )
         return -1;
-    mp4sys_vc1_info_t *info = (mp4sys_vc1_info_t *)importer->info;
-    mp4sys_importer_status current_status = info->status;
-    if( current_status == MP4SYS_IMPORTER_ERROR || buffered_sample->length < info->max_au_length )
+    mp4sys_vc1_info_t *importer_info = (mp4sys_vc1_info_t *)importer->info;
+    vc1_info_t *info = &importer_info->info;
+    mp4sys_importer_status current_status = importer_info->status;
+    if( current_status == MP4SYS_IMPORTER_ERROR || buffered_sample->length < importer_info->max_au_length )
         return -1;
     if( current_status == MP4SYS_IMPORTER_EOF )
     {
         buffered_sample->length = 0;
         return 0;
     }
-    if( vc1_get_access_unit_internal( importer, info, track_number, 0 ) )
+    if( vc1_get_access_unit_internal( importer, 0 ) )
     {
-        info->status = MP4SYS_IMPORTER_ERROR;
+        importer_info->status = MP4SYS_IMPORTER_ERROR;
         return -1;
     }
     vc1_access_unit_t *access_unit = &info->access_unit;
-    buffered_sample->dts = info->ts_list.timestamp[access_unit->number - 1].dts;
-    buffered_sample->cts = info->ts_list.timestamp[access_unit->number - 1].cts;
-    buffered_sample->prop.leading = access_unit->non_bipredictive || buffered_sample->cts >= info->last_ref_intra_cts
-                                  ? ISOM_SAMPLE_IS_NOT_LEADING : access_unit->independent
-                                                               ? ISOM_SAMPLE_IS_DECODABLE_LEADING
-                                                               : ISOM_SAMPLE_IS_UNDECODABLE_LEADING;
+    buffered_sample->dts = importer_info->ts_list.timestamp[access_unit->number - 1].dts;
+    buffered_sample->cts = importer_info->ts_list.timestamp[access_unit->number - 1].cts;
+    buffered_sample->prop.leading = access_unit->independent || access_unit->non_bipredictive || buffered_sample->cts >= importer_info->last_ref_intra_cts
+                                  ? ISOM_SAMPLE_IS_NOT_LEADING : ISOM_SAMPLE_IS_UNDECODABLE_LEADING;
     if( access_unit->independent && !access_unit->disposable )
-        info->last_ref_intra_cts = buffered_sample->cts;
-    if( info->composition_reordering_present && !access_unit->disposable && !access_unit->closed_gop )
+        importer_info->last_ref_intra_cts = buffered_sample->cts;
+    if( importer_info->composition_reordering_present && !access_unit->disposable && !access_unit->closed_gop )
         buffered_sample->prop.allow_earlier = QT_SAMPLE_EARLIER_PTS_ALLOWED;
     buffered_sample->prop.independent = access_unit->independent ? ISOM_SAMPLE_IS_INDEPENDENT : ISOM_SAMPLE_IS_NOT_INDEPENDENT;
     buffered_sample->prop.disposable  = access_unit->disposable  ? ISOM_SAMPLE_IS_DISPOSABLE  : ISOM_SAMPLE_IS_NOT_DISPOSABLE;
@@ -5134,63 +3227,22 @@ static int mp4sys_vc1_get_accessunit( mp4sys_importer_t *importer, uint32_t trac
     return current_status;
 }
 
-static uint8_t *vc1_create_dvc1( mp4sys_vc1_info_t *info, uint32_t *dvc1_length )
+static lsmash_video_summary_t *vc1_create_summary( vc1_info_t *info, vc1_sequence_header_t *sequence, uint32_t max_au_length )
 {
-    lsmash_bits_t *bits = info->bits;
-    vc1_sequence_header_t *sequence = &info->first_sequence;
-    lsmash_bits_put( bits, 32, 0 );                                     /* box size */
-    lsmash_bits_put( bits, 32, ISOM_BOX_TYPE_DVC1 );                    /* box type = 'dvc1' */
-    lsmash_bits_put( bits, 4, sequence->profile << 2 );                 /* profile */
-    lsmash_bits_put( bits, 3, sequence->level );                        /* level */
-    lsmash_bits_put( bits, 1, 0 );                                      /* reserved */
-    /* VC1AdvDecSpecStruc (for Advanced Profile) */
-    lsmash_bits_put( bits, 3, sequence->level );                        /* level (identical to the previous level field) */
-    lsmash_bits_put( bits, 1, 0 );                                      /* cbr */
-    lsmash_bits_put( bits, 6, 0 );                                      /* reserved */
-    lsmash_bits_put( bits, 1, !sequence->interlace );                   /* no_interlace */
-    lsmash_bits_put( bits, 1, !info->multiple_sequence );               /* no_multiple_seq */
-    lsmash_bits_put( bits, 1, !info->multiple_entry_point );            /* no_multiple_entry */
-    lsmash_bits_put( bits, 1, !info->slice_present );                   /* no_slice_code */
-    lsmash_bits_put( bits, 1, !info->composition_reordering_present );  /* no_bframe */
-    lsmash_bits_put( bits, 1, 0 );                                      /* reserved */
-    uint32_t framerate = sequence->framerate_flag
-                       ? ((double)sequence->framerate_numerator / sequence->framerate_denominator) + 0.5
-                       : 0xffffffff;    /* 0xffffffff means framerate is unknown or unspecified. */
-    lsmash_bits_put( bits, 32, framerate );                             /* framerate */
-    /* seqhdr_ephdr[] */
-    uint8_t *ebdu = sequence->ebdu;
-    for( uint32_t i = 0; i < sequence->length; i++ )
-        lsmash_bits_put( bits, 8, *ebdu++ );
-    ebdu = info->first_entry_point.ebdu;
-    for( uint32_t i = 0; i < info->first_entry_point.length; i++ )
-        lsmash_bits_put( bits, 8, *ebdu++ );
-    /* */
-    uint8_t *dvc1 = lsmash_bits_export_data( bits, dvc1_length );
-    lsmash_bits_empty( bits );
-    /* Update box size. */
-    dvc1[0] = ((*dvc1_length) >> 24) & 0xff;
-    dvc1[1] = ((*dvc1_length) >> 16) & 0xff;
-    dvc1[2] = ((*dvc1_length) >>  8) & 0xff;
-    dvc1[3] =  (*dvc1_length)        & 0xff;
-    return dvc1;
-}
-
-static lsmash_video_summary_t *vc1_create_summary( mp4sys_vc1_info_t *info )
-{
-    if( !info->first_sequence.present || !info->first_entry_point.present )
+    if( !info->sequence.present || !info->entry_point.present )
         return NULL;
     lsmash_video_summary_t *summary = (lsmash_video_summary_t *)lsmash_create_summary( MP4SYS_STREAM_TYPE_VisualStream );
     if( !summary )
         return NULL;
-    summary->exdata = vc1_create_dvc1( info, &summary->exdata_length );
+    summary->exdata = lsmash_create_vc1_specific_info( &info->dvc1_param, &summary->exdata_length );
     if( !summary->exdata )
     {
         lsmash_cleanup_summary( (lsmash_summary_t *)summary);
         return NULL;
     }
-    vc1_sequence_header_t *sequence = &info->first_sequence;
     summary->sample_type            = ISOM_CODEC_TYPE_VC_1_VIDEO;
     summary->object_type_indication = MP4SYS_OBJECT_TYPE_VC_1_VIDEO;
+    summary->max_au_length          = max_au_length;
     summary->timescale              = sequence->framerate_numerator;
     summary->timebase               = sequence->framerate_denominator;
     summary->vfr                    = !sequence->framerate_flag;
@@ -5208,9 +3260,10 @@ static int mp4sys_vc1_probe( mp4sys_importer_t *importer )
 {
 #define VC1_CHECK_FIRST_START_CODE( x ) (!(x)[0] && !(x)[1] && ((x)[2] == 0x01))
     /* Find the first start code. */
-    mp4sys_vc1_info_t *info = mp4sys_create_vc1_info();
-    if( !info )
+    mp4sys_vc1_info_t *importer_info = mp4sys_create_vc1_info();
+    if( !importer_info )
         return -1;
+    vc1_info_t *info = &importer_info->info;
     vc1_stream_buffer_t *buffer = &info->buffer;
     buffer->pos = buffer->start;
     buffer->end = buffer->start + fread( buffer->start, 1, buffer->bank->buffer_size, importer->stream );
@@ -5218,7 +3271,7 @@ static int mp4sys_vc1_probe( mp4sys_importer_t *importer )
     while( 1 )
     {
         /* Invalid if encountered any value of non-zero before the first start code. */
-        IF_INVALID_VALUE( *buffer->pos )
+        if( *buffer->pos )
             goto fail;
         /* The first EBDU in decoding order of the stream shall have start code (0x000001). */
         if( VC1_CHECK_FIRST_START_CODE( buffer->pos ) )
@@ -5229,16 +3282,16 @@ static int mp4sys_vc1_probe( mp4sys_importer_t *importer )
         ++ buffer->pos;
     }
     /* OK. It seems the stream has a sequence header of VC-1. */
-    importer->info = info;
+    importer->info = importer_info;
     uint64_t first_ebdu_head_pos = buffer->pos - buffer->start;
     buffer->pos += VC1_START_CODE_PREFIX_LENGTH;
-    vc1_check_buffer_shortage( info, importer->stream, 0 );
+    buffer->update( info, importer->stream, 0 );
     uint8_t first_bdu_type = *(buffer->pos ++);
     if( buffer->pos >= buffer->end )
         goto fail;  /* It seems the stream ends at the first incomplete access unit. */
-    info->status        = MP4SYS_IMPORTER_OK;
-    info->bdu_type      = first_bdu_type;
-    info->ebdu_head_pos = first_ebdu_head_pos;
+    importer_info->status = MP4SYS_IMPORTER_OK;
+    info->bdu_type        = first_bdu_type;
+    info->ebdu_head_pos   = first_ebdu_head_pos;
     /* Parse all EBDU in the stream for preparation of calculating timestamps. */
     uint32_t cts_alloc = (1 << 12) * sizeof(uint64_t);
     uint64_t *cts = malloc( cts_alloc );
@@ -5247,12 +3300,12 @@ static int mp4sys_vc1_probe( mp4sys_importer_t *importer )
     uint32_t num_access_units = 0;
     uint32_t num_consecutive_b = 0;
     fprintf( stderr, "Analyzing stream as VC-1\r" );
-    while( info->status != MP4SYS_IMPORTER_EOF )
+    while( importer_info->status != MP4SYS_IMPORTER_EOF )
     {
 #if 0
         fprintf( stderr, "Analyzing stream as VC-1: %"PRIu32"\n", num_access_units + 1 );
 #endif
-        if( vc1_get_access_unit_internal( importer, info, 0, 1 ) )
+        if( vc1_get_access_unit_internal( importer, 1 ) )
         {
             free( cts );
             goto fail;
@@ -5279,6 +3332,7 @@ static int mp4sys_vc1_probe( mp4sys_importer_t *importer )
             /* B and BI-pictures shall be output or displayed in the same order as they are encoded. */
             cts[ num_access_units ] = num_access_units;
             ++num_consecutive_b;
+            info->dvc1_param.bframe_present = 1;
         }
         if( cts_alloc <= num_access_units * sizeof(uint64_t) )
         {
@@ -5292,7 +3346,7 @@ static int mp4sys_vc1_probe( mp4sys_importer_t *importer )
             cts = temp;
             cts_alloc = alloc;
         }
-        info->max_au_length = LSMASH_MAX( info->access_unit.data_length, info->max_au_length );
+        importer_info->max_au_length = LSMASH_MAX( info->access_unit.data_length, importer_info->max_au_length );
         ++num_access_units;
     }
     if( num_access_units > num_consecutive_b )
@@ -5313,10 +3367,10 @@ static int mp4sys_vc1_probe( mp4sys_importer_t *importer )
     for( uint32_t i = 1; i < num_access_units; i++ )
         if( cts[i] < cts[i - 1] )
         {
-            info->composition_reordering_present = 1;
+            importer_info->composition_reordering_present = 1;
             break;
         }
-    if( info->composition_reordering_present )
+    if( importer_info->composition_reordering_present )
         for( uint32_t i = 0; i < num_access_units; i++ )
         {
             timestamp[i].cts = cts[i];
@@ -5330,22 +3384,20 @@ static int mp4sys_vc1_probe( mp4sys_importer_t *importer )
     for( uint32_t i = 0; i < num_access_units; i++ )
         fprintf( stderr, "Timestamp[%"PRIu32"]: DTS=%"PRIu64", CTS=%"PRIu64"\n", i, timestamp[i].dts, timestamp[i].cts );
 #endif
-    info->summary = vc1_create_summary( info );
-    if( !info->summary || lsmash_add_entry( importer->summaries, info->summary ) )
+    lsmash_video_summary_t *summary = vc1_create_summary( info, &importer_info->first_sequence, importer_info->max_au_length );
+    if( !summary || lsmash_add_entry( importer->summaries, summary ) )
     {
         free( timestamp );
         goto fail;
     }
-    info->ts_list.sample_count           = num_access_units;
-    info->ts_list.timestamp              = timestamp;
+    importer_info->ts_list.sample_count = num_access_units;
+    importer_info->ts_list.timestamp    = timestamp;
     /* Go back to layer of the first EBDU. */
     lsmash_fseek( importer->stream, first_ebdu_head_pos, SEEK_SET );
-    info->status                         = MP4SYS_IMPORTER_OK;
+    importer_info->status                = MP4SYS_IMPORTER_OK;
     info->bdu_type                       = first_bdu_type;
     info->prev_bdu_type                  = 0;
     info->no_more_read                   = 0;
-    info->summary->max_au_length         = info->max_au_length;
-    info->summary                        = NULL;
     buffer->pos                          = buffer->start + VC1_START_CODE_LENGTH;
     buffer->end                          = buffer->start + fread( buffer->start, 1, buffer->bank->buffer_size, importer->stream );
     info->ebdu_head_pos                  = first_ebdu_head_pos;
@@ -5354,11 +3406,11 @@ static int mp4sys_vc1_probe( mp4sys_importer_t *importer )
     memset( &info->access_unit, 0, sizeof(vc1_access_unit_t) );
     info->access_unit.data               = temp_access_unit;
     info->access_unit.incomplete_data    = temp_incomplete_access_unit;
-    memset( &info->next_picture, 0, sizeof(vc1_picture_info_t) );
-    importer->info = info;
+    memset( &info->picture, 0, sizeof(vc1_picture_info_t) );
     return 0;
 fail:
-    mp4sys_remove_vc1_info( info );
+    mp4sys_remove_vc1_info( importer_info );
+    importer->info = NULL;
     lsmash_remove_entries( importer->summaries, lsmash_cleanup_summary );
     return -1;
 #undef VC1_CHECK_FIRST_START_CODE
@@ -5375,10 +3427,6 @@ static uint32_t mp4sys_vc1_get_last_delta( mp4sys_importer_t* importer, uint32_t
          ? 1
          : UINT32_MAX;    /* arbitrary */
 }
-
-#undef VC1_START_CODE_PREFIX_LENGTH
-#undef VC1_START_CODE_SUFFIX_LENGTH
-#undef VC1_START_CODE_LENGTH
 
 const static mp4sys_importer_functions mp4sys_vc1_importer =
 {

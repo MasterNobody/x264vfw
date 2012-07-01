@@ -51,7 +51,12 @@
 #define FOURCC_I420 mmioFOURCC('I','4','2','0')
 #define FOURCC_IYUV mmioFOURCC('I','Y','U','V')
 #define FOURCC_YV12 mmioFOURCC('Y','V','1','2')
-
+/* YUV 4:2:2 planar */
+#define FOURCC_YV16 mmioFOURCC('Y','V','1','6')
+/* YUV 4:4:4 planar */
+#define FOURCC_YV24 mmioFOURCC('Y','V','2','4')
+/* YUV 4:2:0, with one Y plane and one packed U+V */
+#define FOURCC_NV12 mmioFOURCC('N','V','1','2')
 /* YUV 4:2:2 packed */
 #define FOURCC_YUYV mmioFOURCC('Y','U','Y','V')
 #define FOURCC_YUY2 mmioFOURCC('Y','U','Y','2')
@@ -60,7 +65,7 @@
 
 #define X264VFW_WEBSITE "http://sourceforge.net/projects/x264vfw/"
 
-#define X264VFW_FORMAT_VERSION 1
+#define X264VFW_FORMAT_VERSION 2
 
 /* Limits */
 #define MAX_QUANT   51
@@ -74,8 +79,8 @@
 
 #define COUNT_PRESET  10
 #define COUNT_TUNE    7
-#define COUNT_PROFILE 4
-#define COUNT_LEVEL   17
+#define COUNT_PROFILE 7
+#define COUNT_LEVEL   18
 #define COUNT_FOURCC  7
 
 /* Types */
@@ -108,6 +113,7 @@ typedef struct
     int i_level;
     int b_fastdecode;
     int b_zerolatency;
+    int b_keep_input_csp;
     /* Rate control */
     int i_encoding_type;
     int i_qp;
@@ -179,6 +185,7 @@ typedef struct
     int b_user_ref;
     int i_frame_remain;
     int b_warn_frame_loss;
+    int b_flush_delayed;
 
     /* Preset/Tuning/Profile */
     const char *preset;

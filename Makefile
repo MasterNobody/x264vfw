@@ -149,7 +149,7 @@ SRC_C += output/raw.c
 SRC_C += output/matroska.c output/matroska_ebml.c
 SRC_C += output/flv.c output/flv_bytestream.c
 SRC_C += output/mp4.c
-SRC_C += $(addprefix output/mp4/, isom.c utils.c mp4sys.c mp4a.c dts.c a52.c importer.c summary.c chapter.c write.c)
+SRC_C += $(addprefix output/mp4/, isom.c utils.c mp4sys.c mp4a.c dts.c a52.c h264.c vc1.c importer.c summary.c chapter.c write.c)
 
 ifeq ($(HAVE_FFMPEG),yes)
 SRC_C += output/avi.c

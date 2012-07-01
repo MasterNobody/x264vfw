@@ -30,6 +30,16 @@
 
 /*******************/
 
+enum chroma_format_e
+{
+    CHROMA_400 = 0,
+    CHROMA_420 = 1,
+    CHROMA_422 = 2,
+    CHROMA_444 = 3,
+};
+
+/*******************/
+
 #define MP4_LOG_ERROR( ... )                x264vfw_cli_log( p_mp4->opt.p_private, "mp4", X264_LOG_ERROR, __VA_ARGS__ )
 #define MP4_LOG_WARNING( ... )              x264vfw_cli_log( p_mp4->opt.p_private, "mp4", X264_LOG_WARNING, __VA_ARGS__ )
 #define MP4_LOG_INFO( ... )                 x264vfw_cli_log( p_mp4->opt.p_private, "mp4", X264_LOG_INFO, __VA_ARGS__ )
@@ -72,6 +82,7 @@ typedef struct
 
     lsmash_root_t *p_root;
     lsmash_brand_type major_brand;
+    lsmash_video_summary_t summary;
     int i_brand_3gpp;
     int b_brand_qt;
     int b_stdout;
@@ -90,6 +101,7 @@ typedef struct
     int i_delay_frames;
     int i_dts_compress_multiplier;
     int b_use_recovery;
+    int i_chroma_format_idc;
     int b_no_pasp;
     int b_fragments;
 } mp4_hnd_t;
@@ -237,6 +249,10 @@ static int set_param( hnd_t handle, x264_param_t *p_param )
     p_mp4->i_time_inc = p_param->i_timebase_num * p_mp4->i_dts_compress_multiplier;
     MP4_FAIL_IF_ERR( i_media_timescale > UINT32_MAX, "MP4 media timescale %"PRIu64" exceeds maximum\n", i_media_timescale );
 
+    int csp = p_param->i_csp & X264_CSP_MASK;
+    p_mp4->i_chroma_format_idc = csp >= X264_CSP_I444 ? CHROMA_444 :
+                                 csp >= X264_CSP_I422 ? CHROMA_422 : CHROMA_420;
+
     /* Select brands. */
     lsmash_brand_type brands[11] = { 0 };
     uint32_t minor_version = 0;
@@ -287,10 +303,9 @@ static int set_param( hnd_t handle, x264_param_t *p_param )
     p_mp4->i_track = lsmash_create_track( p_mp4->p_root, ISOM_MEDIA_HANDLER_TYPE_VIDEO_TRACK );
     MP4_FAIL_IF_ERR( !p_mp4->i_track, "failed to create a video track.\n" );
 
-    lsmash_video_summary_t summary;
-    memset( &summary, 0, sizeof(lsmash_video_summary_t) );
-    summary.width = p_param->i_width;
-    summary.height = p_param->i_height;
+    memset( &p_mp4->summary, 0, sizeof(lsmash_video_summary_t) );
+    p_mp4->summary.width = p_param->i_width;
+    p_mp4->summary.height = p_param->i_height;
     uint32_t i_display_width = p_param->i_width << 16;
     uint32_t i_display_height = p_param->i_height << 16;
     if( p_param->vui.i_sar_width && p_param->vui.i_sar_height )
@@ -302,17 +317,17 @@ static int set_param( hnd_t handle, x264_param_t *p_param )
             i_display_height /= sar;
         if( !p_mp4->b_no_pasp )
         {
-            summary.par_h = p_param->vui.i_sar_width;
-            summary.par_v = p_param->vui.i_sar_height;
+            p_mp4->summary.par_h = p_param->vui.i_sar_width;
+            p_mp4->summary.par_v = p_param->vui.i_sar_height;
             if( p_mp4->major_brand != ISOM_BRAND_TYPE_QT )
-                summary.scaling_method = ISOM_SCALING_METHOD_MEET;
+                p_mp4->summary.scaling_method = ISOM_SCALING_METHOD_MEET;
         }
     }
     if( p_mp4->b_brand_qt )
     {
-        summary.primaries = p_param->vui.i_colorprim;
-        summary.transfer = p_param->vui.i_transfer;
-        summary.matrix = p_param->vui.i_colmatrix;
+        p_mp4->summary.primaries = p_param->vui.i_colorprim;
+        p_mp4->summary.transfer = p_param->vui.i_transfer;
+        p_mp4->summary.matrix = p_param->vui.i_colmatrix;
     }
 
     /* Set video track parameters. */
@@ -345,15 +360,6 @@ static int set_param( hnd_t handle, x264_param_t *p_param )
     p_mp4->i_video_timescale = lsmash_get_media_timescale( p_mp4->p_root, p_mp4->i_track );
     MP4_FAIL_IF_ERR( !p_mp4->i_video_timescale, "media timescale for video is broken.\n" );
 
-    /* Add a sample entry. */
-    p_mp4->i_sample_entry = lsmash_add_sample_entry( p_mp4->p_root, p_mp4->i_track, ISOM_CODEC_TYPE_AVC1_VIDEO, &summary );
-    MP4_FAIL_IF_ERR( !p_mp4->i_sample_entry,
-                     "failed to add sample entry for video.\n" );
-
-    if( p_mp4->major_brand != ISOM_BRAND_TYPE_QT )
-        MP4_FAIL_IF_ERR( lsmash_add_btrt( p_mp4->p_root, p_mp4->i_track, p_mp4->i_sample_entry ),
-                         "failed to add btrt.\n" );
-
     return 0;
 }
 
@@ -369,14 +375,40 @@ static int write_headers( hnd_t handle, x264_nal_t *p_nal )
     uint8_t *pps = p_nal[1].p_payload + 4;
     uint8_t *sei = p_nal[2].p_payload;
 
-    MP4_FAIL_IF_ERR( lsmash_set_avc_config( p_mp4->p_root, p_mp4->i_track, p_mp4->i_sample_entry, 1, sps[1], sps[2], sps[3], 3, 1, X264_BIT_DEPTH-8, X264_BIT_DEPTH-8 ),
-                     "failed to set avc config.\n" );
+    lsmash_h264_specific_parameters_t param = { 0 };
+    param.AVCProfileIndication    = sps[1];
+    param.profile_compatibility   = sps[2];
+    param.AVCLevelIndication      = sps[3];
+    param.lengthSizeMinusOne      = 4 - 1;
+    param.chroma_format           = p_mp4->i_chroma_format_idc;
+    param.bit_depth_luma_minus8   = X264_BIT_DEPTH - 8;
+    param.bit_depth_chroma_minus8 = X264_BIT_DEPTH - 8;
+
     /* SPS */
-    MP4_FAIL_IF_ERR( lsmash_add_sps_entry( p_mp4->p_root, p_mp4->i_track, p_mp4->i_sample_entry, sps, sps_size ),
-                     "failed to add sps.\n" );
+    MP4_FAIL_IF_ERR( lsmash_append_h264_parameter_set( &param, H264_PARAMETER_SET_TYPE_SPS, sps, sps_size ),
+                     "failed to append SPS.\n" )
     /* PPS */
-    MP4_FAIL_IF_ERR( lsmash_add_pps_entry( p_mp4->p_root, p_mp4->i_track, p_mp4->i_sample_entry, pps, pps_size ),
-                     "failed to add pps.\n" );
+    MP4_FAIL_IF_ERR( lsmash_append_h264_parameter_set( &param, H264_PARAMETER_SET_TYPE_PPS, pps, pps_size ),
+                     "failed to append PPS.\n" )
+
+    uint32_t avc_config_size;
+    uint8_t *avc_config = lsmash_create_h264_specific_info( &param, &avc_config_size );
+    MP4_FAIL_IF_ERR( !avc_config || avc_config_size == 0,
+                     "failed to create AVC specific info.\n" );
+
+    lsmash_destroy_h264_parameter_sets( &param );
+
+    MP4_FAIL_IF_ERR( lsmash_summary_add_exdata( (lsmash_summary_t *)&p_mp4->summary, avc_config, avc_config_size ),
+                     "failed to append AVC specific info.\n" );
+
+    p_mp4->i_sample_entry = lsmash_add_sample_entry( p_mp4->p_root, p_mp4->i_track, ISOM_CODEC_TYPE_AVC1_VIDEO, &p_mp4->summary );
+    MP4_FAIL_IF_ERR( !p_mp4->i_sample_entry,
+                     "failed to add sample entry for video.\n" );
+
+    if( p_mp4->major_brand != ISOM_BRAND_TYPE_QT )
+        MP4_FAIL_IF_ERR( lsmash_add_btrt( p_mp4->p_root, p_mp4->i_track, p_mp4->i_sample_entry ),
+                         "failed to add btrt.\n" );
+
     /* SEI */
     p_mp4->p_sei_buffer = malloc( sei_size );
     MP4_FAIL_IF_ERR( !p_mp4->p_sei_buffer,

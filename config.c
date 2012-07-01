@@ -102,6 +102,7 @@ static const reg_int_t reg_int_table[] =
     { "avc_level",       &reg.i_level,           0,   0,  COUNT_LEVEL - 1  },
     { "fastdecode",      &reg.b_fastdecode,      0,   0,  1                },
     { "zerolatency",     &reg.b_zerolatency,     0,   0,  1                },
+    { "keep_input_csp",  &reg.b_keep_input_csp,  0,   0,  1                },
     /* Rate control */
     { "encoding_type",   &reg.i_encoding_type,   4,   0,  4                }, /* Take into account GordianKnot workaround */
     { "quantizer",       &reg.i_qp,              23,  1,  MAX_QUANT        },
@@ -402,6 +403,7 @@ static void dlg_update_items(CONFIG_DATA *cfg_data)
     SendDlgItemMessage(hMainDlg, IDC_LEVEL, CB_SETCURSEL, config->i_level, 0);
     CheckDlgButton(hMainDlg, IDC_TUNE_FASTDECODE, config->b_fastdecode);
     CheckDlgButton(hMainDlg, IDC_TUNE_ZEROLATENCY, config->b_zerolatency);
+    CheckDlgButton(hMainDlg, IDC_KEEP_INPUT_CSP, config->b_keep_input_csp);
     /* Rate control */
     if (SendMessage(GetDlgItem(hMainDlg, IDC_RC_MODE), CB_GETCOUNT, 0, 0) == 0)
     {
@@ -847,6 +849,10 @@ INT_PTR CALLBACK x264vfw_callback_main(HWND hDlg, UINT uMsg, WPARAM wParam, LPAR
 
                         case IDC_TUNE_ZEROLATENCY:
                             config->b_zerolatency = IsDlgButtonChecked(hMainDlg, IDC_TUNE_ZEROLATENCY);
+                            break;
+
+                        case IDC_KEEP_INPUT_CSP:
+                            config->b_keep_input_csp = IsDlgButtonChecked(hMainDlg, IDC_KEEP_INPUT_CSP);
                             break;
 
                         case IDC_STATS_CREATE:
@@ -1734,6 +1740,7 @@ static void help(char *buffer, int longhelp)
     H1( "      --psnr                  Enable PSNR computation\r\n" );
     H1( "      --ssim                  Enable SSIM computation\r\n" );
     H1( "      --threads <integer>     Force a specific number of threads\r\n" );
+    H2( "      --lookahead-threads <integer> Force a specific number of lookahead threads\r\n" );
     H2( "      --sliced-threads        Low-latency but lower-efficiency threading\r\n" );
     H2( "      --sync-lookahead <integer> Number of buffer frames for threaded lookahead\r\n" );
     H2( "      --non-deterministic     Slightly improve quality of SMP, at the cost of repeatability\r\n" );

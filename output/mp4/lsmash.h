@@ -252,6 +252,10 @@ typedef enum
     QT_CODEC_TYPE_RPZA_VIDEO    = LSMASH_4CC( 'r', 'p', 'z', 'a' ),   /* Apple simple video 'road pizza' compression */
     QT_CODEC_TYPE_TGA_VIDEO     = LSMASH_4CC( 't', 'g', 'a', ' ' ),   /* Truvision Targa video format */
     QT_CODEC_TYPE_TIFF_VIDEO    = LSMASH_4CC( 't', 'i', 'f', 'f' ),   /* Tagged Image File Format (Adobe) */
+    QT_CODEC_TYPE_ULRA_VIDEO    = LSMASH_4CC( 'U', 'L', 'R', 'A' ),   /* Ut Video RGBA 4:4:4:4 8bit full-range */
+    QT_CODEC_TYPE_ULRG_VIDEO    = LSMASH_4CC( 'U', 'L', 'R', 'G' ),   /* Ut Video RGB 4:4:4 8bit full-range */
+    QT_CODEC_TYPE_ULY0_VIDEO    = LSMASH_4CC( 'U', 'L', 'Y', '0' ),   /* Ut Video YCbCr 4:2:0 8bit limited */
+    QT_CODEC_TYPE_ULY2_VIDEO    = LSMASH_4CC( 'U', 'L', 'Y', '2' ),   /* Ut Video YCbCr 4:2:2 8bit limited */
     QT_CODEC_TYPE_V210_VIDEO    = LSMASH_4CC( 'v', '2', '1', '0' ),   /* Uncompressed Y'CbCr, 10-bit-per-component 4:2:2 */
     QT_CODEC_TYPE_V216_VIDEO    = LSMASH_4CC( 'v', '2', '1', '6' ),   /* Uncompressed Y'CbCr, 10, 12, 14, or 16-bit-per-component 4:2:2 */
     QT_CODEC_TYPE_V308_VIDEO    = LSMASH_4CC( 'v', '3', '0', '8' ),   /* Uncompressed Y'CbCr, 8-bit-per-component 4:4:4 */
@@ -943,62 +947,70 @@ typedef enum
 typedef enum
 {
     /* UTF String type */
-    ITUNES_METADATA_TYPE_ALBUM_NAME                 = LSMASH_4CC( 0xA9, 'a', 'l', 'b' ),    /* Album Name */
-    ITUNES_METADATA_TYPE_ARTIST                     = LSMASH_4CC( 0xA9, 'A', 'R', 'T' ),    /* Artist */
-    ITUNES_METADATA_TYPE_USER_COMMENT               = LSMASH_4CC( 0xA9, 'c', 'm', 't' ),    /* User Comment */
-    ITUNES_METADATA_TYPE_RELEASE_DATE               = LSMASH_4CC( 0xA9, 'd', 'a', 'y' ),    /* YYYY-MM-DD format string (may be incomplete, i.e. only year) */
-    ITUNES_METADATA_TYPE_ENCODED_BY                 = LSMASH_4CC( 0xA9, 'e', 'n', 'c' ),    /* Person or company that encoded the recording */
-    ITUNES_METADATA_TYPE_USER_GENRE                 = LSMASH_4CC( 0xA9, 'g', 'e', 'n' ),    /* User Genre user-specified string */
-    ITUNES_METADATA_TYPE_0XA9_GROUPING              = LSMASH_4CC( 0xA9, 'g', 'r', 'p' ),    /* Grouping */
-    ITUNES_METADATA_TYPE_LYRICS                     = LSMASH_4CC( 0xA9, 'l', 'y', 'r' ),    /* Lyrics */
-    ITUNES_METADATA_TYPE_TITLE                      = LSMASH_4CC( 0xA9, 'n', 'a', 'm' ),    /* Title / Song Name */
-    ITUNES_METADATA_TYPE_TRACK_SUBTITLE             = LSMASH_4CC( 0xA9, 's', 't', '3' ),    /* Track Sub-Title */
-    ITUNES_METADATA_TYPE_ENCODING_TOOL              = LSMASH_4CC( 0xA9, 't', 'o', 'o' ),    /* Software which encoded the recording */
-    ITUNES_METADATA_TYPE_COMPOSER                   = LSMASH_4CC( 0xA9, 'w', 'r', 't' ),    /* Composer */
-    ITUNES_METADATA_TYPE_ALBUM_ARTIST               = LSMASH_4CC( 'a', 'A', 'R', 'T' ),     /* Artist for the whole album (if different than the individual tracks) */
-    ITUNES_METADATA_TYPE_PODCAST_CATEGORY           = LSMASH_4CC( 'c', 'a', 't', 'g' ),     /* Podcast Category */
-    ITUNES_METADATA_TYPE_COPYRIGHT                  = LSMASH_4CC( 'c', 'p', 'r', 't' ),     /* Copyright */
-    ITUNES_METADATA_TYPE_DESCRIPTION                = LSMASH_4CC( 'd', 'e', 's', 'c' ),     /* Description (limited to 255 bytes) */
-    ITUNES_METADATA_TYPE_GROUPING                   = LSMASH_4CC( 'g', 'r', 'u', 'p' ),     /* Grouping */
-    ITUNES_METADATA_TYPE_PODCAST_KEYWORD            = LSMASH_4CC( 'k', 'e', 'y', 'w' ),     /* Podcast Keywords */
-    ITUNES_METADATA_TYPE_LONG_DESCRIPTION           = LSMASH_4CC( 'l', 'd', 'e', 's' ),     /* Long Description */
-    ITUNES_METADATA_TYPE_PURCHASE_DATE              = LSMASH_4CC( 'p', 'u', 'r', 'd' ),     /* Purchase Date */
-    ITUNES_METADATA_TYPE_TV_EPISODE_ID              = LSMASH_4CC( 't', 'v', 'e', 'n' ),     /* TV Episode ID */
-    ITUNES_METADATA_TYPE_TV_NETWORK                 = LSMASH_4CC( 't', 'v', 'n', 'n' ),     /* TV Network Name */
-    ITUNES_METADATA_TYPE_TV_SHOW_NAME               = LSMASH_4CC( 't', 'v', 's', 'h' ),     /* TV Show Name */
-    ITUNES_METADATA_TYPE_ITUNES_PURCHASE_ACCOUNT_ID = LSMASH_4CC( 'a', 'p', 'I', 'D' ),     /* iTunes Account Used for Purchase */
+    ITUNES_METADATA_ITEM_ALBUM_NAME                 = LSMASH_4CC( 0xA9, 'a', 'l', 'b' ),    /* Album Name */
+    ITUNES_METADATA_ITEM_ARTIST                     = LSMASH_4CC( 0xA9, 'A', 'R', 'T' ),    /* Artist */
+    ITUNES_METADATA_ITEM_USER_COMMENT               = LSMASH_4CC( 0xA9, 'c', 'm', 't' ),    /* User Comment */
+    ITUNES_METADATA_ITEM_RELEASE_DATE               = LSMASH_4CC( 0xA9, 'd', 'a', 'y' ),    /* YYYY-MM-DD format string (may be incomplete, i.e. only year) */
+    ITUNES_METADATA_ITEM_ENCODED_BY                 = LSMASH_4CC( 0xA9, 'e', 'n', 'c' ),    /* Person or company that encoded the recording */
+    ITUNES_METADATA_ITEM_USER_GENRE                 = LSMASH_4CC( 0xA9, 'g', 'e', 'n' ),    /* User Genre user-specified string */
+    ITUNES_METADATA_ITEM_0XA9_GROUPING              = LSMASH_4CC( 0xA9, 'g', 'r', 'p' ),    /* Grouping */
+    ITUNES_METADATA_ITEM_LYRICS                     = LSMASH_4CC( 0xA9, 'l', 'y', 'r' ),    /* Lyrics */
+    ITUNES_METADATA_ITEM_TITLE                      = LSMASH_4CC( 0xA9, 'n', 'a', 'm' ),    /* Title / Song Name */
+    ITUNES_METADATA_ITEM_TRACK_SUBTITLE             = LSMASH_4CC( 0xA9, 's', 't', '3' ),    /* Track Sub-Title */
+    ITUNES_METADATA_ITEM_ENCODING_TOOL              = LSMASH_4CC( 0xA9, 't', 'o', 'o' ),    /* Software which encoded the recording */
+    ITUNES_METADATA_ITEM_COMPOSER                   = LSMASH_4CC( 0xA9, 'w', 'r', 't' ),    /* Composer */
+    ITUNES_METADATA_ITEM_ALBUM_ARTIST               = LSMASH_4CC( 'a', 'A', 'R', 'T' ),     /* Artist for the whole album (if different than the individual tracks) */
+    ITUNES_METADATA_ITEM_PODCAST_CATEGORY           = LSMASH_4CC( 'c', 'a', 't', 'g' ),     /* Podcast Category */
+    ITUNES_METADATA_ITEM_COPYRIGHT                  = LSMASH_4CC( 'c', 'p', 'r', 't' ),     /* Copyright */
+    ITUNES_METADATA_ITEM_DESCRIPTION                = LSMASH_4CC( 'd', 'e', 's', 'c' ),     /* Description (limited to 255 bytes) */
+    ITUNES_METADATA_ITEM_GROUPING                   = LSMASH_4CC( 'g', 'r', 'u', 'p' ),     /* Grouping */
+    ITUNES_METADATA_ITEM_PODCAST_KEYWORD            = LSMASH_4CC( 'k', 'e', 'y', 'w' ),     /* Podcast Keywords */
+    ITUNES_METADATA_ITEM_LONG_DESCRIPTION           = LSMASH_4CC( 'l', 'd', 'e', 's' ),     /* Long Description */
+    ITUNES_METADATA_ITEM_PURCHASE_DATE              = LSMASH_4CC( 'p', 'u', 'r', 'd' ),     /* Purchase Date */
+    ITUNES_METADATA_ITEM_TV_EPISODE_ID              = LSMASH_4CC( 't', 'v', 'e', 'n' ),     /* TV Episode ID */
+    ITUNES_METADATA_ITEM_TV_NETWORK                 = LSMASH_4CC( 't', 'v', 'n', 'n' ),     /* TV Network Name */
+    ITUNES_METADATA_ITEM_TV_SHOW_NAME               = LSMASH_4CC( 't', 'v', 's', 'h' ),     /* TV Show Name */
+    ITUNES_METADATA_ITEM_ITUNES_PURCHASE_ACCOUNT_ID = LSMASH_4CC( 'a', 'p', 'I', 'D' ),     /* iTunes Account Used for Purchase */
 
     /* Integer type
      * (X): X means length of bytes */
-    ITUNES_METADATA_TYPE_EPISODE_GLOBAL_ID          = LSMASH_4CC( 'e', 'g', 'i', 'd' ),     /* (1) Episode Global Unique ID */
-    ITUNES_METADATA_TYPE_PREDEFINED_GENRE           = LSMASH_4CC( 'g', 'n', 'r', 'e' ),     /* (4) Pre-defined Genre / Enumerated value from ID3 tag set, plus 1 */
-    ITUNES_METADATA_TYPE_PODCAST_URL                = LSMASH_4CC( 'p', 'u', 'r', 'l' ),     /* (?) Podcast URL */
-    ITUNES_METADATA_TYPE_CONTENT_RATING             = LSMASH_4CC( 'r', 't', 'n', 'g' ),     /* (1) Content Rating / Does song have explicit content? 0: none, 2: clean, 4: explicit */
-    ITUNES_METADATA_TYPE_MEDIA_TYPE                 = LSMASH_4CC( 's', 't', 'i', 'k' ),     /* (1) Media Type */
-    ITUNES_METADATA_TYPE_BEATS_PER_MINUTE           = LSMASH_4CC( 't', 'm', 'p', 'o' ),     /* (2) Beats Per Minute */
-    ITUNES_METADATA_TYPE_TV_EPISODE                 = LSMASH_4CC( 't', 'v', 'e', 's' ),     /* (4) TV Episode */
-    ITUNES_METADATA_TYPE_TV_SEASON                  = LSMASH_4CC( 't', 'v', 's', 'n' ),     /* (4) TV Season */
-    ITUNES_METADATA_TYPE_ITUNES_ACCOUNT_TYPE        = LSMASH_4CC( 'a', 'k', 'I', 'D' ),     /* (1) iTunes Account Type / 0: iTunes, 1: AOL */
-    ITUNES_METADATA_TYPE_ITUNES_ARTIST_ID           = LSMASH_4CC( 'a', 't', 'I', 'D' ),     /* (4) iTunes Artist ID */
-    ITUNES_METADATA_TYPE_ITUNES_COMPOSER_ID         = LSMASH_4CC( 'c', 'm', 'I', 'D' ),     /* (4) iTunes Composer ID */
-    ITUNES_METADATA_TYPE_ITUNES_CATALOG_ID          = LSMASH_4CC( 'c', 'n', 'I', 'D' ),     /* (4) iTunes Catalog ID */
-    ITUNES_METADATA_TYPE_ITUNES_TV_GENRE_ID         = LSMASH_4CC( 'g', 'e', 'I', 'D' ),     /* (4) iTunes TV Genre ID */
-    ITUNES_METADATA_TYPE_ITUNES_PLAYLIST_ID         = LSMASH_4CC( 'p', 'l', 'I', 'D' ),     /* (8) iTunes Playlist ID */
-    ITUNES_METADATA_TYPE_ITUNES_COUNTRY_CODE        = LSMASH_4CC( 's', 'f', 'I', 'D' ),     /* (4) iTunes Country Code */
+    ITUNES_METADATA_ITEM_EPISODE_GLOBAL_ID          = LSMASH_4CC( 'e', 'g', 'i', 'd' ),     /* (1) Episode Global Unique ID */
+    ITUNES_METADATA_ITEM_PREDEFINED_GENRE           = LSMASH_4CC( 'g', 'n', 'r', 'e' ),     /* (4) Pre-defined Genre / Enumerated value from ID3 tag set, plus 1 */
+    ITUNES_METADATA_ITEM_PODCAST_URL                = LSMASH_4CC( 'p', 'u', 'r', 'l' ),     /* (?) Podcast URL */
+    ITUNES_METADATA_ITEM_CONTENT_RATING             = LSMASH_4CC( 'r', 't', 'n', 'g' ),     /* (1) Content Rating / Does song have explicit content? 0: none, 2: clean, 4: explicit */
+    ITUNES_METADATA_ITEM_MEDIA_TYPE                 = LSMASH_4CC( 's', 't', 'i', 'k' ),     /* (1) Media Type */
+    ITUNES_METADATA_ITEM_BEATS_PER_MINUTE           = LSMASH_4CC( 't', 'm', 'p', 'o' ),     /* (2) Beats Per Minute */
+    ITUNES_METADATA_ITEM_TV_EPISODE                 = LSMASH_4CC( 't', 'v', 'e', 's' ),     /* (4) TV Episode */
+    ITUNES_METADATA_ITEM_TV_SEASON                  = LSMASH_4CC( 't', 'v', 's', 'n' ),     /* (4) TV Season */
+    ITUNES_METADATA_ITEM_ITUNES_ACCOUNT_TYPE        = LSMASH_4CC( 'a', 'k', 'I', 'D' ),     /* (1) iTunes Account Type / 0: iTunes, 1: AOL */
+    ITUNES_METADATA_ITEM_ITUNES_ARTIST_ID           = LSMASH_4CC( 'a', 't', 'I', 'D' ),     /* (4) iTunes Artist ID */
+    ITUNES_METADATA_ITEM_ITUNES_COMPOSER_ID         = LSMASH_4CC( 'c', 'm', 'I', 'D' ),     /* (4) iTunes Composer ID */
+    ITUNES_METADATA_ITEM_ITUNES_CATALOG_ID          = LSMASH_4CC( 'c', 'n', 'I', 'D' ),     /* (4) iTunes Catalog ID */
+    ITUNES_METADATA_ITEM_ITUNES_TV_GENRE_ID         = LSMASH_4CC( 'g', 'e', 'I', 'D' ),     /* (4) iTunes TV Genre ID */
+    ITUNES_METADATA_ITEM_ITUNES_PLAYLIST_ID         = LSMASH_4CC( 'p', 'l', 'I', 'D' ),     /* (8) iTunes Playlist ID */
+    ITUNES_METADATA_ITEM_ITUNES_COUNTRY_CODE        = LSMASH_4CC( 's', 'f', 'I', 'D' ),     /* (4) iTunes Country Code */
 
     /* Boolean type */
-    ITUNES_METADATA_TYPE_DISC_COMPILATION           = LSMASH_4CC( 'c', 'p', 'i', 'l' ),     /* Disc Compilation / Is disc part of a compilation? 0: No, 1: Yes */
-    ITUNES_METADATA_TYPE_HIGH_DEFINITION_VIDEO      = LSMASH_4CC( 'h', 'd', 'v', 'd' ),     /* High Definition Video / 0: No, 1: Yes */
-    ITUNES_METADATA_TYPE_PODCAST                    = LSMASH_4CC( 'p', 'c', 's', 't' ),     /* Podcast / 0: No, 1: Yes */
-    ITUNES_METADATA_TYPE_GAPLESS_PLAYBACK           = LSMASH_4CC( 'p', 'g', 'a', 'p' ),     /* Gapless Playback / 0: insert gap, 1: no gap */
+    ITUNES_METADATA_ITEM_DISC_COMPILATION           = LSMASH_4CC( 'c', 'p', 'i', 'l' ),     /* Disc Compilation / Is disc part of a compilation? 0: No, 1: Yes */
+    ITUNES_METADATA_ITEM_HIGH_DEFINITION_VIDEO      = LSMASH_4CC( 'h', 'd', 'v', 'd' ),     /* High Definition Video / 0: No, 1: Yes */
+    ITUNES_METADATA_ITEM_PODCAST                    = LSMASH_4CC( 'p', 'c', 's', 't' ),     /* Podcast / 0: No, 1: Yes */
+    ITUNES_METADATA_ITEM_GAPLESS_PLAYBACK           = LSMASH_4CC( 'p', 'g', 'a', 'p' ),     /* Gapless Playback / 0: insert gap, 1: no gap */
 
     /* Binary type */
-    ITUNES_METADATA_TYPE_COVER_ART                  = LSMASH_4CC( 'c', 'o', 'v', 'r' ),     /* One or more cover art images */
-    ITUNES_METADATA_TYPE_DISC_NUMBER                = LSMASH_4CC( 'd', 'i', 's', 'k' ),     /* Disc Number */
-    ITUNES_METADATA_TYPE_TRACH_NUMBER               = LSMASH_4CC( 't', 'r', 'k', 'n' ),     /* Track Number */
+    ITUNES_METADATA_ITEM_COVER_ART                  = LSMASH_4CC( 'c', 'o', 'v', 'r' ),     /* One or more cover art images */
+    ITUNES_METADATA_ITEM_DISC_NUMBER                = LSMASH_4CC( 'd', 'i', 's', 'k' ),     /* Disc Number */
+    ITUNES_METADATA_ITEM_TRACH_NUMBER               = LSMASH_4CC( 't', 'r', 'k', 'n' ),     /* Track Number */
 
     /* Custom type */
-    ITUNES_METADATA_TYPE_CUSTOM                     = LSMASH_4CC( '-', '-', '-', '-' ),     /* Custom */
+    ITUNES_METADATA_ITEM_CUSTOM                     = LSMASH_4CC( '-', '-', '-', '-' ),     /* Custom */
+} lsmash_itunes_metadata_item;
+
+typedef enum
+{
+    ITUNES_METADATA_TYPE_NONE    = 0,
+    ITUNES_METADATA_TYPE_STRING  = 1,
+    ITUNES_METADATA_TYPE_INTEGER = 2,
+    ITUNES_METADATA_TYPE_BOOLEAN = 3,
 } lsmash_itunes_metadata_type;
 
 typedef enum
@@ -1053,95 +1065,6 @@ typedef enum
     QT_PIXEL_FORMAT_TYPE_422YpCbCr8_YUVS                    = LSMASH_4CC( 'y', 'u', 'v', 's' ),     /* Component Y'CbCr 8-bit 4:2:2, ordered Y'0 Cb Y'1 Cr */
     QT_PIXEL_FORMAT_TYPE_422YpCbCr8_FULL_RANGE              = LSMASH_4CC( 'y', 'u', 'v', 'f' ),     /* Component Y'CbCr 8-bit 4:2:2, full range, ordered Y'0 Cb Y'1 Cr */
 } lsmash_pixel_format;
-
-typedef enum
-{
-    DTS_CORE_SUBSTREAM_CORE_FLAG = 0x00000001,
-    DTS_CORE_SUBSTREAM_XXCH_FLAG = 0x00000002,
-    DTS_CORE_SUBSTREAM_X96_FLAG  = 0x00000004,
-    DTS_CORE_SUBSTREAM_XCH_FLAG  = 0x00000008,
-    DTS_EXT_SUBSTREAM_CORE_FLAG  = 0x00000010,
-    DTS_EXT_SUBSTREAM_XBR_FLAG   = 0x00000020,
-    DTS_EXT_SUBSTREAM_XXCH_FLAG  = 0x00000040,
-    DTS_EXT_SUBSTREAM_X96_FLAG   = 0x00000080,
-    DTS_EXT_SUBSTREAM_LBR_FLAG   = 0x00000100,
-    DTS_EXT_SUBSTREAM_XLL_FLAG   = 0x00000200,
-} lsmash_dts_construction_flag;
-
-/* CODEC specific data types */
-typedef struct
-{
-    uint8_t fscod;          /* the same value as the fscod field in the AC-3 bitstream */
-    uint8_t bsid;           /* the same value as the bsid field in the AC-3 bitstream */
-    uint8_t bsmod;          /* the same value as the bsmod field in the AC-3 bitstream */
-    uint8_t acmod;          /* the same value as the acmod field in the AC-3 bitstream */
-    uint8_t lfeon;          /* the same value as the lfeon field in the AC-3 bitstream */
-    uint8_t frmsizecod;     /* the same value as the frmsizecod field in the AC-3 bitstream */
-} lsmash_ac3_specific_parameters_t;
-
-typedef struct
-{
-    uint8_t  fscod;         /* the same value as the fscod field in the independent substream */
-    uint8_t  fscod2;        /* Any user must not use this. */
-    uint8_t  bsid;          /* the same value as the bsid field in the independent substream */
-    uint8_t  bsmod;         /* the same value as the bsmod field in the independent substream
-                             * If the bsmod field is not present in the independent substream, this field shall be set to 0. */
-    uint8_t  acmod;         /* the same value as the acmod field in the independent substream */
-    uint8_t  lfeon;         /* the same value as the lfeon field in the independent substream */
-    uint8_t  num_dep_sub;   /* the number of dependent substreams that are associated with the independent substream */
-    uint16_t chan_loc;      /* channel locations of dependent substreams associated with the independent substream
-                             * This information is extracted from the chanmap field of each dependent substream. */
-} lsmash_eac3_substream_info_t;
-
-typedef struct
-{
-    uint16_t data_rate;     /* the data rate of the Enhanced AC-3 bitstream in kbit/s
-                             * If the Enhanced AC-3 stream is variable bitrate, then this value indicates the maximum data rate of the stream. */
-    uint8_t  num_ind_sub;   /* the number of independent substreams that are present in the Enhanced AC-3 bitstream
-                             * The value of this field is one less than the number of independent substreams present
-                             * and shall be in the range of 0 to 7, inclusive. */
-    lsmash_eac3_substream_info_t independent_info[8];
-} lsmash_eac3_specific_parameters_t;
-
-typedef struct
-{
-    uint32_t DTSSamplingFrequency;  /* the maximum sampling frequency stored in the compressed audio stream */
-    uint32_t maxBitrate;            /* the peak bit rate, in bits per second, of the audio elementary stream for the duration of the track,
-                                     * including the core substream (if present) and all extension substreams.
-                                     * If the stream is a constant bit rate, this parameter shall have the same value as avgBitrate.
-                                     * If the maximum bit rate is unknown, this parameter shall be set to 0. */
-    uint32_t avgBitrate;            /* the average bit rate, in bits per second, of the audio elementary stream for the duration of the track,
-                                     * including the core substream and any extension substream that may be present. */
-    uint8_t  pcmSampleDepth;        /* the bit depth of the rendered audio
-                                     * The value is 16 or 24 bits. */
-    uint8_t  FrameDuration;         /* the number of audio samples decoded in a complete audio access unit at DTSSamplingFrequency
-                                     *   0: 512, 1: 1024, 2: 2048, 3: 4096 */
-    uint8_t  StreamConstruction;    /* complete information on the existence and of location of extensions in any synchronized frame */
-    uint8_t  CoreLFEPresent;        /* the presence of an LFE channel in the core
-                                     *   0: none
-                                     *   1: LFE exists */
-    uint8_t  CoreLayout;            /* the channel layout of the core within the core substream
-                                     * If no core substream exists, this parameter shall be ignored and ChannelLayout or
-                                     * RepresentationType shall be used to determine channel configuration. */
-    uint16_t CoreSize;              /* The size of a core substream AU in bytes.
-                                     * If no core substream exists, CoreSize = 0. */
-    uint8_t  StereoDownmix;         /* the presence of an embedded stereo downmix in the stream
-                                     *   0: none
-                                     *   1: embedded downmix present */
-    uint8_t  RepresentationType;    /* This indicates special properties of the audio presentation.
-                                     *   0: Audio asset designated for mixing with another audio asset
-                                     *   2: Lt/Rt Encoded for matrix surround decoding
-                                     *   3: Audio processed for headphone playback
-                                     *   otherwise: Reserved
-                                     * If ChannelLayout != 0, this value shall be ignored. */
-    uint16_t ChannelLayout;         /* complete information on channels coded in the audio stream including core and extensions */
-    uint8_t  MultiAssetFlag;        /* This flag shall set if the stream contains more than one asset.
-                                     *   0: single asset
-                                     *   1: multiple asset
-                                     * When multiple assets exist, the remaining parameters only reflect the coding parameters of the first asset. */
-    uint8_t  LBRDurationMod;        /* This flag indicates a special case of the LBR coding bandwidth, resulting in 1/3 or 2/3 band limiting.
-                                     * If set to 1, LBR frame duration is 50 % larger than indicated in FrameDuration */
-} lsmash_dts_specific_parameters_t;
 
 /* sample data types */
 typedef struct
@@ -1401,13 +1324,17 @@ typedef enum
     LSMASH_BOOLEAN_TRUE  = 1
 } lsmash_boolean_t;
 
+typedef union
+{
+    char            *string;
+    uint64_t         integer;
+    lsmash_boolean_t boolean;
+} lsmash_itunes_metadata_t;
+
 typedef struct lsmash_root_tag lsmash_root_t;
 typedef void lsmash_itunes_metadata_list_t;
 
 /* public functions */
-int lsmash_add_sps_entry( lsmash_root_t *root, uint32_t track_ID, uint32_t entry_number, uint8_t *sps, uint32_t sps_size );
-int lsmash_add_pps_entry( lsmash_root_t *root, uint32_t track_ID, uint32_t entry_number, uint8_t *pps, uint32_t pps_size );
-int lsmash_add_spsext_entry( lsmash_root_t *root, uint32_t track_ID, uint32_t entry_number, uint8_t *spsext, uint32_t spsext_size );
 int lsmash_add_sample_entry( lsmash_root_t *root, uint32_t track_ID, uint32_t sample_type, void* summary );
 
 int lsmash_add_btrt( lsmash_root_t *root, uint32_t track_ID, uint32_t entry_number );
@@ -1423,10 +1350,6 @@ uint32_t lsmash_get_composition_to_decode_shift( lsmash_root_t *root, uint32_t t
 uint32_t lsmash_get_media_timescale( lsmash_root_t *root, uint32_t track_ID );
 uint32_t lsmash_get_movie_timescale( lsmash_root_t *root );
 
-int lsmash_set_avc_config( lsmash_root_t *root, uint32_t track_ID, uint32_t entry_number,
-                           uint8_t configurationVersion, uint8_t AVCProfileIndication, uint8_t profile_compatibility,
-                           uint8_t AVCLevelIndication, uint8_t lengthSizeMinusOne,
-                           uint8_t chroma_format, uint8_t bit_depth_luma_minus8, uint8_t bit_depth_chroma_minus8 );
 int lsmash_set_last_sample_delta( lsmash_root_t *root, uint32_t track_ID, uint32_t sample_delta );
 int lsmash_set_free( lsmash_root_t *root, uint8_t *data, uint64_t data_length );
 int lsmash_set_tyrant_chapter( lsmash_root_t *root, char *file_name, int add_bom );
@@ -1477,11 +1400,11 @@ void lsmash_delete_tyrant_chapter( lsmash_root_t *root );
 /* track_ID == 0 means copyright declaration applies to the entire presentation, not an entire track. */
 int lsmash_set_copyright( lsmash_root_t *root, uint32_t track_ID, uint16_t ISO_language, char *notice );
 
-/* When type is specified as ITUNES_METADATA_TYPE_CUSTOM, meaning is mandatory while name is optionally valid.
- * Otherwise, meaning and name are just ignored. */
-int lsmash_set_itunes_metadata_string( lsmash_root_t *root, lsmash_itunes_metadata_type type, char *value, char *meaning, char *name );
-int lsmash_set_itunes_metadata_integer( lsmash_root_t *root, lsmash_itunes_metadata_type type, uint64_t value, char *meaning, char *name );
-int lsmash_set_itunes_metadata_boolean( lsmash_root_t *root, lsmash_itunes_metadata_type type, lsmash_boolean_t value, char *meaning, char *name );
+/* When 'item' is specified as ITUNES_METADATA_ITEM_CUSTOM, 'type' and 'meaning' is mandatory while 'name' is optionally valid.
+ * Otherwise 'type', 'meaning' and 'name' are just ignored. */
+int lsmash_set_itunes_metadata( lsmash_root_t *root,
+                                lsmash_itunes_metadata_item item, lsmash_itunes_metadata_type type,
+                                lsmash_itunes_metadata_t value, char *meaning, char *name );
 
 #ifdef LSMASH_DEMUXER_ENABLED
 int lsmash_print_movie( lsmash_root_t *root, const char *filename );
@@ -1528,19 +1451,181 @@ lsmash_summary_t *lsmash_create_summary( lsmash_mp4sys_stream_type stream_type )
 void lsmash_cleanup_summary( lsmash_summary_t *summary );
 
 /* AC-3 tools to make exdata (AC-3 specific info). */
+typedef struct
+{
+    uint8_t fscod;          /* the same value as the fscod field in the AC-3 bitstream */
+    uint8_t bsid;           /* the same value as the bsid field in the AC-3 bitstream */
+    uint8_t bsmod;          /* the same value as the bsmod field in the AC-3 bitstream */
+    uint8_t acmod;          /* the same value as the acmod field in the AC-3 bitstream */
+    uint8_t lfeon;          /* the same value as the lfeon field in the AC-3 bitstream */
+    uint8_t frmsizecod;     /* the same value as the frmsizecod field in the AC-3 bitstream */
+} lsmash_ac3_specific_parameters_t;
+
 int lsmash_setup_ac3_specific_parameters_from_syncframe( lsmash_ac3_specific_parameters_t *param, uint8_t *data, uint32_t data_length );
 uint8_t *lsmash_create_ac3_specific_info( lsmash_ac3_specific_parameters_t *param, uint32_t *data_length );
 
-/* Eanhanced AC-3 tools to make exdata (Enhanced AC-3 specific info). */
+/* Enhanced AC-3 tools to make exdata (Enhanced AC-3 specific info). */
+typedef struct
+{
+    uint8_t  fscod;         /* the same value as the fscod field in the independent substream */
+    uint8_t  fscod2;        /* Any user must not use this. */
+    uint8_t  bsid;          /* the same value as the bsid field in the independent substream */
+    uint8_t  bsmod;         /* the same value as the bsmod field in the independent substream
+                             * If the bsmod field is not present in the independent substream, this field shall be set to 0. */
+    uint8_t  acmod;         /* the same value as the acmod field in the independent substream */
+    uint8_t  lfeon;         /* the same value as the lfeon field in the independent substream */
+    uint8_t  num_dep_sub;   /* the number of dependent substreams that are associated with the independent substream */
+    uint16_t chan_loc;      /* channel locations of dependent substreams associated with the independent substream
+                             * This information is extracted from the chanmap field of each dependent substream. */
+} lsmash_eac3_substream_info_t;
+
+typedef struct
+{
+    uint16_t data_rate;     /* the data rate of the Enhanced AC-3 bitstream in kbit/s
+                             * If the Enhanced AC-3 stream is variable bitrate, then this value indicates the maximum data rate of the stream. */
+    uint8_t  num_ind_sub;   /* the number of independent substreams that are present in the Enhanced AC-3 bitstream
+                             * The value of this field is one less than the number of independent substreams present
+                             * and shall be in the range of 0 to 7, inclusive. */
+    lsmash_eac3_substream_info_t independent_info[8];
+} lsmash_eac3_specific_parameters_t;
+
 int lsmash_setup_eac3_specific_parameters_from_frame( lsmash_eac3_specific_parameters_t *param, uint8_t *data, uint32_t data_length );
 uint16_t lsmash_eac3_get_chan_loc_from_chanmap( uint16_t chanmap );
 uint8_t *lsmash_create_eac3_specific_info( lsmash_eac3_specific_parameters_t *param, uint32_t *data_length );
 
 /* DTS audio tools to make exdata (DTS specific info). */
+typedef enum
+{
+    DTS_CORE_SUBSTREAM_CORE_FLAG = 0x00000001,
+    DTS_CORE_SUBSTREAM_XXCH_FLAG = 0x00000002,
+    DTS_CORE_SUBSTREAM_X96_FLAG  = 0x00000004,
+    DTS_CORE_SUBSTREAM_XCH_FLAG  = 0x00000008,
+    DTS_EXT_SUBSTREAM_CORE_FLAG  = 0x00000010,
+    DTS_EXT_SUBSTREAM_XBR_FLAG   = 0x00000020,
+    DTS_EXT_SUBSTREAM_XXCH_FLAG  = 0x00000040,
+    DTS_EXT_SUBSTREAM_X96_FLAG   = 0x00000080,
+    DTS_EXT_SUBSTREAM_LBR_FLAG   = 0x00000100,
+    DTS_EXT_SUBSTREAM_XLL_FLAG   = 0x00000200,
+} lsmash_dts_construction_flag;
+
+typedef struct
+{
+    uint32_t DTSSamplingFrequency;  /* the maximum sampling frequency stored in the compressed audio stream */
+    uint32_t maxBitrate;            /* the peak bit rate, in bits per second, of the audio elementary stream for the duration of the track,
+                                     * including the core substream (if present) and all extension substreams.
+                                     * If the stream is a constant bit rate, this parameter shall have the same value as avgBitrate.
+                                     * If the maximum bit rate is unknown, this parameter shall be set to 0. */
+    uint32_t avgBitrate;            /* the average bit rate, in bits per second, of the audio elementary stream for the duration of the track,
+                                     * including the core substream and any extension substream that may be present. */
+    uint8_t  pcmSampleDepth;        /* the bit depth of the rendered audio
+                                     * The value is 16 or 24 bits. */
+    uint8_t  FrameDuration;         /* the number of audio samples decoded in a complete audio access unit at DTSSamplingFrequency
+                                     *   0: 512, 1: 1024, 2: 2048, 3: 4096 */
+    uint8_t  StreamConstruction;    /* complete information on the existence and of location of extensions in any synchronized frame */
+    uint8_t  CoreLFEPresent;        /* the presence of an LFE channel in the core
+                                     *   0: none
+                                     *   1: LFE exists */
+    uint8_t  CoreLayout;            /* the channel layout of the core within the core substream
+                                     * If no core substream exists, this parameter shall be ignored and ChannelLayout or
+                                     * RepresentationType shall be used to determine channel configuration. */
+    uint16_t CoreSize;              /* The size of a core substream AU in bytes.
+                                     * If no core substream exists, CoreSize = 0. */
+    uint8_t  StereoDownmix;         /* the presence of an embedded stereo downmix in the stream
+                                     *   0: none
+                                     *   1: embedded downmix present */
+    uint8_t  RepresentationType;    /* This indicates special properties of the audio presentation.
+                                     *   0: Audio asset designated for mixing with another audio asset
+                                     *   2: Lt/Rt Encoded for matrix surround decoding
+                                     *   3: Audio processed for headphone playback
+                                     *   otherwise: Reserved
+                                     * If ChannelLayout != 0, this value shall be ignored. */
+    uint16_t ChannelLayout;         /* complete information on channels coded in the audio stream including core and extensions */
+    uint8_t  MultiAssetFlag;        /* This flag shall set if the stream contains more than one asset.
+                                     *   0: single asset
+                                     *   1: multiple asset
+                                     * When multiple assets exist, the remaining parameters only reflect the coding parameters of the first asset. */
+    uint8_t  LBRDurationMod;        /* This flag indicates a special case of the LBR coding bandwidth, resulting in 1/3 or 2/3 band limiting.
+                                     * If set to 1, LBR frame duration is 50 % larger than indicated in FrameDuration */
+} lsmash_dts_specific_parameters_t;
+
 int lsmash_setup_dts_specific_parameters_from_frame( lsmash_dts_specific_parameters_t *param, uint8_t *data, uint32_t data_length );
 uint8_t lsmash_dts_get_stream_construction( lsmash_dts_construction_flag flags );
 uint32_t lsmash_dts_get_codingname( lsmash_dts_specific_parameters_t *param );
 uint8_t *lsmash_create_dts_specific_info( lsmash_dts_specific_parameters_t *param, uint32_t *data_length );
+
+/* H.264 tools to make exdata (AVC specific info). */
+typedef enum
+{
+    H264_PARAMETER_SET_TYPE_SPS    = 0,
+    H264_PARAMETER_SET_TYPE_PPS    = 1,
+    H264_PARAMETER_SET_TYPE_SPSEXT = 2,
+} lsmash_h264_parameter_set_type;
+
+typedef void lsmash_h264_parameter_sets_t;
+
+typedef struct
+{
+    uint8_t AVCProfileIndication;                           /* profile_idc in sequence parameter sets */
+    uint8_t profile_compatibility;                          /* constraint_set_flags in sequence parameter sets */
+    uint8_t AVCLevelIndication;                             /* maximum level_idc in sequence parameter sets */
+    uint8_t lengthSizeMinusOne;                             /* the length in bytes of the NALUnitLength field prior to NAL unit
+                                                             * The value of this field shall be one of 0, 1, or 3
+                                                             * corresponding to a length encoded with 1, 2, or 4 bytes, respectively.
+                                                             * NALUnitLength indicates the size of a NAL unit measured in bytes,
+                                                             * and includes the size of both the one byte NAL header and the EBSP payload
+                                                             * but does not include the length field itself. */
+    uint8_t chroma_format;                                  /* chroma_format_idc in sequence parameter sets */
+    uint8_t bit_depth_luma_minus8;                          /* bit_depth_luma_minus8 in sequence parameter sets */
+    uint8_t bit_depth_chroma_minus8;                        /* bit_depth_chroma_minus8 in sequence parameter sets */
+    lsmash_h264_parameter_sets_t *sequenceParameterSets;    /* sequence parameter sets */
+    lsmash_h264_parameter_sets_t *pictureParameterSets;     /* picture paramter sets */
+    lsmash_h264_parameter_sets_t *sequenceParameterSetExt;  /* sequence parameter set extensions */
+} lsmash_h264_specific_parameters_t;
+
+int lsmash_setup_h264_specific_parameters_from_access_unit( lsmash_h264_specific_parameters_t *param, uint8_t *data, uint32_t data_length );
+void lsmash_destroy_h264_parameter_sets( lsmash_h264_specific_parameters_t *param );
+int lsmash_check_h264_parameter_set_appendable( lsmash_h264_specific_parameters_t *param, lsmash_h264_parameter_set_type ps_type, void *ps_data, uint32_t ps_length );
+int lsmash_append_h264_parameter_set( lsmash_h264_specific_parameters_t *param, lsmash_h264_parameter_set_type ps_type, void *ps_data, uint32_t ps_length );
+uint8_t *lsmash_create_h264_specific_info( lsmash_h264_specific_parameters_t *param, uint32_t *data_length );
+
+/* VC-1 tools to make exdata (VC-1 specific info). */
+typedef void lsmash_vc1_header_t;
+
+typedef struct
+{
+    /* Note: multiple_sequence, multiple_entry, slice_present and bframe_present shall be decided through overall VC-1 bitstream. */
+    uint8_t  profile;               /* the encoding profile used in the VC-1 bitstream
+                                     *   0: simple profile (not supported)
+                                     *   4: main profile   (not supported)
+                                     *  12: advanced profile
+                                     * Currently, only 12 for advanced profile is available. */
+    uint8_t  level;                 /* the highest encoding level used in the VC-1 bitstream */
+    uint8_t  cbr;                   /* 0: non-constant bitrate model
+                                     * 1: constant bitrate model */
+    uint8_t  interlaced;            /* 0: interlaced coding of frames is not used.
+                                     * 1: frames may use interlaced coding. */
+    uint8_t  multiple_sequence;     /* 0: the track contains no sequence headers (stored only in VC-1 specific info structure),
+                                     *    or
+                                     *    all sequence headers in the track are identical to the sequence header that is specified in the seqhdr field.
+                                     *    In this case, random access points are samples that contain an entry-point header.
+                                     * 1: the track may contain Sequence headers that are different from the sequence header specified in the seqhdr field.
+                                     *    In this case, random access points are samples that contain both a sequence Header and an entry-point header. */
+    uint8_t  multiple_entry;        /* 0: all entry-point headers in the track are identical to the entry-point header that is specified in the ephdr field.
+                                     * 1: the track may contain entry-point headers that are different from the entry-point header specified in the ephdr field. */
+    uint8_t  slice_present;         /* 0: frames are not coded as multiple slices.
+                                     * 1: frames may be coded as multiple slices. */
+    uint8_t  bframe_present;        /* 0: neither B-frames nor BI-frames are present in the track.
+                                     * 1: B-frames or BI-frames may be present in the track. */
+    uint32_t framerate;             /* the rounded frame rate (frames per second) of the track
+                                     * Should be set to 0xffffffff if the frame rate is not known, unspecified, or non-constant. */
+    lsmash_vc1_header_t *seqhdr;    /* a sequence header EBDU (mandatory) */
+    lsmash_vc1_header_t *ephdr;     /* an entry-point header EBDU (mandatory) */
+} lsmash_vc1_specific_parameters_t;
+
+int lsmash_setup_vc1_specific_parameters_from_access_unit( lsmash_vc1_specific_parameters_t *param, uint8_t *data, uint32_t data_length );
+void lsmash_destroy_vc1_headers( lsmash_vc1_specific_parameters_t *param );
+int lsmash_put_vc1_header( lsmash_vc1_specific_parameters_t *param, void *hdr_data, uint32_t hdr_length );
+uint8_t *lsmash_create_vc1_specific_info( lsmash_vc1_specific_parameters_t *param, uint32_t *data_length );
 
 #undef PRIVATE
 

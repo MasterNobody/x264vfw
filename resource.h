@@ -57,3 +57,4 @@
 #define IDC_EXTRA_HELP                          1039
 #define IDC_DEFAULTS                            1040
 #define IDC_BUILD_DATE                          1041
+#define IDC_KEEP_INPUT_CSP                      1042
