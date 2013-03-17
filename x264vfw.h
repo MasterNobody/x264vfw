@@ -1,7 +1,7 @@
 /*****************************************************************************
  * x264vfw.h: x264vfw main header
  *****************************************************************************
- * Copyright (C) 2003-2012 x264vfw project
+ * Copyright (C) 2003-2013 x264vfw project
  *
  * Authors: Justin Clay
  *          Laurent Aimar <fenrir@via.ecp.fr>
@@ -65,7 +65,7 @@
 
 #define X264VFW_WEBSITE "http://sourceforge.net/projects/x264vfw/"
 
-#define X264VFW_FORMAT_VERSION 2
+#define X264VFW_FORMAT_VERSION 3
 
 /* Limits */
 #define MAX_QUANT   51
@@ -77,11 +77,12 @@
 #define MAX_OUTPUT_SIZE  X264_MAX(MAX_OUTPUT_PATH, MAX_PATH)
 #define MAX_CMDLINE      4096
 
-#define COUNT_PRESET  10
-#define COUNT_TUNE    7
-#define COUNT_PROFILE 7
-#define COUNT_LEVEL   18
-#define COUNT_FOURCC  7
+#define COUNT_PRESET     10
+#define COUNT_TUNE       7
+#define COUNT_PROFILE    7
+#define COUNT_LEVEL      18
+#define COUNT_COLORSPACE 6
+#define COUNT_FOURCC     7
 
 /* Types */
 typedef struct
@@ -111,9 +112,9 @@ typedef struct
     int i_tuning;
     int i_profile;
     int i_level;
+    int i_colorspace;
     int b_fastdecode;
     int b_zerolatency;
-    int b_keep_input_csp;
     /* Rate control */
     int i_encoding_type;
     int i_qp;
@@ -215,19 +216,19 @@ typedef struct
 
     /* Decoder */
 #if defined(HAVE_FFMPEG) && X264VFW_USE_DECODER
-    int               decoder_enabled;
-    int               decoder_is_avc;
-    AVCodec           *decoder;
-    AVCodecContext    *decoder_context;
-    AVFrame           *decoder_frame;
-    void              *decoder_extradata;
-    void              *decoder_buf;
-    DWORD             decoder_buf_size;
-    AVPacket          decoder_pkt;
-    enum PixelFormat  decoder_pix_fmt;
-    int               decoder_vflip;
-    int               decoder_swap_UV;
-    struct SwsContext *sws;
+    int                decoder_enabled;
+    int                decoder_is_avc;
+    AVCodec            *decoder;
+    AVCodecContext     *decoder_context;
+    AVFrame            *decoder_frame;
+    void               *decoder_extradata;
+    void               *decoder_buf;
+    DWORD              decoder_buf_size;
+    AVPacket           decoder_pkt;
+    enum AVPixelFormat decoder_pix_fmt;
+    int                decoder_vflip;
+    int                decoder_swap_UV;
+    struct SwsContext  *sws;
 #endif
 } CODEC;
 

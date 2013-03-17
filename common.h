@@ -1,7 +1,7 @@
 /*****************************************************************************
  * common.h: misc common functions
  *****************************************************************************
- * Copyright (C) 2010-2012 x264vfw project
+ * Copyright (C) 2010-2013 x264vfw project
  *
  * Authors: Anton Mitrofanov <BugMaster@narod.ru>
  *

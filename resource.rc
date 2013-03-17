@@ -27,7 +27,7 @@ BEGIN
     DEFPUSHBUTTON   "OK",IDOK,158,109,48,14
     CTEXT           "x264vfw - H.264/MPEG-4 AVC codec",IDC_STATIC,6,6,199,8
     CTEXT           "ABOUT_IDC_BUILD_LABEL",ABOUT_IDC_BUILD_LABEL,6,18,199,18
-    CTEXT           "Copyleft 2003-2012 Laurent Aimar, Justin Clay, Min Chen,\nEric Petit, Mans Rullgard, Loren Merritt,\nAnton Mitrofanov (a.k.a. BugMaster)",IDC_STATIC,6,42,199,30
+    CTEXT           "Copyleft 2003-2013 Laurent Aimar, Justin Clay, Min Chen,\nEric Petit, Mans Rullgard, Loren Merritt,\nAnton Mitrofanov (a.k.a. BugMaster)",IDC_STATIC,6,42,199,30
     CTEXT           "This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation.",IDC_STATIC,6,78,199,26
     PUSHBUTTON      "Visit Homepage",ABOUT_IDC_HOMEPAGE,7,109,77,14
 END
@@ -50,7 +50,7 @@ BEGIN
     COMBOBOX        IDC_LEVEL,198,26,54,84,CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
     CONTROL         "Fast Decode",IDC_TUNE_FASTDECODE,"Button",BS_AUTOCHECKBOX | BS_LEFTTEXT | WS_TABSTOP,18,42,114,12
     CONTROL         "Zero Latency",IDC_TUNE_ZEROLATENCY,"Button",BS_AUTOCHECKBOX | BS_LEFTTEXT | WS_TABSTOP,18,58,114,12
-    CONTROL         "Keep Input Colorspace",IDC_KEEP_INPUT_CSP,"Button",BS_AUTOCHECKBOX | BS_LEFTTEXT | WS_TABSTOP,138,42,114,12
+    COMBOBOX        IDC_COLORSPACE,138,42,114,84,CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
     GROUPBOX        "Rate control",IDC_STATIC,6,76,258,120
     COMBOBOX        IDC_RC_MODE,18,86,234,84,CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
     LTEXT           "IDC_RC_LABEL",IDC_RC_LABEL,18,102,114,12,SS_CENTERIMAGE
@@ -140,7 +140,7 @@ BEGIN
     IDC_LEVEL               "Specify H.264 level (as defined by Annex A)"
     IDC_TUNE_FASTDECODE     "Tune options for faster decoding (less CPU demanding) at the cost of compression efficiency"
     IDC_TUNE_ZEROLATENCY    "Tune options for minimal encoding latency (zero frame-buffering) at the cost of compression efficiency"
-    IDC_KEEP_INPUT_CSP      "Keep input colorspace subsampling format (not memory layout) untouched. With this option lossless-mode will become truly lossless not only for YUV 4:2:0 input"
+    IDC_COLORSPACE          "Specify whether convert colorspace to YUV 4:2:0 or keep input colorspace subsampling format (not memory layout) untouched. With this option lossless-mode will become truly lossless not only for YUV 4:2:0 input"
     IDC_RC_MODE             "Specify bitrate distribution algorithm along the video"
     IDC_STATS_CREATE        "Create stats file with encoding statistics"
     IDC_STATS_UPDATE        "Overwrite stats file with new encoding statistics"
@@ -190,7 +190,7 @@ BEGIN
             VALUE "FileDescription",  "x264vfw - H.264/MPEG-4 AVC codec"
             VALUE "FileVersion",      VER_FULL
             VALUE "InternalName",     "x264vfw"
-            VALUE "LegalCopyright",   "Copyright (C) 2003-2012 x264vfw project"
+            VALUE "LegalCopyright",   "Copyright (C) 2003-2013 x264vfw project"
             VALUE "OriginalFilename", xstr(DLL_NAME)
             VALUE "ProductName",      "x264vfw"
             VALUE "ProductVersion",   VER_FULL

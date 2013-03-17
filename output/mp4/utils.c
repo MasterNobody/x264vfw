@@ -39,17 +39,17 @@ void lsmash_bs_empty( lsmash_bs_t *bs )
         return;
     memset( bs->data, 0, bs->alloc );
     bs->store = 0;
-    bs->pos = 0;
+    bs->pos   = 0;
 }
 
 void lsmash_bs_free( lsmash_bs_t *bs )
 {
     if( bs->data )
         free( bs->data );
-    bs->data = NULL;
+    bs->data  = NULL;
     bs->alloc = 0;
     bs->store = 0;
-    bs->pos = 0;
+    bs->pos   = 0;
 }
 
 void lsmash_bs_alloc( lsmash_bs_t *bs, uint64_t size )
@@ -176,7 +176,7 @@ void lsmash_bs_cleanup( lsmash_bs_t *bs )
     free( bs );
 }
 
-void* lsmash_bs_export_data( lsmash_bs_t *bs, uint32_t* length )
+void *lsmash_bs_export_data( lsmash_bs_t *bs, uint32_t *length )
 {
     if( !bs || !bs->data || bs->store == 0 || bs->error )
         return NULL;
@@ -285,7 +285,7 @@ int lsmash_bs_read_data( lsmash_bs_t *bs, uint32_t size )
 {
     if( !bs )
         return -1;
-    if( !size )
+    if( size == 0 )
         return 0;
     lsmash_bs_alloc( bs, bs->store + size );
     if( bs->error || !bs->stream )
@@ -325,7 +325,7 @@ void lsmash_bits_init( lsmash_bits_t *bits, lsmash_bs_t *bs )
 {
     debug_if( !bits || !bs )
         return;
-    bits->bs = bs;
+    bits->bs    = bs;
     bits->store = 0;
     bits->cache = 0;
 }
@@ -383,8 +383,7 @@ static inline uint8_t lsmash_bits_mask_lsb8( uint32_t value, uint32_t width )
     return (uint8_t)( value & ~( ~0U << width ) );
 }
 
-/* We can change value's type to unsigned int for 64-bit operation if needed. */
-void lsmash_bits_put( lsmash_bits_t *bits, uint32_t width, uint32_t value )
+void lsmash_bits_put( lsmash_bits_t *bits, uint32_t width, uint64_t value )
 {
     debug_if( !bits || !width )
         return;
@@ -418,12 +417,11 @@ void lsmash_bits_put( lsmash_bits_t *bits, uint32_t width, uint32_t value )
     }
 }
 
-/* We can change value's type to unsigned int for 64-bit operation if needed. */
-uint32_t lsmash_bits_get( lsmash_bits_t *bits, uint32_t width )
+uint64_t lsmash_bits_get( lsmash_bits_t *bits, uint32_t width )
 {
     debug_if( !bits || !width )
         return 0;
-    uint32_t value = 0;
+    uint64_t value = 0;
     if( bits->store )
     {
         if( bits->store >= width )
@@ -798,6 +796,35 @@ uint32_t lsmash_count_bits( uint32_t bits )
     bits = (bits & 0x0f0f0f0f) + ((bits >>  4) & 0x0f0f0f0f);
     bits = (bits & 0x00ff00ff) + ((bits >>  8) & 0x00ff00ff);
     return (bits & 0x0000ffff) + ((bits >> 16) & 0x0000ffff);
+}
+
+void lsmash_ifprintf( FILE *fp, int indent, const char *format, ... )
+{
+    va_list args;
+    va_start( args, format );
+    if( indent <= 10 )
+    {
+        static const char *indent_string[] =
+            {
+                "",
+                "    ",
+                "        ",
+                "            ",
+                "                ",
+                "                    ",
+                "                        ",
+                "                            ",
+                "                                ",
+                "                                    ",
+                "                                        "
+            };
+        fprintf( fp, "%s", indent_string[indent] );
+    }
+    else
+        for( int i = 0; i < indent; i++ )
+            fprintf( fp, "    " );
+    vfprintf( fp, format, args );
+    va_end( args );
 }
 
 /* for qsort function */

@@ -1,7 +1,7 @@
 /*****************************************************************************
  * avi.c: avi muxer (using libavformat)
  *****************************************************************************
- * Copyright (C) 2010-2012 x264 project
+ * Copyright (C) 2010-2013 x264 project
  *
  * Authors: Anton Mitrofanov <BugMaster@narod.ru>
  *
@@ -141,9 +141,9 @@ static int set_param( hnd_t handle, x264_param_t *p_param )
     c->time_base.den = p_param->i_timebase_den;
     c->width = p_param->i_width;
     c->height = p_param->i_height;
-    c->pix_fmt = PIX_FMT_YUV420P;
+    c->pix_fmt = AV_PIX_FMT_NONE; //not used
     c->codec_type = AVMEDIA_TYPE_VIDEO;
-    c->codec_id = CODEC_ID_H264;
+    c->codec_id = AV_CODEC_ID_H264;
     c->codec_tag = MKTAG('H','2','6','4');
 
     if( !(c->flags & CODEC_FLAG_GLOBAL_HEADER) && avformat_write_header( h->mux_fc, NULL ) )

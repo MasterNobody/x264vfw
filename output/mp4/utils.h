@@ -32,20 +32,20 @@
 
 typedef struct
 {
-    FILE *stream;     /* I/O stream */
-    uint8_t error;
-    uint8_t *data;    /* buffer for reading/writing */
-    uint64_t store;   /* valid data size on buffer */
-    uint64_t alloc;   /* total buffer size including invalid area */
-    uint64_t pos;     /* data position on buffer to be read next */
-    uint64_t written; /* data size written into "stream" already */
+    FILE    *stream;    /* I/O stream */
+    uint8_t  error;
+    uint8_t *data;      /* buffer for reading/writing */
+    uint64_t store;     /* valid data size on buffer */
+    uint64_t alloc;     /* total buffer size including invalid area */
+    uint64_t pos;       /* data position on buffer to be read next */
+    uint64_t written;   /* data size written into "stream" already */
 } lsmash_bs_t;
 
 uint64_t lsmash_bs_get_pos( lsmash_bs_t *bs );
 void lsmash_bs_empty( lsmash_bs_t *bs );
 void lsmash_bs_free( lsmash_bs_t *bs );
 void lsmash_bs_alloc( lsmash_bs_t *bs, uint64_t size );
-lsmash_bs_t* lsmash_bs_create( char* filename );
+lsmash_bs_t *lsmash_bs_create( char *filename );
 void lsmash_bs_cleanup( lsmash_bs_t *bs );
 
 /*---- bytestream writer ----*/
@@ -60,8 +60,7 @@ void lsmash_bs_put_be16_from_64( lsmash_bs_t *bs, uint64_t value );
 void lsmash_bs_put_be24_from_64( lsmash_bs_t *bs, uint64_t value );
 void lsmash_bs_put_be32_from_64( lsmash_bs_t *bs, uint64_t value );
 int lsmash_bs_write_data( lsmash_bs_t *bs );
-
-void* lsmash_bs_export_data( lsmash_bs_t *bs, uint32_t* length );
+void *lsmash_bs_export_data( lsmash_bs_t *bs, uint32_t *length );
 
 /*---- bytestream reader ----*/
 uint8_t lsmash_bs_show_byte( lsmash_bs_t *bs, uint32_t offset );
@@ -76,6 +75,7 @@ uint64_t lsmash_bs_get_be16_to_64( lsmash_bs_t *bs );
 uint64_t lsmash_bs_get_be24_to_64( lsmash_bs_t *bs );
 uint64_t lsmash_bs_get_be32_to_64( lsmash_bs_t *bs );
 int lsmash_bs_read_data( lsmash_bs_t *bs, uint32_t size );
+int lsmash_bs_import_data( lsmash_bs_t *bs, void *data, uint32_t length );
 
 /*---- bitstream ----*/
 typedef struct {
@@ -85,19 +85,19 @@ typedef struct {
 } lsmash_bits_t;
 
 void lsmash_bits_init( lsmash_bits_t* bits, lsmash_bs_t *bs );
-lsmash_bits_t* lsmash_bits_create( lsmash_bs_t *bs );
+lsmash_bits_t *lsmash_bits_create( lsmash_bs_t *bs );
 void lsmash_bits_empty( lsmash_bits_t *bits );
 void lsmash_bits_put_align( lsmash_bits_t *bits );
 void lsmash_bits_get_align( lsmash_bits_t *bits );
 void lsmash_bits_cleanup( lsmash_bits_t *bits );
 
 /*---- bitstream writer ----*/
-void lsmash_bits_put( lsmash_bits_t *bits, uint32_t width, uint32_t value );
-uint32_t lsmash_bits_get( lsmash_bits_t *bits, uint32_t width );
-lsmash_bits_t* lsmash_bits_adhoc_create();
-void lsmash_bits_adhoc_cleanup( lsmash_bits_t* bits );
-void* lsmash_bits_export_data( lsmash_bits_t* bits, uint32_t* length );
-int lsmash_bits_import_data( lsmash_bits_t* bits, void* data, uint32_t length );
+void lsmash_bits_put( lsmash_bits_t *bits, uint32_t width, uint64_t value );
+uint64_t lsmash_bits_get( lsmash_bits_t *bits, uint32_t width );
+lsmash_bits_t *lsmash_bits_adhoc_create();
+void lsmash_bits_adhoc_cleanup( lsmash_bits_t *bits );
+void* lsmash_bits_export_data( lsmash_bits_t *bits, uint32_t *length );
+int lsmash_bits_import_data( lsmash_bits_t *bits, void *data, uint32_t length );
 
 /*---- list ----*/
 
@@ -119,15 +119,15 @@ typedef struct
     uint32_t entry_count;
 } lsmash_entry_list_t;
 
-typedef void (*lsmash_entry_data_eliminator)(void* data); /* very same as free() of standard c lib; void free(void *); */
+typedef void (*lsmash_entry_data_eliminator)(void *data); /* very same as free() of standard c lib; void free(void *); */
 
 void lsmash_init_entry_list( lsmash_entry_list_t *list );
 lsmash_entry_list_t *lsmash_create_entry_list( void );
 int lsmash_add_entry( lsmash_entry_list_t *list, void *data );
-int lsmash_remove_entry_direct( lsmash_entry_list_t *list, lsmash_entry_t *entry, void* eliminator );
-int lsmash_remove_entry( lsmash_entry_list_t *list, uint32_t entry_number, void* eliminator );
-void lsmash_remove_entries( lsmash_entry_list_t *list, void* eliminator );
-void lsmash_remove_list( lsmash_entry_list_t *list, void* eliminator );
+int lsmash_remove_entry_direct( lsmash_entry_list_t *list, lsmash_entry_t *entry, void *eliminator );
+int lsmash_remove_entry( lsmash_entry_list_t *list, uint32_t entry_number, void *eliminator );
+void lsmash_remove_entries( lsmash_entry_list_t *list, void *eliminator );
+void lsmash_remove_list( lsmash_entry_list_t *list, void *eliminator );
 
 lsmash_entry_t *lsmash_get_entry( lsmash_entry_list_t *list, uint32_t entry_number );
 void *lsmash_get_entry_data( lsmash_entry_list_t *list, uint32_t entry_number );
@@ -161,8 +161,21 @@ typedef enum
     LSMASH_LOG_INFO,
 } lsmash_log_level;
 
+typedef struct
+{
+    uint64_t n;
+    uint64_t d;
+} lsmash_rational_u64_t;
+
+typedef struct
+{
+    int64_t  n;
+    uint64_t d;
+} lsmash_rational_s64_t;
+
 void lsmash_log( lsmash_log_level level, const char* message, ... );
 uint32_t lsmash_count_bits( uint32_t bits );
+void lsmash_ifprintf( FILE *fp, int indent, const char *format, ... );
 int lsmash_compare_dts( const lsmash_media_ts_t *a, const lsmash_media_ts_t *b );
 int lsmash_compare_cts( const lsmash_media_ts_t *a, const lsmash_media_ts_t *b );
 
@@ -185,6 +198,32 @@ static inline uint64_t lsmash_get_lcm( uint64_t a, uint64_t b )
     if( !a )
         return 0;
     return (a / lsmash_get_gcd( a, b )) * b;
+}
+
+static inline void lsmash_reduce_fraction( uint64_t *a, uint64_t *b )
+{
+    if( !a || !b )
+        return;
+    uint64_t gcd = lsmash_get_gcd( *a, *b );
+    if( gcd )
+    {
+        *a /= gcd;
+        *b /= gcd;
+    }
+}
+
+static inline void lsmash_reduce_fraction_su( int64_t *a, uint64_t *b )
+{
+    if( !a || !b )
+        return;
+    uint64_t c = *a > 0 ? *a : -(*a);
+    uint64_t gcd = lsmash_get_gcd( c, *b );
+    if( gcd )
+    {
+        c /= gcd;
+        *b /= gcd;
+        *a = *a > 0 ? c : -c;
+    }
 }
 
 #endif

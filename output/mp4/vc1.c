@@ -24,6 +24,7 @@
 
 #include <string.h>
 #include <stdlib.h>
+#include <inttypes.h>
 
 #include "box.h"
 
@@ -42,11 +43,11 @@ typedef struct
     uint32_t overall_wasted_length;
 } vc1_data_stream_handler_t;
 
-typedef struct
+struct lsmash_vc1_header_tag
 {
     uint8_t *ebdu;
     uint32_t ebdu_size;
-} vc1_header_t;
+};
 
 typedef enum
 {
@@ -76,7 +77,7 @@ typedef enum
     VC1_FRAME_CODING_MODE_FIELD_INTERLACE = 0x3,    /* 0b11 */
 } vc1_frame_coding_mode;
 
-static void vc1_destroy_header( vc1_header_t *hdr )
+static void vc1_destroy_header( lsmash_vc1_header_t *hdr )
 {
     if( !hdr )
         return;
@@ -91,6 +92,16 @@ void lsmash_destroy_vc1_headers( lsmash_vc1_specific_parameters_t *param )
         return;
     vc1_destroy_header( param->seqhdr );
     vc1_destroy_header( param->ephdr );
+    param->seqhdr = NULL;
+    param->ephdr  = NULL;
+}
+
+void vc1_destruct_specific_data( void *data )
+{
+    if( !data )
+        return;
+    lsmash_destroy_vc1_headers( data );
+    free( data );
 }
 
 void vc1_cleanup_parser( vc1_info_t *info )
@@ -287,10 +298,10 @@ int vc1_parse_sequence_header( vc1_info_t *info, uint8_t *ebdu, uint64_t ebdu_si
     {
         /* Update some specific parameters. */
         lsmash_vc1_specific_parameters_t *param = &info->dvc1_param;
-        vc1_header_t *seqhdr = (vc1_header_t *)param->seqhdr;
+        lsmash_vc1_header_t *seqhdr = param->seqhdr;
         if( !seqhdr )
         {
-            seqhdr = malloc( sizeof(vc1_header_t) );
+            seqhdr = malloc( sizeof(lsmash_vc1_header_t) );
             if( !seqhdr )
                 return -1;
             seqhdr->ebdu = lsmash_memdup( ebdu, ebdu_size );
@@ -381,10 +392,10 @@ int vc1_parse_entry_point_header( vc1_info_t *info, uint8_t *ebdu, uint64_t ebdu
     if( try_append )
     {
         lsmash_vc1_specific_parameters_t *param = &info->dvc1_param;
-        vc1_header_t *ephdr = (vc1_header_t *)param->ephdr;
+        lsmash_vc1_header_t *ephdr = param->ephdr;
         if( !ephdr )
         {
-            ephdr = malloc( sizeof(vc1_header_t) );
+            ephdr = malloc( sizeof(lsmash_vc1_header_t) );
             if( !ephdr )
                 return -1;
             ephdr->ebdu = lsmash_memdup( ebdu, ebdu_size );
@@ -521,8 +532,8 @@ uint8_t *lsmash_create_vc1_specific_info( lsmash_vc1_specific_parameters_t *para
     if( !param->seqhdr && !param->ephdr )
         return NULL;
     /* Calculate enough buffer size. */
-    vc1_header_t *seqhdr = (vc1_header_t *)param->seqhdr;
-    vc1_header_t *ephdr  = (vc1_header_t *)param->ephdr;
+    lsmash_vc1_header_t *seqhdr = param->seqhdr;
+    lsmash_vc1_header_t *ephdr  = param->ephdr;
     uint32_t buffer_size = ISOM_BASEBOX_COMMON_SIZE + 7 + seqhdr->ebdu_size + ephdr->ebdu_size;
     /* Set up bitstream writer. */
     uint8_t buffer[buffer_size];
@@ -533,7 +544,7 @@ uint8_t *lsmash_create_vc1_specific_info( lsmash_vc1_specific_parameters_t *para
     lsmash_bits_init( &bits, &bs );
     /* Create a VC1SpecificBox */
     lsmash_bits_put( &bits, 32, 0 );                                    /* box size */
-    lsmash_bits_put( &bits, 32, ISOM_BOX_TYPE_DVC1 );                   /* box type: 'dvc1' */
+    lsmash_bits_put( &bits, 32, ISOM_BOX_TYPE_DVC1.fourcc );            /* box type: 'dvc1' */
     lsmash_bits_put( &bits, 4, param->profile );                        /* profile */
     lsmash_bits_put( &bits, 3, param->level );                          /* level */
     lsmash_bits_put( &bits, 1, 0 );                                     /* reserved */
@@ -563,12 +574,12 @@ uint8_t *lsmash_create_vc1_specific_info( lsmash_vc1_specific_parameters_t *para
     return data;
 }
 
-static int vc1_try_to_put_header( vc1_header_t **p_hdr, uint8_t *multiple_hdr, void *hdr_data, uint32_t hdr_length )
+static int vc1_try_to_put_header( lsmash_vc1_header_t **p_hdr, uint8_t *multiple_hdr, void *hdr_data, uint32_t hdr_length )
 {
-    vc1_header_t *hdr = *p_hdr;
+    lsmash_vc1_header_t *hdr = *p_hdr;
     if( !hdr )
     {
-        hdr = lsmash_malloc_zero( sizeof(vc1_header_t) );
+        hdr = lsmash_malloc_zero( sizeof(lsmash_vc1_header_t) );
         if( !hdr )
             return -1;
     }
@@ -592,9 +603,9 @@ int lsmash_put_vc1_header( lsmash_vc1_specific_parameters_t *param, void *hdr_da
     if( data[0] != 0x00 || data[1] != 0x00 || data[2] != 0x01 )
         return -1;
     if( data[3] == 0x0F )       /* sequence header */
-        return vc1_try_to_put_header( (vc1_header_t **)&param->seqhdr, &param->multiple_sequence, hdr_data, hdr_length );
+        return vc1_try_to_put_header( &param->seqhdr, &param->multiple_sequence, hdr_data, hdr_length );
     else if( data[3] == 0x0E )  /* entry point header */
-        return vc1_try_to_put_header( (vc1_header_t **)&param->ephdr, &param->multiple_entry, hdr_data, hdr_length );
+        return vc1_try_to_put_header( &param->ephdr, &param->multiple_entry, hdr_data, hdr_length );
     return -1;
 }
 
@@ -770,4 +781,205 @@ int lsmash_setup_vc1_specific_parameters_from_access_unit( lsmash_vc1_specific_p
             return vc1_parse_succeeded( info, param );
         consecutive_zero_byte_count = 0;
     }
+}
+
+int vc1_construct_specific_parameters( lsmash_codec_specific_t *dst, lsmash_codec_specific_t *src )
+{
+    assert( dst && dst->data.structured && src && src->data.unstructured );
+    if( src->size < ISOM_BASEBOX_COMMON_SIZE + 7 )
+        return -1;
+    lsmash_vc1_specific_parameters_t *param = (lsmash_vc1_specific_parameters_t *)dst->data.structured;
+    uint8_t *data = src->data.unstructured;
+    uint64_t size = (data[0] << 24) | (data[1] << 16) | (data[2] << 8) | data[3];
+    data += ISOM_BASEBOX_COMMON_SIZE;
+    if( size == 1 )
+    {
+        size = ((uint64_t)data[0] << 56) | ((uint64_t)data[1] << 48) | ((uint64_t)data[2] << 40) | ((uint64_t)data[3] << 32)
+             | ((uint64_t)data[4] << 24) | ((uint64_t)data[5] << 16) | ((uint64_t)data[6] <<  8) |  (uint64_t)data[7];
+        data += 8;
+    }
+    if( size != src->size )
+        return -1;
+    param->profile = (data[0] >> 4) & 0x0F;
+    if( param->profile != 12 )
+        return -1;  /* We don't support profile other than 12 (Advanced profile). */
+    param->level             = (data[0] >> 1) & 0x07;
+    param->cbr               = (data[1] >> 4) & 0x01;
+    param->interlaced        = !((data[2] >> 5) & 0x01);
+    param->multiple_sequence = !((data[2] >> 4) & 0x01);
+    param->multiple_entry    = !((data[2] >> 3) & 0x01);
+    param->slice_present     = !((data[2] >> 2) & 0x01);
+    param->bframe_present    = !((data[2] >> 1) & 0x01);
+    param->framerate         = (data[3] << 24) | (data[4] << 16) | (data[5] << 8) | data[6];
+    /* Try to get seqhdr_ephdr[]. */
+    if( !param->seqhdr )
+    {
+        param->seqhdr = lsmash_malloc_zero( sizeof(lsmash_vc1_header_t) );
+        if( !param->seqhdr )
+            return -1;
+    }
+    if( !param->ephdr )
+    {
+        param->ephdr = lsmash_malloc_zero( sizeof(lsmash_vc1_header_t) );
+        if( !param->ephdr )
+            return -1;
+    }
+    lsmash_vc1_header_t *seqhdr = param->seqhdr;
+    lsmash_vc1_header_t *ephdr  = param->ephdr;
+    data += 7;
+    uint8_t *pos = data;
+    uint8_t *end = src->data.unstructured + src->size;
+    /* Find the start point of Sequence header EBDU. */
+    while( pos < end )
+    {
+        if( vc1_check_next_start_code_prefix( pos, end ) && (pos + 3 < end) && *(pos + 3) == 0x0F )
+        {
+            seqhdr->ebdu_size = 4;
+            pos += 4;
+            break;
+        }
+        ++pos;
+    }
+    /* Find the end point of Sequence header EBDU. */
+    while( pos < end )
+    {
+        if( vc1_check_next_start_code_prefix( pos, end ) )
+            break;
+        ++ seqhdr->ebdu_size;
+    }
+    /* Find the start point of Entry-point header EBDU. */
+    while( pos < end )
+    {
+        if( vc1_check_next_start_code_prefix( pos, end ) && (pos + 3 < end) && *(pos + 3) == 0x0E )
+        {
+            ephdr->ebdu_size = 4;
+            pos += 4;
+            break;
+        }
+        ++pos;
+    }
+    /* Find the end point of Entry-point header EBDU. */
+    while( pos < end )
+    {
+        if( vc1_check_next_start_code_prefix( pos, end ) )
+            break;
+        ++ ephdr->ebdu_size;
+    }
+    /* Append the Sequence header EBDU and Entry-point header EBDU if present. */
+    if( seqhdr->ebdu_size )
+    {
+        if( seqhdr->ebdu )
+            free( seqhdr->ebdu );
+        seqhdr->ebdu = lsmash_memdup( data, seqhdr->ebdu_size );
+        if( !seqhdr->ebdu )
+            return -1;
+    }
+    if( ephdr->ebdu_size )
+    {
+        if( ephdr->ebdu )
+            free( ephdr->ebdu );
+        ephdr->ebdu = lsmash_memdup( data, ephdr->ebdu_size );
+        if( !ephdr->ebdu )
+            return -1;
+    }
+    return 0;
+}
+
+int vc1_copy_codec_specific( lsmash_codec_specific_t *dst, lsmash_codec_specific_t *src )
+{
+    assert( src && src->format == LSMASH_CODEC_SPECIFIC_FORMAT_STRUCTURED && src->data.structured );
+    assert( dst && dst->format == LSMASH_CODEC_SPECIFIC_FORMAT_STRUCTURED && dst->data.structured );
+    lsmash_vc1_specific_parameters_t *src_data = (lsmash_vc1_specific_parameters_t *)src->data.structured;
+    lsmash_vc1_specific_parameters_t *dst_data = (lsmash_vc1_specific_parameters_t *)dst->data.structured;
+    lsmash_destroy_vc1_headers( dst_data );
+    *dst_data = *src_data;
+    if( !src_data->seqhdr && !src_data->ephdr )
+        return 0;
+    if( src_data->seqhdr )
+    {
+        dst_data->seqhdr = lsmash_malloc_zero( sizeof(lsmash_vc1_header_t) );
+        if( !dst_data->seqhdr )
+            return -1;
+        if( src_data->seqhdr->ebdu_size )
+        {
+            dst_data->seqhdr->ebdu = lsmash_memdup( src_data->seqhdr->ebdu, src_data->seqhdr->ebdu_size );
+            if( !dst_data->seqhdr->ebdu )
+            {
+                lsmash_destroy_vc1_headers( dst_data );
+                return -1;
+            }
+        }
+        dst_data->seqhdr->ebdu_size = src_data->seqhdr->ebdu_size;
+    }
+    if( src_data->ephdr )
+    {
+        dst_data->ephdr = lsmash_malloc_zero( sizeof(lsmash_vc1_header_t) );
+        if( !dst_data->ephdr )
+        {
+            lsmash_destroy_vc1_headers( dst_data );
+            return -1;
+        }
+        if( src_data->ephdr->ebdu_size )
+        {
+            dst_data->ephdr->ebdu = lsmash_memdup( src_data->ephdr->ebdu, src_data->ephdr->ebdu_size );
+            if( !dst_data->ephdr->ebdu )
+            {
+                lsmash_destroy_vc1_headers( dst_data );
+                return -1;
+            }
+        }
+        dst_data->ephdr->ebdu_size = src_data->ephdr->ebdu_size;
+    }
+    return 0;
+}
+
+int vc1_print_codec_specific( FILE *fp, lsmash_root_t *root, isom_box_t *box, int level )
+{
+    assert( fp && root && box );
+    int indent = level;
+    lsmash_ifprintf( fp, indent++, "[%s: VC1 Specific Box]\n", isom_4cc2str( box->type.fourcc ) );
+    lsmash_ifprintf( fp, indent, "position = %"PRIu64"\n", box->pos );
+    lsmash_ifprintf( fp, indent, "size = %"PRIu64"\n", box->size );
+    if( box->size < ISOM_BASEBOX_COMMON_SIZE + 7 )
+        return -1;
+    isom_extension_box_t *ext = (isom_extension_box_t *)box;
+    assert( ext->format == EXTENSION_FORMAT_BINARY );
+    uint8_t *data = ext->form.binary;
+    isom_skip_box_common( &data );
+    uint8_t profile = (data[0] >> 4) & 0x0F;
+    if( profile != 12 )
+        return 0;   /* We don't support profile other than 12 (Advanced profile). */
+    lsmash_ifprintf( fp, indent, "profile = %"PRIu8"\n", profile );
+    lsmash_ifprintf( fp, indent, "level = %"PRIu8"\n", (data[0] >> 1) & 0x07 );
+    lsmash_ifprintf( fp, indent, "reserved = %"PRIu8"\n", data[0] & 0x01 );
+    lsmash_ifprintf( fp, indent, "level = %"PRIu8"\n", (data[1] >> 5) & 0x07 );
+    lsmash_ifprintf( fp, indent, "cbr = %"PRIu8"\n", (data[1] >> 4) & 0x01 );
+    lsmash_ifprintf( fp, indent, "reserved1 = 0x%02"PRIx8"\n", (data[1] & 0x0F) | ((data[2] >> 6) & 0x03) );
+    lsmash_ifprintf( fp, indent, "no_interlace = %"PRIu8"\n", (data[2] >> 5) & 0x01 );
+    lsmash_ifprintf( fp, indent, "no_multiple_seq = %"PRIu8"\n", (data[2] >> 4) & 0x01 );
+    lsmash_ifprintf( fp, indent, "no_multiple_entry = %"PRIu8"\n", (data[2] >> 3) & 0x01 );
+    lsmash_ifprintf( fp, indent, "no_slice_code = %"PRIu8"\n", (data[2] >> 2) & 0x01 );
+    lsmash_ifprintf( fp, indent, "no_bframe = %"PRIu8"\n", (data[2] >> 1) & 0x01 );
+    lsmash_ifprintf( fp, indent, "reserved2 = %"PRIu8"\n", data[2] & 0x01 );
+    uint32_t framerate = (data[3] << 24) | (data[4] << 16) | (data[5] << 8) | data[6];
+    lsmash_ifprintf( fp, indent, "framerate = %"PRIu32"\n", framerate );
+    uint32_t seqhdr_ephdr_size = box->size - (data - ext->form.binary + 7);
+    if( seqhdr_ephdr_size )
+    {
+        lsmash_ifprintf( fp, indent, "seqhdr_ephdr[]\n" );
+        data += 7;
+        for( uint32_t i = 0; i < seqhdr_ephdr_size; i += 8 )
+        {
+            lsmash_ifprintf( fp, indent + 1, "" );
+            for( uint32_t j = 0; ; j++ )
+                if( j == 7 || (i + j == seqhdr_ephdr_size - 1) )
+                {
+                    fprintf( fp, "0x%02"PRIx8"\n", data[i + j] );
+                    break;
+                }
+                else
+                    fprintf( fp, "0x%02"PRIx8" ", data[i + j] );
+        }
+    }
+    return 0;
 }

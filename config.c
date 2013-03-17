@@ -1,7 +1,7 @@
 /*****************************************************************************
  * config.c: configuration dialog
  *****************************************************************************
- * Copyright (C) 2003-2012 x264vfw project
+ * Copyright (C) 2003-2013 x264vfw project
  *
  * Authors: Justin Clay
  *          Laurent Aimar <fenrir@via.ecp.fr>
@@ -80,6 +80,8 @@ extern const named_str_t x264vfw_profile_table[COUNT_PROFILE];
 
 extern const named_int_t x264vfw_level_table[COUNT_LEVEL];
 
+extern const named_int_t x264vfw_colorspace_table[COUNT_COLORSPACE];
+
 extern const named_fourcc_t x264vfw_fourcc_table[COUNT_FOURCC];
 
 extern const char * const x264vfw_muxer_names[];
@@ -99,36 +101,36 @@ static const reg_named_str_t reg_named_str_table[] =
 static const reg_int_t reg_int_table[] =
 {
     /* Basic */
-    { "avc_level",       &reg.i_level,           0,   0,  COUNT_LEVEL - 1  },
-    { "fastdecode",      &reg.b_fastdecode,      0,   0,  1                },
-    { "zerolatency",     &reg.b_zerolatency,     0,   0,  1                },
-    { "keep_input_csp",  &reg.b_keep_input_csp,  0,   0,  1                },
+    { "avc_level",       &reg.i_level,           0,   0,  COUNT_LEVEL - 1      },
+    { "fastdecode",      &reg.b_fastdecode,      0,   0,  1                    },
+    { "zerolatency",     &reg.b_zerolatency,     0,   0,  1                    },
+    { "colorspace",      &reg.i_colorspace,      0,   0,  COUNT_COLORSPACE - 1 },
     /* Rate control */
-    { "encoding_type",   &reg.i_encoding_type,   4,   0,  4                }, /* Take into account GordianKnot workaround */
-    { "quantizer",       &reg.i_qp,              23,  1,  MAX_QUANT        },
-    { "ratefactor",      &reg.i_rf_constant,     230, 10, MAX_QUANT * 10   },
-    { "passbitrate",     &reg.i_passbitrate,     800, 1,  MAX_BITRATE      },
-    { "pass_number",     &reg.i_pass,            1,   1,  2                },
-    { "fast1pass",       &reg.b_fast1pass,       0,   0,  1                },
-    { "createstats",     &reg.b_createstats,     0,   0,  1                },
-    { "updatestats",     &reg.b_updatestats,     1,   0,  1                },
+    { "encoding_type",   &reg.i_encoding_type,   4,   0,  4                    }, /* Take into account GordianKnot workaround */
+    { "quantizer",       &reg.i_qp,              23,  1,  MAX_QUANT            },
+    { "ratefactor",      &reg.i_rf_constant,     230, 10, MAX_QUANT * 10       },
+    { "passbitrate",     &reg.i_passbitrate,     800, 1,  MAX_BITRATE          },
+    { "pass_number",     &reg.i_pass,            1,   1,  2                    },
+    { "fast1pass",       &reg.b_fast1pass,       0,   0,  1                    },
+    { "createstats",     &reg.b_createstats,     0,   0,  1                    },
+    { "updatestats",     &reg.b_updatestats,     1,   0,  1                    },
     /* Output */
-    { "output_mode",     &reg.i_output_mode,     0,   0,  1                },
-    { "fourcc_num",      &reg.i_fourcc,          0,   0,  COUNT_FOURCC - 1 },
+    { "output_mode",     &reg.i_output_mode,     0,   0,  1                    },
+    { "fourcc_num",      &reg.i_fourcc,          0,   0,  COUNT_FOURCC - 1     },
 #if X264VFW_USE_VIRTUALDUB_HACK
-    { "vd_hack",         &reg.b_vd_hack,         0,   0,  1                },
+    { "vd_hack",         &reg.b_vd_hack,         0,   0,  1                    },
 #endif
     /* Sample Aspect Ratio */
-    { "sar_width",       &reg.i_sar_width,       1,   1,  9999             },
-    { "sar_height",      &reg.i_sar_height,      1,   1,  9999             },
+    { "sar_width",       &reg.i_sar_width,       1,   1,  9999                 },
+    { "sar_height",      &reg.i_sar_height,      1,   1,  9999                 },
     /* Debug */
-    { "log_level",       &reg.i_log_level,       2,   0,  4                },
-    { "psnr",            &reg.b_psnr,            1,   0,  1                },
-    { "ssim",            &reg.b_ssim,            1,   0,  1                },
-    { "no_asm",          &reg.b_no_asm,          0,   0,  1                },
+    { "log_level",       &reg.i_log_level,       2,   0,  4                    },
+    { "psnr",            &reg.b_psnr,            1,   0,  1                    },
+    { "ssim",            &reg.b_ssim,            1,   0,  1                    },
+    { "no_asm",          &reg.b_no_asm,          0,   0,  1                    },
     /* Decoder && AVI Muxer */
 #if defined(HAVE_FFMPEG) && X264VFW_USE_DECODER
-    { "disable_decoder", &reg.b_disable_decoder, 0,   0,  1                }
+    { "disable_decoder", &reg.b_disable_decoder, 0,   0,  1                    }
 #endif
 };
 
@@ -401,9 +403,15 @@ static void dlg_update_items(CONFIG_DATA *cfg_data)
             SendDlgItemMessage(hMainDlg, IDC_LEVEL, CB_ADDSTRING, 0, (LPARAM)x264vfw_level_table[i].name);
     }
     SendDlgItemMessage(hMainDlg, IDC_LEVEL, CB_SETCURSEL, config->i_level, 0);
+    if (SendMessage(GetDlgItem(hMainDlg, IDC_COLORSPACE), CB_GETCOUNT, 0, 0) == 0)
+    {
+        int i;
+        for (i = 0; i < COUNT_COLORSPACE; i++)
+            SendDlgItemMessage(hMainDlg, IDC_COLORSPACE, CB_ADDSTRING, 0, (LPARAM)x264vfw_colorspace_table[i].name);
+    }
+    SendDlgItemMessage(hMainDlg, IDC_COLORSPACE, CB_SETCURSEL, config->i_colorspace, 0);
     CheckDlgButton(hMainDlg, IDC_TUNE_FASTDECODE, config->b_fastdecode);
     CheckDlgButton(hMainDlg, IDC_TUNE_ZEROLATENCY, config->b_zerolatency);
-    CheckDlgButton(hMainDlg, IDC_KEEP_INPUT_CSP, config->b_keep_input_csp);
     /* Rate control */
     if (SendMessage(GetDlgItem(hMainDlg, IDC_RC_MODE), CB_GETCOUNT, 0, 0) == 0)
     {
@@ -764,6 +772,10 @@ INT_PTR CALLBACK x264vfw_callback_main(HWND hDlg, UINT uMsg, WPARAM wParam, LPAR
                             config->i_level = SendDlgItemMessage(hMainDlg, IDC_LEVEL, CB_GETCURSEL, 0, 0);
                             break;
 
+                        case IDC_COLORSPACE:
+                            config->i_colorspace = SendDlgItemMessage(hMainDlg, IDC_COLORSPACE, CB_GETCURSEL, 0, 0);
+                            break;
+
                         case IDC_RC_MODE:
                             config->i_pass = 1;
                             config->b_fast1pass = FALSE;
@@ -849,10 +861,6 @@ INT_PTR CALLBACK x264vfw_callback_main(HWND hDlg, UINT uMsg, WPARAM wParam, LPAR
 
                         case IDC_TUNE_ZEROLATENCY:
                             config->b_zerolatency = IsDlgButtonChecked(hMainDlg, IDC_TUNE_ZEROLATENCY);
-                            break;
-
-                        case IDC_KEEP_INPUT_CSP:
-                            config->b_keep_input_csp = IsDlgButtonChecked(hMainDlg, IDC_KEEP_INPUT_CSP);
                             break;
 
                         case IDC_STATS_CREATE:

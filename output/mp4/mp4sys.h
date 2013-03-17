@@ -81,7 +81,7 @@ typedef enum {
     MP4SYS_VISUAL_PLI_Simple_FBA_PL2                 = 0x64, /* 0b01100100, Simple FBA Profile/Level 2 */
     MP4SYS_VISUAL_PLI_Basic_Animated_Texture_PL1     = 0x71, /* 0b01110001, Basic Animated Texture Profile/Level 1 */
     MP4SYS_VISUAL_PLI_Basic_Animated_Texture_PL2     = 0x72, /* 0b01110010, Basic Animated Texture Profile/Level 2 */
-    MP4SYS_VISUAL_PLI_H264_AVC                       = 0x7F, /* ISO/IEC 14496-10 Advanced Video Codec / H.264, defined in ISO/IEC 14496-1:2001/Amd.7:2004 */
+    MP4SYS_VISUAL_PLI_H264_AVC                       = 0x7F, /* ISO/IEC 14496-10 Advanced Video Codec / H.264, defined in ISO/IEC 14496-1:2010 */
                                                              /* NOTE: Some other implementations seem to use 0x15(0b00010101) for AVC, but I think that's wrong. */
     MP4SYS_VISUAL_PLI_Hybrid_PL1                     = 0x81, /* 0b10000001, Hybrid Profile/Level 1 */
     MP4SYS_VISUAL_PLI_Hybrid_PL2                     = 0x82, /* 0b10000010, Hybrid Profile/Level 2 */
@@ -131,6 +131,12 @@ typedef struct {
     uint32_t dsi_payload_length ;   /* size of dsi_payload */
 } mp4sys_ES_Descriptor_params_t;
 
+struct lsmash_mp4sys_decoder_specific_info_tag
+{
+    uint8_t *payload;
+    uint32_t payload_length;
+};
+
 #ifndef MP4SYS_INTERNAL
 
 #include "utils.h"
@@ -161,9 +167,8 @@ int mp4sys_add_DecoderConfigDescriptor(
 int mp4sys_add_SLConfigDescriptor( mp4sys_ES_Descriptor_t* esd );
 int mp4sys_add_ES_ID_Inc( mp4sys_ObjectDescriptor_t* od, uint32_t Track_ID);
 
-/* ES_ID might be usually 0 or lower 16 bits of the TrackID
-   14496-14 says, "set to 0 as stored; when built into a stream, the lower 16 bits of the TrackID are used."
-   I'm not sure about actual meaning of "stored" and "built into a stream", but maybe 0 will do in stsd(esds). */
+/* ES_ID of the ES Descriptor is stored as 0 when the ES Descriptor is built into sample descriptions in MP4 file format
+ * since the lower 16 bits of the track_ID is used, instead of ES_ID, for the identifier of the elemental stream within the track. */
 mp4sys_ES_Descriptor_t* mp4sys_create_ES_Descriptor( uint16_t ES_ID );
 mp4sys_ObjectDescriptor_t* mp4sys_create_ObjectDescriptor( uint16_t ObjectDescriptorID );
 int mp4sys_to_InitialObjectDescriptor(
@@ -179,7 +184,8 @@ int mp4sys_to_InitialObjectDescriptor(
 uint32_t mp4sys_update_ES_Descriptor_size( mp4sys_ES_Descriptor_t* esd );
 uint32_t mp4sys_update_ObjectDescriptor_size( mp4sys_ObjectDescriptor_t* od );
 
-int mp4sys_write_ES_Descriptor( lsmash_bs_t *bs, mp4sys_ES_Descriptor_t* esd );
+int mp4sys_put_ES_Descriptor( lsmash_bs_t *bs, mp4sys_ES_Descriptor_t *esd );
+int mp4sys_write_ES_Descriptor( lsmash_bs_t *bs, mp4sys_ES_Descriptor_t *esd );
 int mp4sys_write_ObjectDescriptor( lsmash_bs_t *bs, mp4sys_ObjectDescriptor_t* od );
 
 int mp4sys_update_DecoderConfigDescriptor(
@@ -191,11 +197,11 @@ int mp4sys_update_DecoderConfigDescriptor(
 
 #ifdef LSMASH_DEMUXER_ENABLED
 mp4sys_ES_Descriptor_t *mp4sys_duplicate_ES_Descriptor( mp4sys_ES_Descriptor_t *src );
+#endif
 
 mp4sys_ES_Descriptor_t *mp4sys_get_ES_Descriptor( lsmash_bs_t *bs );
 
 int mp4sys_setup_summary_from_DecoderSpecificInfo( lsmash_audio_summary_t *summary, mp4sys_ES_Descriptor_t *esd );
-#endif
 
 /* to facilitate to make ES_Descriptor */
 mp4sys_ES_Descriptor_t* mp4sys_setup_ES_Descriptor( mp4sys_ES_Descriptor_params_t* params );

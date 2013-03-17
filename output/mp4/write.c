@@ -31,48 +31,42 @@
 #include "mp4a.h"
 #include "mp4sys.h"
 #include "write.h"
+#include "description.h"
 
-static void isom_bs_put_basebox_common( lsmash_bs_t *bs, isom_box_t *box )
+static int isom_write_unknown_box( lsmash_bs_t *bs, isom_unknown_box_t *unknown_box )
 {
-    if( box->size > UINT32_MAX )
-    {
-        lsmash_bs_put_be32( bs, 1 );
-        lsmash_bs_put_be32( bs, box->type );
-        lsmash_bs_put_be64( bs, box->size );    /* largesize */
-    }
-    else
-    {
-        lsmash_bs_put_be32( bs, (uint32_t)box->size );
-        lsmash_bs_put_be32( bs, box->type );
-    }
-    if( box->type == ISOM_BOX_TYPE_UUID )
-        lsmash_bs_put_bytes( bs, 16, box->usertype );
+    if( !unknown_box || (unknown_box->manager & LSMASH_INCOMPLETE_BOX) )
+        return 0;
+    isom_bs_put_box_common( bs, unknown_box );
+    if( unknown_box->unknown_field && unknown_box->unknown_size )
+        lsmash_bs_put_bytes( bs, unknown_box->unknown_size, unknown_box->unknown_field );
+    return lsmash_bs_write_data( bs );
 }
 
-static void isom_bs_put_fullbox_common( lsmash_bs_t *bs, isom_box_t *box )
+static void isom_bs_put_qt_color_table( lsmash_bs_t *bs, isom_qt_color_table_t *color_table )
 {
-    isom_bs_put_basebox_common( bs, box );
-    lsmash_bs_put_byte( bs, box->version );
-    lsmash_bs_put_be24( bs, box->flags );
+    lsmash_bs_put_be32( bs, color_table->seed );
+    lsmash_bs_put_be16( bs, color_table->flags );
+    lsmash_bs_put_be16( bs, color_table->size );
+    isom_qt_color_array_t *array = color_table->array;
+    if( array )
+        for( uint16_t i = 0; i <= color_table->size; i++ )
+        {
+            lsmash_bs_put_be16( bs, array[i].value );
+            lsmash_bs_put_be16( bs, array[i].r );
+            lsmash_bs_put_be16( bs, array[i].g );
+            lsmash_bs_put_be16( bs, array[i].b );
+        }
 }
 
-static void isom_bs_put_box_common( lsmash_bs_t *bs, void *box )
+static int isom_write_ctab( lsmash_bs_t *bs, isom_moov_t *moov )
 {
-    if( !box )
-    {
-        bs->error = 1;
-        return;
-    }
-    isom_box_t *parent = ((isom_box_t *)box)->parent;
-    if( parent && parent->type == ISOM_BOX_TYPE_STSD )
-    {
-        isom_bs_put_basebox_common( bs, (isom_box_t *)box );
-        return;
-    }
-    if( isom_is_fullbox( box ) )
-        isom_bs_put_fullbox_common( bs, (isom_box_t *)box );
-    else
-        isom_bs_put_basebox_common( bs, (isom_box_t *)box );
+    isom_ctab_t *ctab = moov->ctab;
+    if( !ctab )
+        return 0;
+    isom_bs_put_box_common( bs, ctab );
+    isom_bs_put_qt_color_table( bs, &ctab->color_table );
+    return lsmash_bs_write_data( bs );
 }
 
 static int isom_write_tkhd( lsmash_bs_t *bs, isom_trak_entry_t *trak )
@@ -244,10 +238,10 @@ static int isom_write_mdhd( lsmash_bs_t *bs, isom_trak_entry_t *trak )
     return lsmash_bs_write_data( bs );
 }
 
-static int isom_write_hdlr( lsmash_bs_t *bs, isom_hdlr_t *hdlr, uint32_t parent_type )
+static int isom_write_hdlr( lsmash_bs_t *bs, isom_hdlr_t *hdlr, lsmash_box_type_t parent_type )
 {
     if( !hdlr )
-        return parent_type == ISOM_BOX_TYPE_MINF ? 0 : -1;
+        return lsmash_check_box_type_identical( parent_type, ISOM_BOX_TYPE_MINF ) ? 0 : -1;
     isom_bs_put_box_common( bs, hdlr );
     lsmash_bs_put_be32( bs, hdlr->componentType );
     lsmash_bs_put_be32( bs, hdlr->componentSubtype );
@@ -353,17 +347,17 @@ static int isom_write_dref( lsmash_bs_t *bs, isom_dref_t *dref )
         if( !data )
             return -1;
         isom_bs_put_box_common( bs, data );
-        if( data->type == ISOM_BOX_TYPE_URN )
+        if( lsmash_check_box_type_identical( data->type, ISOM_BOX_TYPE_URN ) )
             lsmash_bs_put_bytes( bs, data->name_length, data->name );
         lsmash_bs_put_bytes( bs, data->location_length, data->location );
     }
     return lsmash_bs_write_data( bs );
 }
 
-static int isom_write_dinf( lsmash_bs_t *bs, isom_dinf_t *dinf, uint32_t parent_type )
+static int isom_write_dinf( lsmash_bs_t *bs, isom_dinf_t *dinf, lsmash_box_type_t parent_type )
 {
     if( !dinf )
-        return parent_type == ISOM_BOX_TYPE_MINF ? -1 : 0;
+        return lsmash_check_box_type_identical( parent_type, ISOM_BOX_TYPE_MINF ) ? -1 : 0;
     isom_bs_put_box_common( bs, dinf );
     if( lsmash_bs_write_data( bs ) )
         return -1;
@@ -398,21 +392,27 @@ static int isom_write_clap( lsmash_bs_t *bs, isom_clap_t *clap )
 
 static int isom_write_colr( lsmash_bs_t *bs, isom_colr_t *colr )
 {
-    if( !colr || colr->color_parameter_type == QT_COLOR_PARAMETER_TYPE_PROF )
+    if( !colr
+     || (colr->color_parameter_type != ISOM_COLOR_PARAMETER_TYPE_NCLX
+      && colr->color_parameter_type !=   QT_COLOR_PARAMETER_TYPE_NCLC) )
         return 0;
     isom_bs_put_box_common( bs, colr );
     lsmash_bs_put_be32( bs, colr->color_parameter_type );
     lsmash_bs_put_be16( bs, colr->primaries_index );
     lsmash_bs_put_be16( bs, colr->transfer_function_index );
     lsmash_bs_put_be16( bs, colr->matrix_index );
+    if( colr->color_parameter_type == ISOM_COLOR_PARAMETER_TYPE_NCLX )
+        lsmash_bs_put_byte( bs, (colr->full_range_flag << 7) | colr->reserved );
     return lsmash_bs_write_data( bs );
 }
 
 static int isom_write_gama( lsmash_bs_t *bs, isom_gama_t *gama )
 {
+    if( !gama || !gama->parent )
+        return 0;
     /* Note: 'gama' box is superseded by 'colr' box.
      * Therefore, writers of QTFF should never write both 'colr' and 'gama' box into an Image Description. */
-    if( !gama || (gama->parent && ((isom_visual_entry_t *)gama->parent)->colr) )
+    if( isom_get_extension_box( &((isom_visual_entry_t *)gama->parent)->extensions, QT_BOX_TYPE_COLR ) )
         return 0;
     isom_bs_put_box_common( bs, gama );
     lsmash_bs_put_be32( bs, gama->level );
@@ -467,6 +467,7 @@ static int isom_write_esds( lsmash_bs_t *bs, isom_esds_t *esds )
     return mp4sys_write_ES_Descriptor( bs, esds->ES );
 }
 
+#if 0
 static int isom_put_ps_entries( lsmash_bs_t *bs, lsmash_entry_list_t *list )
 {
     for( lsmash_entry_t *entry = list->head; entry; entry = entry->next )
@@ -509,6 +510,7 @@ static int isom_write_avcC( lsmash_bs_t *bs, isom_avcC_t *avcC )
     }
     return lsmash_bs_write_data( bs );
 }
+#endif
 
 static int isom_write_btrt( lsmash_bs_t *bs, isom_btrt_t *btrt )
 {
@@ -535,19 +537,42 @@ static int isom_write_visual_extensions( lsmash_bs_t *bs, isom_visual_entry_t *v
 {
     if( !visual )
         return 0;
-    if( isom_write_avcC( bs, visual->avcC )
-     || isom_write_btrt( bs, visual->btrt )
-     || isom_write_esds( bs, visual->esds )
-     || isom_write_glbl( bs, visual->glbl )
-     || isom_write_colr( bs, visual->colr )
-     || isom_write_gama( bs, visual->gama )
-     || isom_write_fiel( bs, visual->fiel )
-     || isom_write_cspc( bs, visual->cspc )
-     || isom_write_sgbt( bs, visual->sgbt )
-     || isom_write_stsl( bs, visual->stsl )
-     || isom_write_clap( bs, visual->clap )
-     || isom_write_pasp( bs, visual->pasp ) )
-        return -1;
+    for( lsmash_entry_t *entry = visual->extensions.head; entry; entry = entry->next )
+    {
+        isom_extension_box_t *ext = (isom_extension_box_t *)entry->data;
+        if( !ext )
+            continue;
+        if( ext->format == EXTENSION_FORMAT_BINARY )
+        {
+            lsmash_bs_put_bytes( bs, ext->size, ext->form.binary );
+            if( lsmash_bs_write_data( bs ) )
+                return -1;
+            continue;
+        }
+        int ret;
+        if( lsmash_check_box_type_identical( ext->type, ISOM_BOX_TYPE_STSL ) )
+            ret = isom_write_stsl( bs, ext->form.box );
+        else if( lsmash_check_box_type_identical( ext->type, ISOM_BOX_TYPE_BTRT ) )
+            ret = isom_write_btrt( bs, ext->form.box );
+        else if( lsmash_check_box_type_identical( ext->type, QT_BOX_TYPE_GLBL ) )
+            ret = isom_write_glbl( bs, ext->form.box );
+        else if( lsmash_check_box_type_identical( ext->type, QT_BOX_TYPE_GAMA ) )
+            ret = isom_write_gama( bs, ext->form.box );
+        else if( lsmash_check_box_type_identical( ext->type, QT_BOX_TYPE_FIEL ) )
+            ret = isom_write_fiel( bs, ext->form.box );
+        else if( lsmash_check_box_type_identical( ext->type, QT_BOX_TYPE_CSPC ) )
+            ret = isom_write_cspc( bs, ext->form.box );
+        else if( lsmash_check_box_type_identical( ext->type, QT_BOX_TYPE_SGBT ) )
+            ret = isom_write_sgbt( bs, ext->form.box );
+        else
+            continue;
+        if( ret )
+            return -1;
+    }
+    if( isom_write_colr( bs, isom_get_extension_box( &visual->extensions, ISOM_BOX_TYPE_COLR ) )
+     || isom_write_clap( bs, isom_get_extension_box( &visual->extensions, ISOM_BOX_TYPE_CLAP ) )
+     || isom_write_pasp( bs, isom_get_extension_box( &visual->extensions, ISOM_BOX_TYPE_PASP ) ) )
+        return -1;  /* FIXME: multiple 'colr' boxes can be present. */
     return 0;
 }
 
@@ -578,33 +603,6 @@ static int isom_write_mp4a( lsmash_bs_t *bs, isom_mp4a_t *mp4a )
     return lsmash_bs_write_data( bs );
 }
 
-static int isom_write_terminator( lsmash_bs_t *bs, isom_terminator_t *terminator )
-{
-    if( !terminator )
-        return -1;
-    isom_bs_put_box_common( bs, terminator );
-    return lsmash_bs_write_data( bs );
-}
-
-static int isom_write_wave( lsmash_bs_t *bs, isom_wave_t *wave )
-{
-    if( !wave )
-        return 0;
-    isom_bs_put_box_common( bs, wave );
-    if( lsmash_bs_write_data( bs ) )
-        return -1;
-    if( isom_write_frma( bs, wave->frma )
-     || isom_write_enda( bs, wave->enda )
-     || isom_write_mp4a( bs, wave->mp4a ) )
-        return -1;
-    lsmash_bs_put_bytes( bs, wave->exdata_length, wave->exdata );
-    if( lsmash_bs_write_data( bs ) )
-        return -1;
-    if( isom_write_esds( bs, wave->esds ) )
-        return -1;
-    return isom_write_terminator( bs, wave->terminator );
-}
-
 static int isom_write_chan( lsmash_bs_t *bs, isom_chan_t *chan )
 {
     if( !chan )
@@ -628,15 +626,111 @@ static int isom_write_chan( lsmash_bs_t *bs, isom_chan_t *chan )
     return lsmash_bs_write_data( bs );
 }
 
+static int isom_write_terminator( lsmash_bs_t *bs, isom_terminator_t *terminator )
+{
+    if( !terminator )
+        return -1;
+    isom_bs_put_box_common( bs, terminator );
+    return lsmash_bs_write_data( bs );
+}
+
+static int isom_write_wave( lsmash_bs_t *bs, isom_wave_t *wave )
+{
+    if( !wave )
+        return 0;
+    isom_bs_put_box_common( bs, wave );
+    if( lsmash_bs_write_data( bs ) )
+        return -1;
+    if( isom_write_frma( bs, wave->frma )
+     || isom_write_enda( bs, wave->enda ) )
+        return -1;
+    for( lsmash_entry_t *entry = wave->extensions.head; entry; entry = entry->next )
+    {
+        isom_extension_box_t *ext = (isom_extension_box_t *)entry->data;
+        if( !ext )
+            continue;
+        if( lsmash_check_box_type_identical( ext->type, QT_BOX_TYPE_TERMINATOR ) )
+            continue;   /* Terminator Box must be placed at the end of this box. */
+        if( lsmash_check_box_type_identical( ext->type, QT_BOX_TYPE_CHAN ) )
+            continue;   /* Channel Layout Box should be placed after decoder specific info. */
+        if( ext->format == EXTENSION_FORMAT_BINARY )
+        {
+            lsmash_bs_put_bytes( bs, ext->size, ext->form.binary );
+            if( lsmash_bs_write_data( bs ) )
+                return -1;
+            continue;
+        }
+        if( lsmash_check_box_type_identical( ext->type, QT_BOX_TYPE_GLBL ) )
+        {
+            if( isom_write_glbl( bs, ext->form.box ) )
+                return -1;
+        }
+        else
+        {
+            isom_unknown_box_t *unknown = (isom_unknown_box_t *)ext->form.box;
+            if( (unknown->manager & LSMASH_UNKNOWN_BOX)
+             && isom_write_unknown_box( bs, unknown ) )
+                return -1;
+        }
+    }
+    if( isom_write_mp4a( bs, wave->mp4a )
+     || isom_write_esds( bs, isom_get_extension_box( &wave->extensions, ISOM_BOX_TYPE_ESDS ) )
+     || isom_write_glbl( bs, isom_get_extension_box( &wave->extensions, QT_BOX_TYPE_GLBL ) ) )
+        return -1;
+    /* Write Channel Layout Box if present. */
+    isom_extension_box_t *ext = isom_get_sample_description_extension( &wave->extensions, QT_BOX_TYPE_CHAN );
+    if( ext )
+    {
+        if( ext->format == EXTENSION_FORMAT_BINARY )
+        {
+            lsmash_bs_put_bytes( bs, ext->size, ext->form.binary );
+            if( lsmash_bs_write_data( bs ) )
+                return -1;
+        }
+        else if( isom_write_chan( bs, ext->form.box ) )
+            return -1;
+    }
+    /* Write Terminator Box. */
+    isom_terminator_t *terminator = isom_get_extension_box( &wave->extensions, QT_BOX_TYPE_TERMINATOR );
+    return isom_write_terminator( bs, terminator ? terminator : wave->terminator );
+}
+
 static int isom_write_audio_extensions( lsmash_bs_t *bs, isom_audio_entry_t *audio )
 {
     if( !audio )
         return 0;
-    if( isom_write_esds( bs, audio->esds )
-     || isom_write_wave( bs, audio->wave )
-     || isom_write_chan( bs, audio->chan ) )
+    for( lsmash_entry_t *entry = audio->extensions.head; entry; entry = entry->next )
+    {
+        isom_extension_box_t *ext = (isom_extension_box_t *)entry->data;
+        if( !ext )
+            continue;
+        if( lsmash_check_box_type_identical( ext->type, QT_BOX_TYPE_CHAN ) )
+            continue;   /* Channel Layout Box should be placed after decoder specific info. */
+        if( ext->format == EXTENSION_FORMAT_BINARY )
+        {
+            lsmash_bs_put_bytes( bs, ext->size, ext->form.binary );
+            if( lsmash_bs_write_data( bs ) )
+                return -1;
+            continue;
+        }
+        if( lsmash_check_box_type_identical( ext->type, QT_BOX_TYPE_GLBL )
+         && isom_write_glbl( bs, ext->form.box ) )
+            return -1;
+    }
+    if( isom_write_esds( bs, isom_get_extension_box( &audio->extensions, ISOM_BOX_TYPE_ESDS ) )
+     || isom_write_wave( bs, isom_get_extension_box( &audio->extensions, QT_BOX_TYPE_WAVE ) )
+     || isom_write_glbl( bs, isom_get_extension_box( &audio->extensions, QT_BOX_TYPE_GLBL ) ) )
         return -1;
-    return 0;
+    /* Write Channel Layout Box if present. */
+    isom_extension_box_t *ext = isom_get_sample_description_extension( &audio->extensions, QT_BOX_TYPE_CHAN );
+    if( !ext )
+        return 0;
+    if( ext->format == EXTENSION_FORMAT_BINARY )
+    {
+        lsmash_bs_put_bytes( bs, ext->size, ext->form.binary );
+        return lsmash_bs_write_data( bs );
+    }
+    return isom_write_chan( bs, ext->form.box );
 }
 
 static int isom_write_visual_entry( lsmash_bs_t *bs, lsmash_entry_t *entry )
@@ -661,7 +755,8 @@ static int isom_write_visual_entry( lsmash_bs_t *bs, lsmash_entry_t *entry )
     lsmash_bs_put_bytes( bs, 32, data->compressorname );
     lsmash_bs_put_be16( bs, data->depth );
     lsmash_bs_put_be16( bs, data->color_table_ID );
-    lsmash_bs_put_bytes( bs, data->exdata_length, data->exdata );
+    if( data->color_table_ID == 0 )
+        isom_bs_put_qt_color_table( bs, &data->color_table );
     if( lsmash_bs_write_data( bs ) )
         return -1;
     return isom_write_visual_extensions( bs, data );
@@ -701,7 +796,6 @@ static int isom_write_audio_entry( lsmash_bs_t *bs, lsmash_entry_t *entry )
         lsmash_bs_put_be32( bs, data->constBytesPerAudioPacket );
         lsmash_bs_put_be32( bs, data->constLPCMFramesPerAudioPacket );
     }
-    lsmash_bs_put_bytes( bs, data->exdata_length, data->exdata );
     if( lsmash_bs_write_data( bs ) )
         return -1;
     return isom_write_audio_extensions( bs, data );
@@ -815,6 +909,120 @@ static int isom_write_stsd( lsmash_bs_t *bs, isom_trak_entry_t *trak )
     isom_stsd_t *stsd = trak->mdia->minf->stbl->stsd;
     if( !stsd || !stsd->list || !stsd->list->head )
         return -1;
+    static struct write_table_tag
+    {
+        lsmash_codec_type_t type;
+        int (*func)( lsmash_bs_t *, lsmash_entry_t * );
+    } write_table[128] = { { LSMASH_CODEC_TYPE_INITIALIZER, NULL } };
+    if( !write_table[0].func )
+    {
+        /* Initialize the table. */
+        int i = 0;
+#define ADD_WRITE_TABLE_ELEMENT( type, func ) write_table[i++] = (struct write_table_tag){ type, func }
+        ADD_WRITE_TABLE_ELEMENT( ISOM_CODEC_TYPE_AVC1_VIDEO, isom_write_visual_entry );
+        ADD_WRITE_TABLE_ELEMENT( ISOM_CODEC_TYPE_AVC2_VIDEO, isom_write_visual_entry );
+        ADD_WRITE_TABLE_ELEMENT( ISOM_CODEC_TYPE_AVC1_VIDEO, isom_write_visual_entry );
+        ADD_WRITE_TABLE_ELEMENT( ISOM_CODEC_TYPE_VC_1_VIDEO, isom_write_visual_entry );
+        ADD_WRITE_TABLE_ELEMENT( QT_CODEC_TYPE_2VUY_VIDEO,   isom_write_visual_entry );
+        ADD_WRITE_TABLE_ELEMENT( QT_CODEC_TYPE_APCH_VIDEO,   isom_write_visual_entry );
+        ADD_WRITE_TABLE_ELEMENT( QT_CODEC_TYPE_APCN_VIDEO,   isom_write_visual_entry );
+        ADD_WRITE_TABLE_ELEMENT( QT_CODEC_TYPE_APCS_VIDEO,   isom_write_visual_entry );
+        ADD_WRITE_TABLE_ELEMENT( QT_CODEC_TYPE_APCO_VIDEO,   isom_write_visual_entry );
+        ADD_WRITE_TABLE_ELEMENT( QT_CODEC_TYPE_AP4H_VIDEO,   isom_write_visual_entry );
+        ADD_WRITE_TABLE_ELEMENT( QT_CODEC_TYPE_DVC_VIDEO,    isom_write_visual_entry );
+        ADD_WRITE_TABLE_ELEMENT( QT_CODEC_TYPE_DVCP_VIDEO,   isom_write_visual_entry );
+        ADD_WRITE_TABLE_ELEMENT( QT_CODEC_TYPE_DVPP_VIDEO,   isom_write_visual_entry );
+        ADD_WRITE_TABLE_ELEMENT( QT_CODEC_TYPE_DV5N_VIDEO,   isom_write_visual_entry );
+        ADD_WRITE_TABLE_ELEMENT( QT_CODEC_TYPE_DV5P_VIDEO,   isom_write_visual_entry );
+        ADD_WRITE_TABLE_ELEMENT( QT_CODEC_TYPE_DVH2_VIDEO,   isom_write_visual_entry );
+        ADD_WRITE_TABLE_ELEMENT( QT_CODEC_TYPE_DVH3_VIDEO,   isom_write_visual_entry );
+        ADD_WRITE_TABLE_ELEMENT( QT_CODEC_TYPE_DVH5_VIDEO,   isom_write_visual_entry );
+        ADD_WRITE_TABLE_ELEMENT( QT_CODEC_TYPE_DVH6_VIDEO,   isom_write_visual_entry );
+        ADD_WRITE_TABLE_ELEMENT( QT_CODEC_TYPE_DVHP_VIDEO,   isom_write_visual_entry );
+        ADD_WRITE_TABLE_ELEMENT( QT_CODEC_TYPE_DVHQ_VIDEO,   isom_write_visual_entry );
+        ADD_WRITE_TABLE_ELEMENT( QT_CODEC_TYPE_ULRA_VIDEO,   isom_write_visual_entry );
+        ADD_WRITE_TABLE_ELEMENT( QT_CODEC_TYPE_ULRG_VIDEO,   isom_write_visual_entry );
+        ADD_WRITE_TABLE_ELEMENT( QT_CODEC_TYPE_ULY2_VIDEO,   isom_write_visual_entry );
+        ADD_WRITE_TABLE_ELEMENT( QT_CODEC_TYPE_ULY0_VIDEO,   isom_write_visual_entry );
+        ADD_WRITE_TABLE_ELEMENT( QT_CODEC_TYPE_V210_VIDEO,   isom_write_visual_entry );
+        ADD_WRITE_TABLE_ELEMENT( QT_CODEC_TYPE_V216_VIDEO,   isom_write_visual_entry );
+        ADD_WRITE_TABLE_ELEMENT( QT_CODEC_TYPE_V308_VIDEO,   isom_write_visual_entry );
+        ADD_WRITE_TABLE_ELEMENT( QT_CODEC_TYPE_V408_VIDEO,   isom_write_visual_entry );
+        ADD_WRITE_TABLE_ELEMENT( QT_CODEC_TYPE_V410_VIDEO,   isom_write_visual_entry );
+        ADD_WRITE_TABLE_ELEMENT( QT_CODEC_TYPE_YUV2_VIDEO,   isom_write_visual_entry );
+#ifdef LSMASH_DEMUXER_ENABLED
+        ADD_WRITE_TABLE_ELEMENT( ISOM_CODEC_TYPE_MP4V_VIDEO, isom_write_visual_entry );
+#endif
+#if 0
+        ADD_WRITE_TABLE_ELEMENT( ISOM_CODEC_TYPE_AVC2_VIDEO, isom_write_visual_entry );
+        ADD_WRITE_TABLE_ELEMENT( ISOM_CODEC_TYPE_AVCP_VIDEO, isom_write_visual_entry );
+        ADD_WRITE_TABLE_ELEMENT( ISOM_CODEC_TYPE_SVC1_VIDEO, isom_write_visual_entry );
+        ADD_WRITE_TABLE_ELEMENT( ISOM_CODEC_TYPE_MVC1_VIDEO, isom_write_visual_entry );
+        ADD_WRITE_TABLE_ELEMENT( ISOM_CODEC_TYPE_MVC2_VIDEO, isom_write_visual_entry );
+        ADD_WRITE_TABLE_ELEMENT( ISOM_CODEC_TYPE_DRAC_VIDEO, isom_write_visual_entry );
+        ADD_WRITE_TABLE_ELEMENT( ISOM_CODEC_TYPE_ENCV_VIDEO, isom_write_visual_entry );
+        ADD_WRITE_TABLE_ELEMENT( ISOM_CODEC_TYPE_MJP2_VIDEO, isom_write_visual_entry );
+        ADD_WRITE_TABLE_ELEMENT( ISOM_CODEC_TYPE_S263_VIDEO, isom_write_visual_entry );
+#endif
+        ADD_WRITE_TABLE_ELEMENT( ISOM_CODEC_TYPE_MP4A_AUDIO, isom_write_audio_entry );
+        ADD_WRITE_TABLE_ELEMENT( ISOM_CODEC_TYPE_AC_3_AUDIO, isom_write_audio_entry );
+        ADD_WRITE_TABLE_ELEMENT( ISOM_CODEC_TYPE_ALAC_AUDIO, isom_write_audio_entry );
+        ADD_WRITE_TABLE_ELEMENT( ISOM_CODEC_TYPE_DTSC_AUDIO, isom_write_audio_entry );
+        ADD_WRITE_TABLE_ELEMENT( ISOM_CODEC_TYPE_DTSE_AUDIO, isom_write_audio_entry );
+        ADD_WRITE_TABLE_ELEMENT( ISOM_CODEC_TYPE_DTSH_AUDIO, isom_write_audio_entry );
+        ADD_WRITE_TABLE_ELEMENT( ISOM_CODEC_TYPE_DTSL_AUDIO, isom_write_audio_entry );
+        ADD_WRITE_TABLE_ELEMENT( ISOM_CODEC_TYPE_EC_3_AUDIO, isom_write_audio_entry );
+        ADD_WRITE_TABLE_ELEMENT( ISOM_CODEC_TYPE_SAMR_AUDIO, isom_write_audio_entry );
+        ADD_WRITE_TABLE_ELEMENT( ISOM_CODEC_TYPE_SAWB_AUDIO, isom_write_audio_entry );
+        ADD_WRITE_TABLE_ELEMENT( QT_CODEC_TYPE_MP4A_AUDIO,   isom_write_audio_entry );
+        ADD_WRITE_TABLE_ELEMENT( QT_CODEC_TYPE_23NI_AUDIO,   isom_write_audio_entry );
+        ADD_WRITE_TABLE_ELEMENT( QT_CODEC_TYPE_NONE_AUDIO,   isom_write_audio_entry );
+        ADD_WRITE_TABLE_ELEMENT( QT_CODEC_TYPE_LPCM_AUDIO,   isom_write_audio_entry );
+        ADD_WRITE_TABLE_ELEMENT( QT_CODEC_TYPE_SOWT_AUDIO,   isom_write_audio_entry );
+        ADD_WRITE_TABLE_ELEMENT( QT_CODEC_TYPE_TWOS_AUDIO,   isom_write_audio_entry );
+        ADD_WRITE_TABLE_ELEMENT( QT_CODEC_TYPE_FL32_AUDIO,   isom_write_audio_entry );
+        ADD_WRITE_TABLE_ELEMENT( QT_CODEC_TYPE_FL64_AUDIO,   isom_write_audio_entry );
+        ADD_WRITE_TABLE_ELEMENT( QT_CODEC_TYPE_IN24_AUDIO,   isom_write_audio_entry );
+        ADD_WRITE_TABLE_ELEMENT( QT_CODEC_TYPE_IN32_AUDIO,   isom_write_audio_entry );
+        ADD_WRITE_TABLE_ELEMENT( QT_CODEC_TYPE_NOT_SPECIFIED, isom_write_audio_entry );
+#if 0
+        ADD_WRITE_TABLE_ELEMENT( ISOM_CODEC_TYPE_DRA1_AUDIO, isom_write_audio_entry );
+        ADD_WRITE_TABLE_ELEMENT( ISOM_CODEC_TYPE_ENCA_AUDIO, isom_write_audio_entry );
+        ADD_WRITE_TABLE_ELEMENT( ISOM_CODEC_TYPE_G719_AUDIO, isom_write_audio_entry );
+        ADD_WRITE_TABLE_ELEMENT( ISOM_CODEC_TYPE_G726_AUDIO, isom_write_audio_entry );
+        ADD_WRITE_TABLE_ELEMENT( ISOM_CODEC_TYPE_M4AE_AUDIO, isom_write_audio_entry );
+        ADD_WRITE_TABLE_ELEMENT( ISOM_CODEC_TYPE_MLPA_AUDIO, isom_write_audio_entry );
+        ADD_WRITE_TABLE_ELEMENT( ISOM_CODEC_TYPE_RAW_AUDIO,  isom_write_audio_entry );
+        ADD_WRITE_TABLE_ELEMENT( ISOM_CODEC_TYPE_SAWP_AUDIO, isom_write_audio_entry );
+        ADD_WRITE_TABLE_ELEMENT( ISOM_CODEC_TYPE_SEVC_AUDIO, isom_write_audio_entry );
+        ADD_WRITE_TABLE_ELEMENT( ISOM_CODEC_TYPE_SQCP_AUDIO, isom_write_audio_entry );
+        ADD_WRITE_TABLE_ELEMENT( ISOM_CODEC_TYPE_SSMV_AUDIO, isom_write_audio_entry );
+        ADD_WRITE_TABLE_ELEMENT( ISOM_CODEC_TYPE_TWOS_AUDIO, isom_write_audio_entry );
+        ADD_WRITE_TABLE_ELEMENT( ISOM_CODEC_TYPE_FDP_HINT,  isom_write_hint_entry );
+        ADD_WRITE_TABLE_ELEMENT( ISOM_CODEC_TYPE_M2TS_HINT, isom_write_hint_entry );
+        ADD_WRITE_TABLE_ELEMENT( ISOM_CODEC_TYPE_PM2T_HINT, isom_write_hint_entry );
+        ADD_WRITE_TABLE_ELEMENT( ISOM_CODEC_TYPE_PRTP_HINT, isom_write_hint_entry );
+        ADD_WRITE_TABLE_ELEMENT( ISOM_CODEC_TYPE_RM2T_HINT, isom_write_hint_entry );
+        ADD_WRITE_TABLE_ELEMENT( ISOM_CODEC_TYPE_RRTP_HINT, isom_write_hint_entry );
+        ADD_WRITE_TABLE_ELEMENT( ISOM_CODEC_TYPE_RSRP_HINT, isom_write_hint_entry );
+        ADD_WRITE_TABLE_ELEMENT( ISOM_CODEC_TYPE_RTP_HINT,  isom_write_hint_entry );
+        ADD_WRITE_TABLE_ELEMENT( ISOM_CODEC_TYPE_SM2T_HINT, isom_write_hint_entry );
+        ADD_WRITE_TABLE_ELEMENT( ISOM_CODEC_TYPE_SRTP_HINT, isom_write_hint_entry );
+        ADD_WRITE_TABLE_ELEMENT( ISOM_CODEC_TYPE_IXSE_META, isom_write_metadata_entry );
+        ADD_WRITE_TABLE_ELEMENT( ISOM_CODEC_TYPE_METT_META, isom_write_metadata_entry );
+        ADD_WRITE_TABLE_ELEMENT( ISOM_CODEC_TYPE_METX_META, isom_write_metadata_entry );
+        ADD_WRITE_TABLE_ELEMENT( ISOM_CODEC_TYPE_MLIX_META, isom_write_metadata_entry );
+        ADD_WRITE_TABLE_ELEMENT( ISOM_CODEC_TYPE_OKSD_META, isom_write_metadata_entry );
+        ADD_WRITE_TABLE_ELEMENT( ISOM_CODEC_TYPE_SVCM_META, isom_write_metadata_entry );
+        ADD_WRITE_TABLE_ELEMENT( ISOM_CODEC_TYPE_TEXT_META, isom_write_metadata_entry );
+        ADD_WRITE_TABLE_ELEMENT( ISOM_CODEC_TYPE_URIM_META, isom_write_metadata_entry );
+        ADD_WRITE_TABLE_ELEMENT( ISOM_CODEC_TYPE_XML_META,  isom_write_metadata_entry );
+#endif
+        ADD_WRITE_TABLE_ELEMENT( ISOM_CODEC_TYPE_TX3G_TEXT, isom_write_tx3g_entry );
+        ADD_WRITE_TABLE_ELEMENT( QT_CODEC_TYPE_TEXT_TEXT, isom_write_text_entry );
+        ADD_WRITE_TABLE_ELEMENT( LSMASH_CODEC_TYPE_UNSPECIFIED, NULL );
+#undef ADD_WRITE_TABLE_ELEMENT
+    }
     isom_bs_put_box_common( bs, stsd );
     lsmash_bs_put_be32( bs, stsd->list->entry_count );
     int ret = -1;
@@ -823,128 +1031,19 @@ static int isom_write_stsd( lsmash_bs_t *bs, isom_trak_entry_t *trak )
         isom_sample_entry_t *sample = (isom_sample_entry_t *)entry->data;
         if( !sample )
             return -1;
-        switch( sample->type )
+        if( lsmash_check_box_type_identical( sample->type, (lsmash_box_type_t)LSMASH_CODEC_TYPE_RAW ) )
         {
-            case ISOM_CODEC_TYPE_AVC1_VIDEO :
-            case ISOM_CODEC_TYPE_VC_1_VIDEO :
-            case QT_CODEC_TYPE_APCH_VIDEO :
-            case QT_CODEC_TYPE_APCN_VIDEO :
-            case QT_CODEC_TYPE_APCS_VIDEO :
-            case QT_CODEC_TYPE_APCO_VIDEO :
-            case QT_CODEC_TYPE_AP4H_VIDEO :
-            case QT_CODEC_TYPE_DVC_VIDEO :
-            case QT_CODEC_TYPE_DVCP_VIDEO :
-            case QT_CODEC_TYPE_DVPP_VIDEO :
-            case QT_CODEC_TYPE_DV5N_VIDEO :
-            case QT_CODEC_TYPE_DV5P_VIDEO :
-            case QT_CODEC_TYPE_DVH2_VIDEO :
-            case QT_CODEC_TYPE_DVH3_VIDEO :
-            case QT_CODEC_TYPE_DVH5_VIDEO :
-            case QT_CODEC_TYPE_DVH6_VIDEO :
-            case QT_CODEC_TYPE_DVHP_VIDEO :
-            case QT_CODEC_TYPE_DVHQ_VIDEO :
-            case QT_CODEC_TYPE_ULRA_VIDEO :
-            case QT_CODEC_TYPE_ULRG_VIDEO :
-            case QT_CODEC_TYPE_ULY2_VIDEO :
-            case QT_CODEC_TYPE_ULY0_VIDEO :
-            case QT_CODEC_TYPE_V210_VIDEO :
-            case QT_CODEC_TYPE_V216_VIDEO :
-            case QT_CODEC_TYPE_V308_VIDEO :
-            case QT_CODEC_TYPE_V408_VIDEO :
-            case QT_CODEC_TYPE_V410_VIDEO :
-            case QT_CODEC_TYPE_YUV2_VIDEO :
-#ifdef LSMASH_DEMUXER_ENABLED
-            case ISOM_CODEC_TYPE_MP4V_VIDEO :
-#endif
-#if 0
-            case ISOM_CODEC_TYPE_AVC2_VIDEO :
-            case ISOM_CODEC_TYPE_AVCP_VIDEO :
-            case ISOM_CODEC_TYPE_SVC1_VIDEO :
-            case ISOM_CODEC_TYPE_MVC1_VIDEO :
-            case ISOM_CODEC_TYPE_MVC2_VIDEO :
-            case ISOM_CODEC_TYPE_DRAC_VIDEO :
-            case ISOM_CODEC_TYPE_ENCV_VIDEO :
-            case ISOM_CODEC_TYPE_MJP2_VIDEO :
-            case ISOM_CODEC_TYPE_S263_VIDEO :
-#endif
+            if( sample->manager & LSMASH_VIDEO_DESCRIPTION )
                 ret = isom_write_visual_entry( bs, entry );
-                break;
-            case ISOM_CODEC_TYPE_MP4A_AUDIO :
-            case ISOM_CODEC_TYPE_AC_3_AUDIO :
-            case ISOM_CODEC_TYPE_ALAC_AUDIO :
-            case ISOM_CODEC_TYPE_DTSC_AUDIO :
-            case ISOM_CODEC_TYPE_DTSE_AUDIO :
-            case ISOM_CODEC_TYPE_DTSH_AUDIO :
-            case ISOM_CODEC_TYPE_DTSL_AUDIO :
-            case ISOM_CODEC_TYPE_EC_3_AUDIO :
-            case ISOM_CODEC_TYPE_SAMR_AUDIO :
-            case ISOM_CODEC_TYPE_SAWB_AUDIO :
-            case QT_CODEC_TYPE_23NI_AUDIO :
-            case QT_CODEC_TYPE_NONE_AUDIO :
-            case QT_CODEC_TYPE_LPCM_AUDIO :
-            case QT_CODEC_TYPE_SOWT_AUDIO :
-            case QT_CODEC_TYPE_TWOS_AUDIO :
-            case QT_CODEC_TYPE_FL32_AUDIO :
-            case QT_CODEC_TYPE_FL64_AUDIO :
-            case QT_CODEC_TYPE_IN24_AUDIO :
-            case QT_CODEC_TYPE_IN32_AUDIO :
-            case QT_CODEC_TYPE_NOT_SPECIFIED :
-#if 0
-            case ISOM_CODEC_TYPE_DRA1_AUDIO :
-            case ISOM_CODEC_TYPE_ENCA_AUDIO :
-            case ISOM_CODEC_TYPE_G719_AUDIO :
-            case ISOM_CODEC_TYPE_G726_AUDIO :
-            case ISOM_CODEC_TYPE_M4AE_AUDIO :
-            case ISOM_CODEC_TYPE_MLPA_AUDIO :
-            case ISOM_CODEC_TYPE_RAW_AUDIO :
-            case ISOM_CODEC_TYPE_SAWP_AUDIO :
-            case ISOM_CODEC_TYPE_SEVC_AUDIO :
-            case ISOM_CODEC_TYPE_SQCP_AUDIO :
-            case ISOM_CODEC_TYPE_SSMV_AUDIO :
-            case ISOM_CODEC_TYPE_TWOS_AUDIO :
-#endif
+            else if( sample->manager & LSMASH_AUDIO_DESCRIPTION )
                 ret = isom_write_audio_entry( bs, entry );
-                break;
-#if 0
-            case ISOM_CODEC_TYPE_FDP_HINT :
-            case ISOM_CODEC_TYPE_M2TS_HINT :
-            case ISOM_CODEC_TYPE_PM2T_HINT :
-            case ISOM_CODEC_TYPE_PRTP_HINT :
-            case ISOM_CODEC_TYPE_RM2T_HINT :
-            case ISOM_CODEC_TYPE_RRTP_HINT :
-            case ISOM_CODEC_TYPE_RSRP_HINT :
-            case ISOM_CODEC_TYPE_RTP_HINT  :
-            case ISOM_CODEC_TYPE_SM2T_HINT :
-            case ISOM_CODEC_TYPE_SRTP_HINT :
-                ret = isom_write_hint_entry( bs, entry );
-                break;
-            case ISOM_CODEC_TYPE_IXSE_META :
-            case ISOM_CODEC_TYPE_METT_META :
-            case ISOM_CODEC_TYPE_METX_META :
-            case ISOM_CODEC_TYPE_MLIX_META :
-            case ISOM_CODEC_TYPE_OKSD_META :
-            case ISOM_CODEC_TYPE_SVCM_META :
-            case ISOM_CODEC_TYPE_TEXT_META :
-            case ISOM_CODEC_TYPE_URIM_META :
-            case ISOM_CODEC_TYPE_XML_META  :
-                ret = isom_write_metadata_entry( bs, entry );
-                break;
-#endif
-            case ISOM_CODEC_TYPE_TX3G_TEXT :
-                ret = isom_write_tx3g_entry( bs, entry );
-                break;
-            case QT_CODEC_TYPE_TEXT_TEXT :
-                ret = isom_write_text_entry( bs, entry );
-                break;
-            case LSMASH_CODEC_TYPE_RAW :
-                if( sample->manager & LSMASH_VIDEO_DESCRIPTION )
-                    ret = isom_write_visual_entry( bs, entry );
-                else if( sample->manager & LSMASH_AUDIO_DESCRIPTION )
-                    ret = isom_write_audio_entry( bs, entry );
-                break;
-            default :
-                break;
         }
+        for( int i = 0; write_table[i].func; i++ )
+            if( lsmash_check_box_type_identical( sample->type, (lsmash_box_type_t)write_table[i].type ) )
+            {
+                ret = write_table[i].func( bs, entry );
+                break;
+            }
         if( ret )
             break;
     }
@@ -1505,7 +1604,7 @@ static int isom_bs_write_movie_extends_placeholder( lsmash_bs_t *bs )
      * We use version 1 Movie Extends Header Box since it causes extra 4 bytes region
      * we cannot replace with empty Free Space Box as we place version 0 one.  */
     lsmash_bs_put_be32( bs, ISOM_FULLBOX_COMMON_SIZE + 8 );
-    lsmash_bs_put_be32( bs, ISOM_BOX_TYPE_FREE );
+    lsmash_bs_put_be32( bs, ISOM_BOX_TYPE_FREE.fourcc );
     lsmash_bs_put_be32( bs, 0 );
     lsmash_bs_put_be64( bs, 0 );
     return lsmash_bs_write_data( bs );
@@ -1573,6 +1672,18 @@ static int isom_write_tfhd( lsmash_bs_t *bs, isom_tfhd_t *tfhd )
     return lsmash_bs_write_data( bs );
 }
 
+static int isom_write_tfdt( lsmash_bs_t *bs, isom_tfdt_t *tfdt )
+{
+    if( !tfdt )
+        return 0;
+    isom_bs_put_box_common( bs, tfdt );
+    if( tfdt->version == 1 )
+        lsmash_bs_put_be64( bs, tfdt->baseMediaDecodeTime );
+    else
+        lsmash_bs_put_be32( bs, tfdt->baseMediaDecodeTime );
+    return lsmash_bs_write_data( bs );
+}
+
 static int isom_write_trun( lsmash_bs_t *bs, isom_trun_entry_t *trun )
 {
     if( !trun )
@@ -1602,7 +1713,8 @@ static int isom_write_traf( lsmash_bs_t *bs, isom_traf_entry_t *traf )
     isom_bs_put_box_common( bs, traf );
     if( lsmash_bs_write_data( bs ) )
         return -1;
-    if( isom_write_tfhd( bs, traf->tfhd ) )
+    if( isom_write_tfhd( bs, traf->tfhd )
+     || isom_write_tfdt( bs, traf->tfdt ) )
         return -1;
     if( traf->trun_list )
         for( lsmash_entry_t *entry = traf->trun_list->head; entry; entry = entry->next )
@@ -1697,7 +1809,7 @@ int isom_write_mfra( lsmash_bs_t *bs, isom_mfra_t *mfra )
 static int isom_bs_write_largesize_placeholder( lsmash_bs_t *bs )
 {
     lsmash_bs_put_be32( bs, ISOM_BASEBOX_COMMON_SIZE );
-    lsmash_bs_put_be32( bs, ISOM_BOX_TYPE_FREE );
+    lsmash_bs_put_be32( bs, ISOM_BOX_TYPE_FREE.fourcc );
     return lsmash_bs_write_data( bs );
 }
 
@@ -1738,14 +1850,14 @@ int isom_write_mdat_size( lsmash_root_t *root )
     {
         lsmash_fseek( stream, mdat->placeholder_pos, SEEK_SET );
         lsmash_bs_put_be32( bs, 1 );
-        lsmash_bs_put_be32( bs, ISOM_BOX_TYPE_MDAT );
+        lsmash_bs_put_be32( bs, ISOM_BOX_TYPE_MDAT.fourcc );
         lsmash_bs_put_be64( bs, mdat->size + ISOM_BASEBOX_COMMON_SIZE );
     }
     else
     {
         lsmash_fseek( stream, mdat->placeholder_pos + ISOM_BASEBOX_COMMON_SIZE, SEEK_SET );
         lsmash_bs_put_be32( bs, mdat->size );
-        lsmash_bs_put_be32( bs, ISOM_BOX_TYPE_MDAT );
+        lsmash_bs_put_be32( bs, ISOM_BOX_TYPE_MDAT.fourcc );
     }
     int ret = lsmash_bs_write_data( bs );
     lsmash_fseek( stream, current_pos, SEEK_SET );
@@ -1787,6 +1899,7 @@ int isom_write_moov( lsmash_root_t *root )
             if( isom_write_trak( bs, (isom_trak_entry_t *)entry->data ) )
                 return -1;
     if( isom_write_udta( bs, moov, NULL )
+     || isom_write_ctab( bs, moov )
      || isom_write_meta( bs, moov->meta ) )
         return -1;
     return isom_write_mvex( bs, moov->mvex );

@@ -56,6 +56,10 @@ ifeq ($(wildcard config.mak)x,x)
 ifneq ($(wildcard $(X264_DIR)/config.mak)x,x)
 $(info $() Copy config.mak from $(X264_DIR))
 $(shell cat "$(X264_DIR)/config.mak" | awk '/^ *\w+ *=/' > "$(DIR_CUR)/config.mak")
+ifeq ($(HAVE_FFMPEG),yes)
+$(info $() Append config.mak from $(FFMPEG_DIR))
+$(shell cat "$(FFMPEG_DIR)/config.mak" | awk '/^ *EXTRALIBS *=/' >> "$(DIR_CUR)/config.mak")
+endif
 endif
 endif
 ifeq ($(wildcard config.h)x,x)
@@ -102,8 +106,6 @@ endif
 ##############################################################################
 
 # Constants which should not be modified
-# The `mingw-runtime` package is required when building with -mno-cygwin
-CFLAGS += -mno-cygwin
 CFLAGS += -D_WIN32_IE=0x0501
 CFLAGS += "-I$(X264_DIR)"
 
@@ -128,6 +130,7 @@ VFW_LDFLAGS += "-L$(FFMPEG_DIR)/libavcodec" -lavcodec
 #VFW_LDFLAGS += "-L$(FFMPEG_DIR)/libavcore" -lavcore
 VFW_LDFLAGS += "-L$(FFMPEG_DIR)/libavutil" -lavutil
 VFW_LDFLAGS += "-L$(FFMPEG_DIR)/libswscale" -lswscale
+VFW_LDFLAGS += $(EXTRALIBS)
 endif
 
 ifneq ($(wildcard version.h)x,x)
@@ -149,7 +152,7 @@ SRC_C += output/raw.c
 SRC_C += output/matroska.c output/matroska_ebml.c
 SRC_C += output/flv.c output/flv_bytestream.c
 SRC_C += output/mp4.c
-SRC_C += $(addprefix output/mp4/, isom.c utils.c mp4sys.c mp4a.c dts.c a52.c h264.c vc1.c importer.c summary.c chapter.c write.c)
+SRC_C += $(addprefix output/mp4/, isom.c utils.c write.c importer.c mp4sys.c mp4a.c summary.c chapter.c dts.c a52.c h264.c vc1.c alac.c meta.c description.c box.c)
 
 ifeq ($(HAVE_FFMPEG),yes)
 SRC_C += output/avi.c
@@ -205,7 +208,7 @@ $(DLL): .depend config.mak config.h $(OBJECTS)
 	@cp -f "$(DIR_SRC)/driverproc.def" "$(DIR_BUILD)/driverproc.def"
 	@cd "$(DIR_BUILD)" && \
 	$(CC) \
-	-mno-cygwin -shared -Wl,-dll,--out-implib,$@.a,--enable-stdcall-fixup \
+	-shared -Wl,-dll,--out-implib,$@.a,--enable-stdcall-fixup \
 	-o $@ \
 	$(OBJECTS) driverproc.def \
 	$(VFW_LDFLAGS) $(LDFLAGS) -lgdi32 -lwinmm -lcomdlg32 -lcomctl32
