@@ -1,7 +1,7 @@
 /*****************************************************************************
  * driverproc.c: vfw wrapper
  *****************************************************************************
- * Copyright (C) 2003-2013 x264vfw project
+ * Copyright (C) 2003-2014 x264vfw project
  *
  * Authors: Justin Clay
  *          Laurent Aimar <fenrir@via.ecp.fr>
@@ -34,12 +34,12 @@ HINSTANCE x264vfw_hInst;
 CRITICAL_SECTION x264vfw_CS;
 
 /* Calling back point for our DLL so we can keep track of the window in x264vfw_hInst */
-BOOL WINAPI DllMain(HANDLE hModule, DWORD ul_reason_for_call, LPVOID lpReserved)
+BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved)
 {
-    x264vfw_hInst = (HINSTANCE)hModule;
+    x264vfw_hInst = hinstDLL;
 
 #ifdef PTW32_STATIC_LIB
-    switch (ul_reason_for_call)
+    switch (fdwReason)
     {
         case DLL_PROCESS_ATTACH:
             InitializeCriticalSection(&x264vfw_CS);
@@ -62,7 +62,7 @@ BOOL WINAPI DllMain(HANDLE hModule, DWORD ul_reason_for_call, LPVOID lpReserved)
             break;
     }
 #else
-    switch (ul_reason_for_call)
+    switch (fdwReason)
     {
         case DLL_PROCESS_ATTACH:
             InitializeCriticalSection(&x264vfw_CS);
@@ -213,7 +213,7 @@ LRESULT WINAPI attribute_align_arg DriverProc(DWORD_PTR dwDriverId, HDRVR hDrive
                 memset(&temp, 0, sizeof(CONFIG_DATA));
                 memcpy(&temp.config, &codec->config, sizeof(CONFIG));
 
-                DialogBoxParam(x264vfw_hInst, MAKEINTRESOURCE(IDD_CONFIG), (HWND)lParam1, x264vfw_callback_main, (LPARAM)&temp);
+                DialogBoxParamW(x264vfw_hInst, MAKEINTRESOURCEW(IDD_CONFIG), (HWND)lParam1, x264vfw_callback_main, (LPARAM)&temp);
 
                 if (temp.b_save)
                 {
@@ -225,7 +225,7 @@ LRESULT WINAPI attribute_align_arg DriverProc(DWORD_PTR dwDriverId, HDRVR hDrive
 
         case ICM_ABOUT:
             if (lParam1 != -1)
-                DialogBoxParam(x264vfw_hInst, MAKEINTRESOURCE(IDD_ABOUT), (HWND)lParam1, x264vfw_callback_about, 0);
+                DialogBoxParamW(x264vfw_hInst, MAKEINTRESOURCEW(IDD_ABOUT), (HWND)lParam1, x264vfw_callback_about, 0);
             return ICERR_OK;
 
         case ICM_GET:

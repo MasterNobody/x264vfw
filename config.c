@@ -1,7 +1,7 @@
 /*****************************************************************************
  * config.c: configuration dialog
  *****************************************************************************
- * Copyright (C) 2003-2013 x264vfw project
+ * Copyright (C) 2003-2014 x264vfw project
  *
  * Authors: Justin Clay
  *          Laurent Aimar <fenrir@via.ecp.fr>
@@ -64,10 +64,10 @@ typedef struct
 
 typedef struct
 {
-    const char * const reg_value;
-    char * const config_str;
-    const char * const default_str;
-    const int max_len; /* Maximum string length, including the terminating NULL char */
+    const wchar_t * const reg_value;
+    wchar_t * const config_str;
+    const wchar_t * const default_str;
+    const int buffer_size; /* Maximum size of string in bytes including terminating NULL char */
 } reg_str_t;
 
 static CONFIG reg;
@@ -137,11 +137,11 @@ static const reg_int_t reg_int_table[] =
 static const reg_str_t reg_str_table[] =
 {
     /* Rate control */
-    { "statsfile",     reg.stats,         ".\\x264.stats", MAX_STATS_PATH  },
+    { L"statsfile",     reg.stats,         L".\\x264.stats", sizeof(reg.stats)         },
     /* Output */
-    { "output_file",   reg.output_file,   "",              MAX_OUTPUT_PATH },
+    { L"output_file",   reg.output_file,   L"",              sizeof(reg.output_file)   },
     /* Extra command line */
-    { "extra_cmdline", reg.extra_cmdline, "",              MAX_CMDLINE     }
+    { L"extra_cmdline", reg.extra_cmdline, L"",              sizeof(reg.extra_cmdline) }
 };
 
 static double GetDlgItemDouble(HWND hDlg, int nIDDlgItem)
@@ -235,7 +235,7 @@ void x264vfw_config_defaults(CONFIG *config)
     memset(&reg, 0, sizeof(CONFIG));
 
     /* Save all named params */
-    for (i = 0; i < sizeof(reg_named_str_table) / sizeof(reg_named_str_t); i++)
+    for (i = 0; i < ARRAY_ELEMS(reg_named_str_table); i++)
     {
         int j;
         for (j = 0; j < reg_named_str_table[i].list_count; j++)
@@ -244,14 +244,14 @@ void x264vfw_config_defaults(CONFIG *config)
     }
 
     /* Set all integers */
-    for (i = 0; i < sizeof(reg_int_table) / sizeof(reg_int_t); i++)
+    for (i = 0; i < ARRAY_ELEMS(reg_int_table); i++)
         *reg_int_table[i].config_int = reg_int_table[i].default_int;
-    for (i = 0; i < sizeof(reg_int_table) / sizeof(reg_int_t); i++)
+    for (i = 0; i < ARRAY_ELEMS(reg_int_table); i++)
         *reg_int_table[i].config_int = X264_CLIP(*reg_int_table[i].config_int, reg_int_table[i].min_int, reg_int_table[i].max_int);
 
     /* Set all strings */
-    for (i = 0; i < sizeof(reg_str_table) / sizeof(reg_str_t); i++)
-        strcpy(reg_str_table[i].config_str, reg_str_table[i].default_str);
+    for (i = 0; i < ARRAY_ELEMS(reg_str_table); i++)
+        wcscpy(reg_str_table[i].config_str, reg_str_table[i].default_str);
 
     GordianKnotWorkaround(reg.i_encoding_type);
     memcpy(config, &reg, sizeof(CONFIG));
@@ -273,7 +273,7 @@ void x264vfw_config_reg_load(CONFIG *config)
     memset(&reg, 0, sizeof(CONFIG));
 
     /* Read all named params */
-    for (i = 0; i < sizeof(reg_named_str_table) / sizeof(reg_named_str_t); i++)
+    for (i = 0; i < ARRAY_ELEMS(reg_named_str_table); i++)
     {
         char temp[1024];
         int j;
@@ -281,7 +281,7 @@ void x264vfw_config_reg_load(CONFIG *config)
             if (!strcasecmp(reg_named_str_table[i].default_str, reg_named_str_table[i].list[j].value))
                 *reg_named_str_table[i].config_int = j;
         i_size = 1024;
-        if (RegQueryValueEx(hKey, reg_named_str_table[i].reg_value, 0, 0, (LPBYTE)temp, &i_size) == ERROR_SUCCESS)
+        if (RegQueryValueEx(hKey, reg_named_str_table[i].reg_value, NULL, NULL, (LPBYTE)temp, &i_size) == ERROR_SUCCESS)
         {
             for (j = 0; j < reg_named_str_table[i].list_count; j++)
                 if (!strcasecmp(temp, reg_named_str_table[i].list[j].value))
@@ -290,21 +290,21 @@ void x264vfw_config_reg_load(CONFIG *config)
     }
 
     /* Read all integers */
-    for (i = 0; i < sizeof(reg_int_table) / sizeof(reg_int_t); i++)
+    for (i = 0; i < ARRAY_ELEMS(reg_int_table); i++)
     {
         i_size = sizeof(int);
-        if (RegQueryValueEx(hKey, reg_int_table[i].reg_value, 0, 0, (LPBYTE)reg_int_table[i].config_int, &i_size) != ERROR_SUCCESS)
+        if (RegQueryValueEx(hKey, reg_int_table[i].reg_value, NULL, NULL, (LPBYTE)reg_int_table[i].config_int, &i_size) != ERROR_SUCCESS)
             *reg_int_table[i].config_int = reg_int_table[i].default_int;
     }
-    for (i = 0; i < sizeof(reg_int_table) / sizeof(reg_int_t); i++)
+    for (i = 0; i < ARRAY_ELEMS(reg_int_table); i++)
         *reg_int_table[i].config_int = X264_CLIP(*reg_int_table[i].config_int, reg_int_table[i].min_int, reg_int_table[i].max_int);
 
     /* Read all strings */
-    for (i = 0; i < sizeof(reg_str_table) / sizeof(reg_str_t); i++)
+    for (i = 0; i < ARRAY_ELEMS(reg_str_table); i++)
     {
-        i_size = reg_str_table[i].max_len;
-        if (RegQueryValueEx(hKey, reg_str_table[i].reg_value, 0, 0, (LPBYTE)reg_str_table[i].config_str, &i_size) != ERROR_SUCCESS)
-            strcpy(reg_str_table[i].config_str, reg_str_table[i].default_str);
+        i_size = reg_str_table[i].buffer_size;
+        if (RegQueryValueExW(hKey, reg_str_table[i].reg_value, NULL, NULL, (LPBYTE)reg_str_table[i].config_str, &i_size) != ERROR_SUCCESS)
+            wcscpy(reg_str_table[i].config_str, reg_str_table[i].default_str);
     }
 
     GordianKnotWorkaround(reg.i_encoding_type);
@@ -326,7 +326,7 @@ void x264vfw_config_reg_save(CONFIG *config)
     GordianKnotWorkaround(reg.i_encoding_type);
 
     /* Save all named params */
-    for (i = 0; i < sizeof(reg_named_str_table) / sizeof(reg_named_str_t); i++)
+    for (i = 0; i < ARRAY_ELEMS(reg_named_str_table); i++)
     {
         const char *temp = *reg_named_str_table[i].config_int >= 0 && *reg_named_str_table[i].config_int < reg_named_str_table[i].list_count
                            ? reg_named_str_table[i].list[*reg_named_str_table[i].config_int].value
@@ -335,12 +335,12 @@ void x264vfw_config_reg_save(CONFIG *config)
     }
 
     /* Save all integers */
-    for (i = 0; i < sizeof(reg_int_table) / sizeof(reg_int_t); i++)
+    for (i = 0; i < ARRAY_ELEMS(reg_int_table); i++)
         RegSetValueEx(hKey, reg_int_table[i].reg_value, 0, REG_DWORD, (LPBYTE)reg_int_table[i].config_int, sizeof(int));
 
     /* Save all strings */
-    for (i = 0; i < sizeof(reg_str_table) / sizeof(reg_str_t); i++)
-        RegSetValueEx(hKey, reg_str_table[i].reg_value, 0, REG_SZ, (LPBYTE)reg_str_table[i].config_str, strlen(reg_str_table[i].config_str) + 1);
+    for (i = 0; i < ARRAY_ELEMS(reg_str_table); i++)
+        RegSetValueExW(hKey, reg_str_table[i].reg_value, 0, REG_SZ, (LPBYTE)reg_str_table[i].config_str, (wcslen(reg_str_table[i].config_str) + 1) * sizeof(wchar_t));
 
     LeaveCriticalSection(&x264vfw_CS);
     RegCloseKey(hKey);
@@ -497,7 +497,7 @@ static void dlg_update_items(CONFIG_DATA *cfg_data)
     CheckDlgButton(hMainDlg, IDC_STATS_CREATE, config->b_createstats);
     CheckDlgButton(hMainDlg, IDC_STATS_UPDATE, config->b_updatestats);
     SendMessage(GetDlgItem(hMainDlg, IDC_STATS_FILE), EM_LIMITTEXT, MAX_STATS_PATH - 1, 0);
-    SetDlgItemText(hMainDlg, IDC_STATS_FILE, config->stats);
+    SetDlgItemTextW(hMainDlg, IDC_STATS_FILE, config->stats);
     /* Output */
     if (SendMessage(GetDlgItem(hMainDlg, IDC_OUTPUT_MODE), CB_GETCOUNT, 0, 0) == 0)
     {
@@ -516,7 +516,7 @@ static void dlg_update_items(CONFIG_DATA *cfg_data)
     CheckDlgButton(hMainDlg, IDC_VFW_VD_HACK, config->b_vd_hack);
 #endif
     SendMessage(GetDlgItem(hMainDlg, IDC_OUTPUT_FILE), EM_LIMITTEXT, MAX_OUTPUT_PATH - 1, 0);
-    SetDlgItemText(hMainDlg, IDC_OUTPUT_FILE, config->output_file);
+    SetDlgItemTextW(hMainDlg, IDC_OUTPUT_FILE, config->output_file);
     /* Encoder */
     sprintf(temp, "libx264 core %d%s", X264_BUILD, X264_VERSION);
     SetDlgItemText(hMainDlg, IDC_ENCODER_LABEL, temp);
@@ -544,7 +544,7 @@ static void dlg_update_items(CONFIG_DATA *cfg_data)
 #endif
     /* Extra command line*/
     SendMessage(GetDlgItem(hMainDlg, IDC_EXTRA_CMDLINE), EM_LIMITTEXT, MAX_CMDLINE - 1, 0);
-    SetDlgItemText(hMainDlg, IDC_EXTRA_CMDLINE, config->extra_cmdline);
+    SetDlgItemTextW(hMainDlg, IDC_EXTRA_CMDLINE, config->extra_cmdline);
     /* Build date */
     sprintf(temp, "Build date: %s %s", __DATE__, __TIME__);
     SetDlgItemText(hMainDlg, IDC_BUILD_DATE, temp);
@@ -693,19 +693,19 @@ do {\
     SetDlgItemInt(hDlg, nIDDlgItem, var, bSigned);\
 } while (0)
 
-static int get_extension_index(const char *filename, const char *list)
+static int get_extension_index(const wchar_t *filename, const wchar_t *list)
 {
     int index = 0;
-    const char *ext = filename + strlen(filename);
-    while (*ext != '.' && ext > filename)
+    const wchar_t *ext = filename + wcslen(filename);
+    while (*ext != L'.' && ext > filename)
         ext--;
-    ext += *ext == '.';
+    ext += *ext == L'.';
     while (*list)
     {
         index++;
-        if (!strcasecmp(ext, list))
+        if (!_wcsicmp(ext, list))
             return index;
-        list += strlen(list) + 1;
+        list += wcslen(list) + 1;
     }
     return 0;
 }
@@ -873,32 +873,32 @@ INT_PTR CALLBACK x264vfw_callback_main(HWND hDlg, UINT uMsg, WPARAM wParam, LPAR
 
                         case IDC_STATS_BROWSE:
                         {
-                            OPENFILENAME ofn;
-                            char tmp[MAX_STATS_SIZE];
+                            OPENFILENAMEW ofn;
+                            wchar_t tmp[MAX_STATS_SIZE];
 
-                            if (GetDlgItemText(hMainDlg, IDC_STATS_FILE, tmp, MAX_STATS_SIZE) == 0)
-                                strcpy(tmp, "");
+                            if (GetDlgItemTextW(hMainDlg, IDC_STATS_FILE, tmp, MAX_STATS_SIZE) == 0)
+                                wcscpy(tmp, L"");
 
-                            memset(&ofn, 0, sizeof(OPENFILENAME));
-                            ofn.lStructSize = sizeof(OPENFILENAME);
+                            memset(&ofn, 0, sizeof(OPENFILENAMEW));
+                            ofn.lStructSize = sizeof(OPENFILENAMEW);
 
                             ofn.hwndOwner = hMainDlg;
-                            ofn.lpstrFilter = "Stats files (*.stats)\0*.stats\0All files (*.*)\0*.*\0\0";
-                            ofn.nFilterIndex = tmp[0] ? get_extension_index(tmp, "stats\0\0") : 1;
+                            ofn.lpstrFilter = L"Stats files (*.stats)\0*.stats\0All files (*.*)\0*.*\0\0";
+                            ofn.nFilterIndex = tmp[0] ? get_extension_index(tmp, L"stats\0\0") : 1;
                             ofn.nFilterIndex = ofn.nFilterIndex ? ofn.nFilterIndex : 2;
                             ofn.lpstrFile = tmp;
                             ofn.nMaxFile = MAX_STATS_SIZE;
                             ofn.Flags = OFN_PATHMUSTEXIST;
-                            ofn.lpstrDefExt = "";
+                            ofn.lpstrDefExt = L"";
 
                             if (config->i_pass <= 1)
                                 ofn.Flags |= OFN_OVERWRITEPROMPT;
                             else
                                 ofn.Flags |= OFN_FILEMUSTEXIST;
 
-                            if ((config->i_pass <= 1 && GetSaveFileName(&ofn)) ||
-                                (config->i_pass > 1 && GetOpenFileName(&ofn)))
-                                SetDlgItemText(hMainDlg, IDC_STATS_FILE, tmp);
+                            if ((config->i_pass <= 1 && GetSaveFileNameW(&ofn)) ||
+                                (config->i_pass > 1 && GetOpenFileNameW(&ofn)))
+                                SetDlgItemTextW(hMainDlg, IDC_STATS_FILE, tmp);
                             break;
                         }
 
@@ -910,26 +910,26 @@ INT_PTR CALLBACK x264vfw_callback_main(HWND hDlg, UINT uMsg, WPARAM wParam, LPAR
 
                         case IDC_OUTPUT_BROWSE:
                         {
-                            OPENFILENAME ofn;
-                            char tmp[MAX_OUTPUT_SIZE];
+                            OPENFILENAMEW ofn;
+                            wchar_t tmp[MAX_OUTPUT_SIZE];
 
-                            if (GetDlgItemText(hMainDlg, IDC_OUTPUT_FILE, tmp, MAX_OUTPUT_SIZE) == 0)
-                                strcpy(tmp, "");
+                            if (GetDlgItemTextW(hMainDlg, IDC_OUTPUT_FILE, tmp, MAX_OUTPUT_SIZE) == 0)
+                                wcscpy(tmp, L"");
 
-                            memset(&ofn, 0, sizeof(OPENFILENAME));
-                            ofn.lStructSize = sizeof(OPENFILENAME);
+                            memset(&ofn, 0, sizeof(OPENFILENAMEW));
+                            ofn.lStructSize = sizeof(OPENFILENAMEW);
 
                             ofn.hwndOwner = hMainDlg;
-                            ofn.lpstrFilter = "*.avi\0*.avi\0*.flv\0*.flv\0*.mkv\0*.mkv\0*.mp4\0*.mp4\0*.h264\0*.h264\0All files (*.*)\0*.*\0\0";
-                            ofn.nFilterIndex = tmp[0] ? get_extension_index(tmp, "avi\0flv\0mkv\0mp4\0h264\0\0") : 1;
+                            ofn.lpstrFilter = L"*.avi\0*.avi\0*.flv\0*.flv\0*.mkv\0*.mkv\0*.mp4\0*.mp4\0*.h264\0*.h264\0All files (*.*)\0*.*\0\0";
+                            ofn.nFilterIndex = tmp[0] ? get_extension_index(tmp, L"avi\0flv\0mkv\0mp4\0h264\0\0") : 1;
                             ofn.nFilterIndex = ofn.nFilterIndex ? ofn.nFilterIndex : 6;
                             ofn.lpstrFile = tmp;
                             ofn.nMaxFile = MAX_OUTPUT_SIZE;
                             ofn.Flags = OFN_PATHMUSTEXIST | OFN_OVERWRITEPROMPT;
-                            ofn.lpstrDefExt = "";
+                            ofn.lpstrDefExt = L"";
 
-                            if (GetSaveFileName(&ofn))
-                                SetDlgItemText(hMainDlg, IDC_OUTPUT_FILE, tmp);
+                            if (GetSaveFileNameW(&ofn))
+                                SetDlgItemTextW(hMainDlg, IDC_OUTPUT_FILE, tmp);
                             break;
                         }
 
@@ -953,7 +953,7 @@ INT_PTR CALLBACK x264vfw_callback_main(HWND hDlg, UINT uMsg, WPARAM wParam, LPAR
 
                         case IDC_EXTRA_HELP:
                             if (!cfg_data->hHelpDlg)
-                                cfg_data->hHelpDlg = CreateDialog(x264vfw_hInst, MAKEINTRESOURCE(IDD_HELP), GetDesktopWindow(), x264vfw_callback_help);
+                                cfg_data->hHelpDlg = CreateDialogW(x264vfw_hInst, MAKEINTRESOURCEW(IDD_HELP), GetDesktopWindow(), x264vfw_callback_help);
                             if (cfg_data->hHelpDlg)
                             {
                                 ShowWindow(cfg_data->hHelpDlg, SW_SHOWNORMAL);
@@ -1018,13 +1018,13 @@ INT_PTR CALLBACK x264vfw_callback_main(HWND hDlg, UINT uMsg, WPARAM wParam, LPAR
                             break;
 
                         case IDC_STATS_FILE:
-                            if (GetDlgItemText(hMainDlg, IDC_STATS_FILE, config->stats, MAX_STATS_PATH) == 0)
-                                strcpy(config->stats, ".\\x264.stats");
+                            if (GetDlgItemTextW(hMainDlg, IDC_STATS_FILE, config->stats, MAX_STATS_PATH) == 0)
+                                wcscpy(config->stats, L".\\x264.stats");
                             break;
 
                         case IDC_OUTPUT_FILE:
-                            if (GetDlgItemText(hMainDlg, IDC_OUTPUT_FILE, config->output_file, MAX_OUTPUT_PATH) == 0)
-                                strcpy(config->output_file, "");
+                            if (GetDlgItemTextW(hMainDlg, IDC_OUTPUT_FILE, config->output_file, MAX_OUTPUT_PATH) == 0)
+                                wcscpy(config->output_file, L"");
                             break;
 
                         case IDC_SAR_W:
@@ -1036,8 +1036,8 @@ INT_PTR CALLBACK x264vfw_callback_main(HWND hDlg, UINT uMsg, WPARAM wParam, LPAR
                             break;
 
                         case IDC_EXTRA_CMDLINE:
-                            if (GetDlgItemText(hMainDlg, IDC_EXTRA_CMDLINE, config->extra_cmdline, MAX_CMDLINE) == 0)
-                                strcpy(config->extra_cmdline, "");
+                            if (GetDlgItemTextW(hMainDlg, IDC_EXTRA_CMDLINE, config->extra_cmdline, MAX_CMDLINE) == 0)
+                                wcscpy(config->extra_cmdline, L"");
                             break;
 
                         default:
@@ -1083,15 +1083,15 @@ INT_PTR CALLBACK x264vfw_callback_main(HWND hDlg, UINT uMsg, WPARAM wParam, LPAR
                             break;
 
                         case IDC_STATS_FILE:
-                            if (GetDlgItemText(hMainDlg, IDC_STATS_FILE, config->stats, MAX_STATS_PATH) == 0)
-                                strcpy(config->stats, ".\\x264.stats");
-                            SetDlgItemText(hMainDlg, IDC_STATS_FILE, config->stats);
+                            if (GetDlgItemTextW(hMainDlg, IDC_STATS_FILE, config->stats, MAX_STATS_PATH) == 0)
+                                wcscpy(config->stats, L".\\x264.stats");
+                            SetDlgItemTextW(hMainDlg, IDC_STATS_FILE, config->stats);
                             break;
 
                         case IDC_OUTPUT_FILE:
-                            if (GetDlgItemText(hMainDlg, IDC_OUTPUT_FILE, config->output_file, MAX_OUTPUT_PATH) == 0)
-                                strcpy(config->output_file, "");
-                            SetDlgItemText(hMainDlg, IDC_OUTPUT_FILE, config->output_file);
+                            if (GetDlgItemTextW(hMainDlg, IDC_OUTPUT_FILE, config->output_file, MAX_OUTPUT_PATH) == 0)
+                                wcscpy(config->output_file, L"");
+                            SetDlgItemTextW(hMainDlg, IDC_OUTPUT_FILE, config->output_file);
                             break;
 
                         case IDC_SAR_W:
@@ -1103,9 +1103,9 @@ INT_PTR CALLBACK x264vfw_callback_main(HWND hDlg, UINT uMsg, WPARAM wParam, LPAR
                             break;
 
                         case IDC_EXTRA_CMDLINE:
-                            if (GetDlgItemText(hMainDlg, IDC_EXTRA_CMDLINE, config->extra_cmdline, MAX_CMDLINE) == 0)
-                                strcpy(config->extra_cmdline, "");
-                            SetDlgItemText(hMainDlg, IDC_EXTRA_CMDLINE, config->extra_cmdline);
+                            if (GetDlgItemTextW(hMainDlg, IDC_EXTRA_CMDLINE, config->extra_cmdline, MAX_CMDLINE) == 0)
+                                wcscpy(config->extra_cmdline, L"");
+                            SetDlgItemTextW(hMainDlg, IDC_EXTRA_CMDLINE, config->extra_cmdline);
                             break;
 
                         default:
@@ -1568,8 +1568,11 @@ static void help(char *buffer, int longhelp)
     H2( "      --slices <integer>      Number of slices per frame; forces rectangular\r\n"
         "                              slices and is overridden by other slicing options\r\n" );
     else H1( "      --slices <integer>      Number of slices per frame\r\n" );
+    H2( "      --slices-max <integer>  Absolute maximum slices per frame; overrides\r\n"
+        "                              slice-max-size/slice-max-mbs when necessary\r\n" );
     H2( "      --slice-max-size <integer> Limit the size of each slice in bytes\r\n");
-    H2( "      --slice-max-mbs <integer> Limit the size of each slice in macroblocks\r\n");
+    H2( "      --slice-max-mbs <integer> Limit the size of each slice in macroblocks (max)\r\n");
+    H2( "      --slice-min-mbs <integer> Limit the size of each slice in macroblocks (min)\r\n");
     H0( "      --tff                   Enable interlaced mode (top field first)\r\n" );
     H0( "      --bff                   Enable interlaced mode (bottom field first)\r\n" );
     H2( "      --constrained-intra     Enable constrained intra prediction.\r\n" );
@@ -1709,22 +1712,26 @@ static void help(char *buffer, int longhelp)
     H2( "      --range <string>        Specify color range [\"%s\"]\r\n"
         "                                  - %s\r\n", x264vfw_range_names[0], stringify_names( buf, x264vfw_range_names ) );
     H2( "      --colorprim <string>    Specify color primaries [\"%s\"]\r\n"
-        "                                  - undef, bt709, bt470m, bt470bg\r\n"
-        "                                    smpte170m, smpte240m, film\r\n",
+        "                                  - undef, bt709, bt470m, bt470bg, smpte170m,\r\n"
+        "                                    smpte240m, film, bt2020\r\n",
                                        strtable_lookup( x264_colorprim_names, defaults->vui.i_colorprim ) );
     H2( "      --transfer <string>     Specify transfer characteristics [\"%s\"]\r\n"
-        "                                  - undef, bt709, bt470m, bt470bg, linear,\r\n"
-        "                                    log100, log316, smpte170m, smpte240m\r\n",
+        "                                  - undef, bt709, bt470m, bt470bg, smpte170m,\r\n"
+        "                                    smpte240m, linear, log100, log316,\r\n"
+        "                                    iec61966-2-4, bt1361e, iec61966-2-1,\r\n"
+        "                                    bt2020-10, bt2020-12\r\n",
                                        strtable_lookup( x264_transfer_names, defaults->vui.i_transfer ) );
     H2( "      --colormatrix <string>  Specify color matrix setting [\"%s\"]\r\n"
-        "                                  - undef, bt709, fcc, bt470bg\r\n"
-        "                                    smpte170m, smpte240m, GBR, YCgCo\r\n",
+        "                                  - undef, bt709, fcc, bt470bg, smpte170m,\r\n"
+        "                                    smpte240m, GBR, YCgCo, bt2020nc, bt2020c\r\n",
                                        strtable_lookup( x264_colmatrix_names, defaults->vui.i_colmatrix ) );
     H2( "      --chromaloc <integer>   Specify chroma sample location (0 to 5) [%d]\r\n",
                                        defaults->vui.i_chroma_loc );
 
     H2( "      --nal-hrd <string>      Signal HRD information (requires vbv-bufsize)\r\n"
         "                                  - none, vbr, cbr (cbr not allowed in .mp4)\r\n" );
+    H2( "      --filler                Force hard-CBR and generate filler (implied by\r\n"
+        "                              --nal-hrd cbr)\r\n" );
     H2( "      --pic-struct            Force pic_struct in Picture Timing SEI\r\n" );
     H2( "      --crop-rect <string>    Add 'left,top,right,bottom' to the bitstream-level\r\n"
         "                              cropping rectangle\r\n" );
@@ -1739,6 +1746,10 @@ static void help(char *buffer, int longhelp)
     H0( "      --fps <float|rational>  Specify framerate\r\n" );
     H0( "      --level <string>        Specify level (as defined by Annex A)\r\n" );
     H1( "      --bluray-compat         Enable compatibility hacks for Blu-ray support\r\n" );
+    H1( "      --avcintra-class <integer> Use compatibility hacks for AVC-Intra class\r\n"
+        "                                  - 50, 100, 200\r\n" );
+    H1( "      --stitchable            Don't optimize headers based on video content\r\n"
+        "                              Ensures ability to recombine a segmented encode\r\n" );
     H1( "\r\n" );
     H1( "  -v, --verbose               Print stats for each frame\r\n" );
     H0( "      --quiet                 Quiet Mode\r\n" );

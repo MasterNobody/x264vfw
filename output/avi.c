@@ -1,7 +1,7 @@
 /*****************************************************************************
  * avi.c: avi muxer (using libavformat)
  *****************************************************************************
- * Copyright (C) 2010-2013 x264 project
+ * Copyright (C) 2010-2014 x264 project
  *
  * Authors: Anton Mitrofanov <BugMaster@narod.ru>
  *
@@ -23,6 +23,7 @@
 #include "output.h"
 #undef DECLARE_ALIGNED
 #include <libavformat/avformat.h>
+#include <libavutil/mathematics.h>
 
 typedef struct
 {
@@ -72,30 +73,36 @@ static int close_file( hnd_t handle, int64_t largest_pts, int64_t second_largest
 
 static int open_file( char *psz_filename, hnd_t *p_handle, cli_output_opt_t *opt )
 {
-    avi_hnd_t *h;
-    AVOutputFormat *mux_fmt;
-
     *p_handle = NULL;
 
-    FILE *fh = fopen( psz_filename, "w" );
-    if( !fh )
-        return -1;
-    int b_regular = x264_is_regular_file( fh );
-    fclose( fh );
+    int b_regular = strcmp( psz_filename, "-" );
+    b_regular = b_regular && x264_is_regular_file_path( psz_filename );
+    if( b_regular )
+    {
+        FILE *fh = x264vfw_fopen( psz_filename, "wb" );
+        if( !fh )
+        {
+            x264vfw_cli_log( opt->p_private, "avi", X264_LOG_ERROR, "cannot open output file `%s'.\n", psz_filename );
+            return -1;
+        }
+        b_regular = x264_is_regular_file( fh );
+        fclose( fh );
+    }
+
     if( !b_regular )
     {
         x264vfw_cli_log( opt->p_private, "avi", X264_LOG_ERROR, "AVI output is incompatible with non-regular file `%s'\n", psz_filename );
         return -1;
     }
 
-    if( !(h = malloc( sizeof(avi_hnd_t) )) )
+    avi_hnd_t *h = calloc( 1, sizeof(avi_hnd_t) );
+    if( !h )
         return -1;
-    memset( h, 0, sizeof(avi_hnd_t) );
 
     memcpy( &h->opt, opt, sizeof(cli_output_opt_t) );
 
     av_register_all();
-    mux_fmt = av_guess_format( "avi", NULL, NULL );
+    AVOutputFormat *mux_fmt = av_guess_format( "avi", NULL, NULL );
     if( !mux_fmt )
     {
         close_file( h, 0, 0 );
@@ -145,6 +152,9 @@ static int set_param( hnd_t handle, x264_param_t *p_param )
     c->codec_type = AVMEDIA_TYPE_VIDEO;
     c->codec_id = AV_CODEC_ID_H264;
     c->codec_tag = MKTAG('H','2','6','4');
+
+    h->video_stm->time_base.num = p_param->i_timebase_num;
+    h->video_stm->time_base.den = p_param->i_timebase_den;
 
     if( !(c->flags & CODEC_FLAG_GLOBAL_HEADER) && avformat_write_header( h->mux_fc, NULL ) )
         return -1;
@@ -233,8 +243,8 @@ static int write_frame( hnd_t handle, uint8_t *p_nalu, int i_size, x264_picture_
         pkt.data = p_nalu;
         pkt.size = i_size;
     }
-    pkt.pts = AV_NOPTS_VALUE; //av_rescale_q( p_picture->i_pts, h->video_stm->codec->time_base, h->video_stm->time_base );
-    pkt.dts = AV_NOPTS_VALUE; //av_rescale_q( p_picture->i_dts, h->video_stm->codec->time_base, h->video_stm->time_base );
+    pkt.pts = av_rescale_q( p_picture->i_pts, h->video_stm->codec->time_base, h->video_stm->time_base );
+    pkt.dts = av_rescale_q( p_picture->i_dts, h->video_stm->codec->time_base, h->video_stm->time_base );
     if( av_interleaved_write_frame( h->mux_fc, &pkt ) )
         return -1;
 

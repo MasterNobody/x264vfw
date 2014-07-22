@@ -1,7 +1,7 @@
 /*****************************************************************************
  * x264vfw.h: x264vfw main header
  *****************************************************************************
- * Copyright (C) 2003-2013 x264vfw project
+ * Copyright (C) 2003-2014 x264vfw project
  *
  * Authors: Justin Clay
  *          Laurent Aimar <fenrir@via.ecp.fr>
@@ -32,6 +32,7 @@
 #include <libavformat/avformat.h>
 #include <libavcodec/avcodec.h>
 #include <libavutil/avutil.h>
+#include <libavutil/opt.h>
 #include <libswscale/swscale.h>
 #endif
 
@@ -65,7 +66,7 @@
 
 #define X264VFW_WEBSITE "http://sourceforge.net/projects/x264vfw/"
 
-#define X264VFW_FORMAT_VERSION 3
+#define X264VFW_FORMAT_VERSION 4
 
 /* Limits */
 #define MAX_QUANT   51
@@ -124,7 +125,7 @@ typedef struct
     int b_fast1pass;    /* Turns off some flags during 1st pass */
     int b_createstats;  /* Creates the statsfile in single pass mode */
     int b_updatestats;  /* Updates the statsfile during 2nd pass */
-    char stats[MAX_STATS_SIZE];
+    wchar_t stats[MAX_STATS_SIZE];
     /* Output */
     int i_output_mode;
     int i_fourcc;
@@ -133,7 +134,7 @@ typedef struct
 #else
     int reserved_b_vd_hack;
 #endif
-    char output_file[MAX_OUTPUT_SIZE];
+    wchar_t output_file[MAX_OUTPUT_SIZE];
     /* Sample Aspect Ratio */
     int i_sar_width;
     int i_sar_height;
@@ -149,7 +150,7 @@ typedef struct
     int reserved_b_disable_decoder;
 #endif
     /* Extra command line */
-    char extra_cmdline[MAX_CMDLINE];
+    wchar_t extra_cmdline[MAX_CMDLINE];
 } CONFIG;
 
 typedef struct

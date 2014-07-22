@@ -1,7 +1,7 @@
 /*****************************************************************************
  * codec.c: main encoding/decoding functions
  *****************************************************************************
- * Copyright (C) 2003-2013 x264vfw project
+ * Copyright (C) 2003-2014 x264vfw project
  *
  * Authors: Justin Clay
  *          Laurent Aimar <fenrir@via.ecp.fr>
@@ -25,7 +25,6 @@
 #include "x264vfw.h"
 
 #include <assert.h>
-#include <wchar.h>
 
 #define _GNU_SOURCE
 #include <getopt.h>
@@ -140,6 +139,16 @@ typedef enum
     RANGE_TV,
     RANGE_PC
 } range_enum;
+
+/* Functions for dealing with Unicode on Windows. */
+FILE *x264vfw_fopen(const char *filename, const char *mode)
+{
+    wchar_t filename_utf16[MAX_PATH];
+    wchar_t mode_utf16[16];
+    if (utf8_to_utf16(filename, filename_utf16) && utf8_to_utf16(mode, mode_utf16))
+        return _wfopen(filename_utf16, mode_utf16);
+    return NULL;
+}
 
 /* Return a valid x264 colorspace or X264VFW_CSP_NONE if it is not supported */
 static int get_csp(BITMAPINFOHEADER *hdr)
@@ -614,7 +623,7 @@ void x264vfw_log_create(CODEC *codec)
 {
     x264vfw_log_destroy(codec);
     if (codec->config.i_log_level > 0)
-        codec->hCons = CreateDialog(x264vfw_hInst, MAKEINTRESOURCE(IDD_LOG), GetDesktopWindow(), x264vfw_callback_log);
+        codec->hCons = CreateDialogW(x264vfw_hInst, MAKEINTRESOURCEW(IDD_LOG), GetDesktopWindow(), x264vfw_callback_log);
 }
 
 void x264vfw_log_destroy(CODEC *codec)
@@ -629,7 +638,8 @@ void x264vfw_log_destroy(CODEC *codec)
 
 static void x264vfw_log_internal(CODEC *codec, const char *name, int i_level, const char *psz_fmt, va_list arg)
 {
-    char msg[1024];
+    char msg[2048];
+    wchar_t utf16_msg[2048];
     char *s_level;
 
     switch (i_level)
@@ -658,7 +668,20 @@ static void x264vfw_log_internal(CODEC *codec, const char *name, int i_level, co
     snprintf(msg, sizeof(msg) - 1, "%s [%s]: ", name, s_level);
     vsnprintf(msg + strlen(msg), sizeof(msg) - strlen(msg) - 1, psz_fmt, arg);
 
-    DPRINTF("%s", msg);
+    /* convert UTF-8 to wide chars */
+    if (!MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, msg, -1, utf16_msg, sizeof(utf16_msg)) &&
+        !MultiByteToWideChar(CP_ACP, 0, msg, -1, utf16_msg, sizeof(utf16_msg)))
+    {
+#if X264VFW_DEBUG_OUTPUT
+        OutputDebugString("x264vfw [error]: log msg to unicode conversion failed");
+        OutputDebugString(msg);
+#endif
+        return;
+    }
+
+#if X264VFW_DEBUG_OUTPUT
+    OutputDebugStringW(utf16_msg);
+#endif
 
     if (codec && codec->hCons)
     {
@@ -667,9 +690,9 @@ static void x264vfw_log_internal(CODEC *codec, const char *name, int i_level, co
         HDC  hdc;
 
         /* Strip final linefeeds (required) */
-        idx = strlen(msg) - 1;
-        while (idx >= 0 && (msg[idx] == '\n' || msg[idx] == '\r'))
-            msg[idx--] = 0;
+        idx = wcslen(utf16_msg) - 1;
+        while (idx >= 0 && (utf16_msg[idx] == L'\n' || utf16_msg[idx] == L'\r'))
+            utf16_msg[idx--] = 0;
 
         if (!codec->b_visible)
         {
@@ -677,7 +700,7 @@ static void x264vfw_log_internal(CODEC *codec, const char *name, int i_level, co
             codec->b_visible = TRUE;
         }
         h_console = GetDlgItem(codec->hCons, LOG_IDC_CONSOLE);
-        idx = SendMessage(h_console, LB_ADDSTRING, 0, (LPARAM)msg);
+        idx = SendMessageW(h_console, LB_ADDSTRING, 0, (LPARAM)utf16_msg);
 
         /* Make sure that the last added item is visible (autoscroll) */
         if (idx >= 0)
@@ -689,9 +712,10 @@ static void x264vfw_log_internal(CODEC *codec, const char *name, int i_level, co
             HFONT hfntDefault;
             SIZE  sz;
 
-            strcat(msg, "X"); /* Otherwise item may be clipped */
+            if (wcslen(utf16_msg) < ARRAY_ELEMS(utf16_msg) - 1)
+                wcscat(utf16_msg, L"X"); /* Otherwise item may be clipped */
             hfntDefault = SelectObject(hdc, (HFONT)SendMessage(h_console, WM_GETFONT, 0, 0));
-            GetTextExtentPoint32(hdc, msg, strlen(msg), &sz);
+            GetTextExtentPoint32W(hdc, utf16_msg, wcslen(utf16_msg), &sz);
             if (sz.cx > SendMessage(h_console, LB_GETHORIZONTALEXTENT, 0, 0))
                 SendMessage(h_console, LB_SETHORIZONTALEXTENT, (WPARAM)sz.cx, 0);
             SelectObject(hdc, hfntDefault);
@@ -744,7 +768,6 @@ typedef enum
     OPT_THREAD_INPUT,
     OPT_QUIET,
     OPT_NOPROGRESS,
-    OPT_VISUALIZE,
     OPT_LONGHELP,
     OPT_PROFILE,
     OPT_PRESET,
@@ -791,6 +814,7 @@ static struct option long_options[] =
     { "b-pyramid",         required_argument, NULL, 0                   },
     { "open-gop",          no_argument,       NULL, 0                   },
     { "bluray-compat",     no_argument,       NULL, 0                   },
+    { "avcintra-class",    required_argument, NULL, 0                   },
     { "min-keyint",        required_argument, NULL, 'i'                 },
     { "keyint",            required_argument, NULL, 'I'                 },
     { "intra-refresh",     no_argument,       NULL, 0                   },
@@ -879,7 +903,9 @@ static struct option long_options[] =
     { "no-sliced-threads", no_argument,       NULL, 0                   },
     { "slice-max-size",    required_argument, NULL, 0                   },
     { "slice-max-mbs",     required_argument, NULL, 0                   },
+    { "slice-min-mbs",     required_argument, NULL, 0                   },
     { "slices",            required_argument, NULL, 0                   },
+    { "slices-max",        required_argument, NULL, 0                   },
     { "thread-input",      no_argument,       NULL, OPT_THREAD_INPUT    },
     { "sync-lookahead",    required_argument, NULL, 0                   },
     { "deterministic",     no_argument,       NULL, 0                   },
@@ -894,7 +920,6 @@ static struct option long_options[] =
     { "log-level",         required_argument, NULL, OPT_LOG_LEVEL       },
     { "progress",          no_argument,       NULL, OPT_NOPROGRESS      },
     { "no-progress",       no_argument,       NULL, OPT_NOPROGRESS      },
-    { "visualize",         no_argument,       NULL, OPT_VISUALIZE       },
     { "dump-yuv",          required_argument, NULL, 0                   },
     { "sps-id",            required_argument, NULL, 0                   },
     { "aud",               no_argument,       NULL, 0                   },
@@ -931,6 +956,8 @@ static struct option long_options[] =
     { "frame-packing",     required_argument, NULL, 0                   },
     { "dts-compress",      no_argument,       NULL, OPT_DTS_COMPRESSION },
     { "output-csp",        required_argument, NULL, OPT_OUTPUT_CSP      },
+    { "stitchable",        no_argument,       NULL, 0                   },
+    { "filler",            no_argument,       NULL, 0                   },
 #if X264VFW_USE_VIRTUALDUB_HACK
     { "vd-hack",           no_argument,       NULL, OPT_VD_HACK         },
 #endif
@@ -1106,6 +1133,8 @@ static int select_output(const char *muxer, char *filename, x264_param_t *param,
 /* Parse command line for preset/tune options */
 static int parse_preset_tune(int argc, char **argv, x264_param_t *param, CODEC *codec)
 {
+    EnterCriticalSection(&x264vfw_CS);
+
     opterr = 0; /* Suppress error messages printing in getopt */
     optind = 0; /* Initialize getopt */
 
@@ -1122,10 +1151,15 @@ static int parse_preset_tune(int argc, char **argv, x264_param_t *param, CODEC *
         else if (c == '?')
         {
             x264vfw_log(codec, X264_LOG_ERROR, "unknown option or absent argument: '%s'\n", argv[checked_optind]);
-            return -1;
+            goto fail;
         }
     }
+
+    LeaveCriticalSection(&x264vfw_CS);
     return 0;
+fail:
+    LeaveCriticalSection(&x264vfw_CS);
+    return -1;
 }
 
 static int parse_enum_name(const char *arg, const char * const *names, const char **dst)
@@ -1155,6 +1189,8 @@ static int parse_enum_value(const char *arg, const char * const *names, int *dst
 /* Parse command line for all other options */
 static int parse_cmdline(int argc, char **argv, x264_param_t *param, CODEC *codec)
 {
+    EnterCriticalSection(&x264vfw_CS);
+
     opterr = 0; /* Suppress error messages printing in getopt */
     optind = 0; /* Initialize getopt */
 
@@ -1181,7 +1217,6 @@ static int parse_cmdline(int argc, char **argv, x264_param_t *param, CODEC *code
             case OPT_QPFILE:
             case OPT_THREAD_INPUT:
             case OPT_NOPROGRESS:
-            case OPT_VISUALIZE:
             case OPT_TCFILE_IN:
             case OPT_TCFILE_OUT:
             case OPT_TIMEBASE:
@@ -1198,7 +1233,7 @@ static int parse_cmdline(int argc, char **argv, x264_param_t *param, CODEC *code
                 if (parse_enum_name(optarg, x264vfw_muxer_names, &codec->cli_output_muxer) < 0)
                 {
                     x264vfw_log(codec, X264_LOG_ERROR, "unknown muxer '%s'\n", optarg);
-                    return -1;
+                    goto fail;
                 }
                 break;
 
@@ -1255,7 +1290,7 @@ static int parse_cmdline(int argc, char **argv, x264_param_t *param, CODEC *code
                 if (parse_enum_value(optarg, x264vfw_range_names, &param->vui.b_fullrange) < 0)
                 {
                     x264vfw_log(codec, X264_LOG_ERROR, "unknown range '%s'\n", optarg);
-                    return -1;
+                    goto fail;
                 }
                 param->vui.b_fullrange += RANGE_AUTO;
                 break;
@@ -1275,7 +1310,7 @@ generic_option:
                     if (long_options_index < 0)
                     {
                         x264vfw_log(codec, X264_LOG_ERROR, "unknown option or absent argument: '%s'\n", argv[checked_optind]);
-                        return -1;
+                        goto fail;
                     }
                 }
                 b_error = x264_param_parse(param, long_options[long_options_index].name, optarg);
@@ -1298,10 +1333,15 @@ generic_option:
                     x264vfw_log(codec, X264_LOG_ERROR, "unknown error with option: '%s'\n", argv[checked_optind]);
                     break;
             }
-            return -1;
+            goto fail;
         }
     }
+
+    LeaveCriticalSection(&x264vfw_CS);
     return 0;
+fail:
+    LeaveCriticalSection(&x264vfw_CS);
+    return -1;
 }
 
 /* Prepare to compress data */
@@ -1310,11 +1350,12 @@ LRESULT x264vfw_compress_begin(CODEC *codec, BITMAPINFO *lpbiInput, BITMAPINFO *
     CONFIG *config = &codec->config;
     char tune_buf[64];
     x264_param_t param;
+    char stats[MAX_STATS_SIZE * 2];
+    char output_file[MAX_OUTPUT_SIZE * 2];
+    char extra_cmdline[MAX_CMDLINE * 2];
     char *argv[MAX_ARG_NUM];
-    char arg_mem[MAX_CMDLINE];
+    char arg_mem[MAX_CMDLINE * 2];
     int argc;
-    char stat_out[MAX_STATS_SIZE];
-    char stat_in[MAX_STATS_SIZE];
 
     /* Destroy previous handle */
     x264vfw_compress_end(codec);
@@ -1330,8 +1371,6 @@ LRESULT x264vfw_compress_begin(CODEC *codec, BITMAPINFO *lpbiInput, BITMAPINFO *
 
     /* Default internal codec params */
 #if X264VFW_USE_BUGGY_APPS_HACK
-    codec->prev_lpbiOutput = NULL;
-    codec->prev_output_biSizeImage = 0;
     codec->b_check_size = lpbiOutput->bmiHeader.biSizeImage != 0;
 #endif
 #if X264VFW_USE_VIRTUALDUB_HACK
@@ -1372,8 +1411,16 @@ LRESULT x264vfw_compress_begin(CODEC *codec, BITMAPINFO *lpbiInput, BITMAPINFO *
     }
     codec->tune = tune_buf[0] ? tune_buf : NULL;
 
+    if (!WideCharToMultiByte(CP_UTF8, 0, config->stats, -1, stats, sizeof(stats), NULL, NULL) ||
+        !WideCharToMultiByte(CP_UTF8, 0, config->output_file, -1, output_file, sizeof(output_file), NULL, NULL) ||
+        !WideCharToMultiByte(CP_UTF8, 0, config->extra_cmdline, -1, extra_cmdline, sizeof(extra_cmdline), NULL, NULL))
+    {
+        x264vfw_log(codec, X264_LOG_ERROR, "strings conversion to utf-8 failed\n");
+        goto fail;
+    }
+
     /* Split extra command line on separate args for getopt processing */
-    argc = split_cmdline(config->extra_cmdline, argv, arg_mem);
+    argc = split_cmdline(extra_cmdline, argv, arg_mem);
 
     /* Presets are applied before all other options. */
     if (parse_preset_tune(argc, argv, &param, codec) < 0)
@@ -1456,15 +1503,13 @@ LRESULT x264vfw_compress_begin(CODEC *codec, BITMAPINFO *lpbiInput, BITMAPINFO *
 
     if (param.rc.b_stat_write || param.rc.b_stat_read)
     {
-        strcpy(stat_out, config->stats);
-        strcpy(stat_in, config->stats);
-        param.rc.psz_stat_out = stat_out;
-        param.rc.psz_stat_in = stat_in;
+        param.rc.psz_stat_out = stats;
+        param.rc.psz_stat_in = stats;
     }
 
     /* Output */
     codec->b_cli_output = FALSE;
-    codec->cli_output_file = config->i_output_mode == 1 ? config->output_file : "-";
+    codec->cli_output_file = config->i_output_mode == 1 ? output_file : "-";
     codec->cli_output_muxer = x264vfw_muxer_names[0];
     memset(&codec->cli_output_opt, 0, sizeof(cli_output_opt_t));
     codec->cli_output_opt.p_private = codec;
@@ -1929,10 +1974,10 @@ LRESULT x264vfw_decompress_begin(CODEC *codec, BITMAPINFO *lpbiInput, BITMAPINFO
         return ICERR_ERROR;
     }
 
-    codec->decoder_frame = avcodec_alloc_frame();
+    codec->decoder_frame = av_frame_alloc();
     if (!codec->decoder_frame)
     {
-        x264vfw_log(codec, X264_LOG_DEBUG, "avcodec_alloc_frame failed\n");
+        x264vfw_log(codec, X264_LOG_DEBUG, "av_frame_alloc failed\n");
         av_freep(&codec->decoder_context);
         return ICERR_ERROR;
     }
@@ -1966,7 +2011,7 @@ LRESULT x264vfw_decompress_begin(CODEC *codec, BITMAPINFO *lpbiInput, BITMAPINFO
     {
         x264vfw_log(codec, X264_LOG_DEBUG, "avcodec_open failed\n");
         av_freep(&codec->decoder_context);
-        avcodec_free_frame(&codec->decoder_frame);
+        av_frame_free(&codec->decoder_frame);
         av_freep(&codec->decoder_extradata);
         return ICERR_ERROR;
     }
@@ -1976,6 +2021,91 @@ LRESULT x264vfw_decompress_begin(CODEC *codec, BITMAPINFO *lpbiInput, BITMAPINFO
     codec->decoder_pkt.size = 0;
 
     return ICERR_OK;
+}
+
+/* handle the deprecated jpeg pixel formats */
+static int handle_jpeg(int pix_fmt, int *fullrange)
+{
+    switch (pix_fmt)
+    {
+        case AV_PIX_FMT_YUVJ420P: *fullrange = 1; return AV_PIX_FMT_YUV420P;
+        case AV_PIX_FMT_YUVJ422P: *fullrange = 1; return AV_PIX_FMT_YUV422P;
+        case AV_PIX_FMT_YUVJ444P: *fullrange = 1; return AV_PIX_FMT_YUV444P;
+        default:                                  return pix_fmt;
+    }
+}
+
+static struct SwsContext *x264vfw_init_sws_context(CODEC *codec, int dst_width, int dst_height)
+{
+    struct SwsContext *sws = sws_alloc_context();
+    if (!sws)
+        return NULL;
+
+    int flags = SWS_BICUBIC |
+                SWS_FULL_CHR_H_INP | SWS_ACCURATE_RND;
+
+    int src_width = codec->decoder_context->width;
+    int src_height = codec->decoder_context->height;
+    if (!src_width || !src_height)
+    {
+        src_width = codec->decoder_context->coded_width;
+        src_height = codec->decoder_context->coded_height;
+    }
+    int src_range = codec->decoder_context->color_range == AVCOL_RANGE_JPEG;
+    int src_pix_fmt = handle_jpeg(codec->decoder_context->pix_fmt, &src_range);
+
+    int dst_range = src_range; //maintain source range
+    int dst_pix_fmt = handle_jpeg(codec->decoder_pix_fmt, &dst_range);
+
+    av_opt_set_int(sws, "sws_flags",  flags,       0);
+
+    av_opt_set_int(sws, "srcw",       src_width,   0);
+    av_opt_set_int(sws, "srch",       src_height,  0);
+    av_opt_set_int(sws, "src_format", src_pix_fmt, 0);
+    av_opt_set_int(sws, "src_range",  src_range,   0);
+
+    av_opt_set_int(sws, "dstw",       dst_width,   0);
+    av_opt_set_int(sws, "dsth",       dst_height,  0);
+    av_opt_set_int(sws, "dst_format", dst_pix_fmt, 0);
+    av_opt_set_int(sws, "dst_range",  dst_range,   0);
+
+    /* SWS_FULL_CHR_H_INT is correctly supported only for RGB formats */
+    if (dst_pix_fmt == AV_PIX_FMT_BGR24 || dst_pix_fmt == AV_PIX_FMT_BGRA)
+        flags |= SWS_FULL_CHR_H_INT;
+
+    const int *coefficients = NULL;
+    switch (codec->decoder_context->colorspace)
+    {
+        case AVCOL_SPC_BT709:
+            coefficients = sws_getCoefficients(SWS_CS_ITU709);
+            break;
+        case AVCOL_SPC_FCC:
+            coefficients = sws_getCoefficients(SWS_CS_FCC);
+            break;
+        case AVCOL_SPC_BT470BG:
+            coefficients = sws_getCoefficients(SWS_CS_ITU601);
+            break;
+        case AVCOL_SPC_SMPTE170M:
+            coefficients = sws_getCoefficients(SWS_CS_SMPTE170M);
+            break;
+        case AVCOL_SPC_SMPTE240M:
+            coefficients = sws_getCoefficients(SWS_CS_SMPTE240M);
+            break;
+        default:
+            coefficients = sws_getCoefficients(SWS_CS_DEFAULT);
+            break;
+    }
+    sws_setColorspaceDetails(sws,
+                             coefficients, src_range,
+                             coefficients, dst_range,
+                             0, 1<<16, 1<<16);
+
+    if (sws_init_context(sws, NULL, NULL) < 0)
+    {
+        sws_freeContext(sws);
+        return NULL;
+    }
+    return sws;
 }
 
 LRESULT x264vfw_decompress(CODEC *codec, ICDECOMPRESS *icd)
@@ -2098,24 +2228,10 @@ LRESULT x264vfw_decompress(CODEC *codec, ICDECOMPRESS *icd)
 
     if (!codec->sws)
     {
-        int flags = SWS_BICUBIC |
-                    SWS_FULL_CHR_H_INP | SWS_ACCURATE_RND;
-        int width = codec->decoder_context->width;
-        int height = codec->decoder_context->height;
-        if (!width || !height)
-        {
-            width = codec->decoder_context->coded_width;
-            height = codec->decoder_context->coded_height;
-        }
-        /* SWS_FULL_CHR_H_INT is correctly supported only for RGB formats */
-        if (codec->decoder_pix_fmt == AV_PIX_FMT_BGR24 || codec->decoder_pix_fmt == AV_PIX_FMT_BGRA)
-            flags |= SWS_FULL_CHR_H_INT;
-        codec->sws = sws_getContext(width, height, codec->decoder_context->pix_fmt,
-                                    inhdr->biWidth, inhdr->biHeight, codec->decoder_pix_fmt,
-                                    flags, NULL, NULL, NULL);
+        codec->sws = x264vfw_init_sws_context(codec, inhdr->biWidth, inhdr->biHeight);
         if (!codec->sws)
         {
-            x264vfw_log(codec, X264_LOG_DEBUG, "sws_getContext failed\n");
+            x264vfw_log(codec, X264_LOG_DEBUG, "x264vfw_init_sws_context failed\n");
             return ICERR_ERROR;
         }
     }
@@ -2132,7 +2248,7 @@ LRESULT x264vfw_decompress_end(CODEC *codec)
     if (codec->decoder_context)
         avcodec_close(codec->decoder_context);
     av_freep(&codec->decoder_context);
-    avcodec_free_frame(&codec->decoder_frame);
+    av_frame_free(&codec->decoder_frame);
     av_freep(&codec->decoder_extradata);
     av_freep(&codec->decoder_buf);
     codec->decoder_buf_size = 0;

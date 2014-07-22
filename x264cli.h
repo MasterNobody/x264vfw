@@ -1,7 +1,7 @@
 /*****************************************************************************
  * x264cli.h: x264cli common
  *****************************************************************************
- * Copyright (C) 2003-2013 x264vfw project
+ * Copyright (C) 2003-2014 x264vfw project
  *
  * Authors: Laurent Aimar <fenrir@via.ecp.fr>
  *          Loren Merritt <lorenm@u.washington.edu>
@@ -55,5 +55,9 @@ static inline char *get_filename_extension( char *filename )
 }
 
 void x264vfw_cli_log( void *p_private, const char *name, int i_level, const char *psz_fmt, ... );
+
+#define utf8_to_utf16( utf8, utf16 )\
+    MultiByteToWideChar( CP_UTF8, MB_ERR_INVALID_CHARS, utf8, -1, utf16, sizeof(utf16)/sizeof(wchar_t) )
+FILE *x264vfw_fopen( const char *filename, const char *mode );
 
 #endif

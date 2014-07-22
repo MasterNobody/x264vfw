@@ -127,7 +127,6 @@ CFLAGS += -DHAVE_FFMPEG
 CFLAGS += "-I$(FFMPEG_DIR)"
 VFW_LDFLAGS += "-L$(FFMPEG_DIR)/libavformat" -lavformat
 VFW_LDFLAGS += "-L$(FFMPEG_DIR)/libavcodec" -lavcodec
-#VFW_LDFLAGS += "-L$(FFMPEG_DIR)/libavcore" -lavcore
 VFW_LDFLAGS += "-L$(FFMPEG_DIR)/libavutil" -lavutil
 VFW_LDFLAGS += "-L$(FFMPEG_DIR)/libswscale" -lswscale
 VFW_LDFLAGS += $(EXTRALIBS)
@@ -148,11 +147,20 @@ ifneq ($(wildcard config.h)x,x)
 CONFIG := $(shell cat config.h)
 endif
 
+SRCS_LSMASH = common/alloc.c common/utils.c common/bstream.c common/list.c \
+              common/osdep.c codecs/mp4sys.c codecs/mp4a.c codecs/dts.c codecs/a52.c \
+              codecs/h264.c codecs/hevc.c codecs/vc1.c codecs/alac.c \
+              codecs/description.c core/isom.c core/fragment.c core/summary.c \
+              core/print.c core/read.c core/timeline.c core/chapter.c core/meta.c \
+              core/write.c core/box.c
+
+CFLAGS += -Ioutput/L-SMASH -DLSMASH_DEMUXER_ENABLED
+
 SRC_C += output/raw.c
 SRC_C += output/matroska.c output/matroska_ebml.c
 SRC_C += output/flv.c output/flv_bytestream.c
-SRC_C += output/mp4.c
-SRC_C += $(addprefix output/mp4/, isom.c utils.c write.c importer.c mp4sys.c mp4a.c summary.c chapter.c dts.c a52.c h264.c vc1.c alac.c meta.c description.c box.c)
+SRC_C += output/mp4_lsmash.c
+SRC_C += $(addprefix output/L-SMASH/, $(SRCS_LSMASH))
 
 ifeq ($(HAVE_FFMPEG),yes)
 SRC_C += output/avi.c

@@ -1,7 +1,7 @@
 /*****************************************************************************
  * common.h: misc common functions
  *****************************************************************************
- * Copyright (C) 2010-2013 x264vfw project
+ * Copyright (C) 2010-2014 x264vfw project
  *
  * Authors: Anton Mitrofanov <BugMaster@narod.ru>
  *
@@ -34,6 +34,7 @@
 #include <stdio.h>
 #include <sys/stat.h>
 #include <windows.h>
+#include <wchar.h>
 
 #include <x264.h>
 #include "config.h"
@@ -69,6 +70,7 @@
 #define X264_MIN(a, b) (((a)<(b)) ? (a) : (b))
 #define X264_MAX(a, b) (((a)>(b)) ? (a) : (b))
 #define X264_CLIP(v, min, max) (((v)<(min)) ? (min) : ((v)>(max)) ? (max) : (v))
+#define ARRAY_ELEMS(a) ((sizeof(a))/(sizeof(a[0])))
 
 #define WORD_SIZE sizeof(void*)
 
@@ -137,7 +139,7 @@ static inline uint8_t x264_is_regular_file_path( const char *filename )
 }
 
 #if X264VFW_DEBUG_OUTPUT
-#define DPRINTF_BUF_SZ 1024
+#define DPRINTF_BUF_SZ 2048
 static inline void DPRINTF(const char *fmt, ...)
 {
     va_list arg;
