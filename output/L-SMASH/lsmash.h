@@ -33,17 +33,51 @@
 /****************************************************************************
  * Version
  ****************************************************************************/
-#define LSMASH_VERSION_MAJOR  1
-#define LSMASH_VERSION_MINOR 11
-#define LSMASH_VERSION_MICRO  8
+#define LSMASH_VERSION_MAJOR  2
+#define LSMASH_VERSION_MINOR  4
+#define LSMASH_VERSION_MICRO  1
 
 #define LSMASH_VERSION_INT( a, b, c ) (((a) << 16) | ((b) << 8) | (c))
+
+#define LIBLSMASH_VERSION_INT LSMASH_VERSION_INT( LSMASH_VERSION_MAJOR, \
+                                                  LSMASH_VERSION_MINOR, \
+                                                  LSMASH_VERSION_MICRO )
+
+/****************************************************************************
+ * Error Values
+ ****************************************************************************/
+enum
+{
+    LSMASH_ERR_NAMELESS       = -1, /* An error but not assigned to any following errors */
+    LSMASH_ERR_MEMORY_ALLOC   = -2, /* There is not enough room in the heap. */
+    LSMASH_ERR_INVALID_DATA   = -3, /* Invalid data was found. */
+    LSMASH_ERR_FUNCTION_PARAM = -4, /* An error in the parameter list of the function */
+    LSMASH_ERR_PATCH_WELCOME  = -5, /* Not implemented yet, so patches welcome. */
+    LSMASH_ERR_UNKNOWN        = -6, /* Unknown error occured. */
+};
 
 /****************************************************************************
  * ROOT
  *   The top-level opaque handler for whole file handling.
  ****************************************************************************/
 typedef struct lsmash_root_tag lsmash_root_t;
+
+/* Allocate a ROOT.
+ * The allocated ROOT can be deallocate by lsmash_destroy_root().
+ *
+ * Return the address of an allocated ROOT if successful.
+ * Return NULL otherwise. */
+lsmash_root_t *lsmash_create_root( void );
+
+/* Deallocate a given ROOT. */
+void lsmash_destroy_root
+(
+    lsmash_root_t *root     /* the address of a ROOT you want to deallocate */
+);
+
+/****************************************************************************
+ * File Layer
+ ****************************************************************************/
 typedef struct lsmash_file_tag lsmash_file_t;
 
 typedef enum
@@ -206,12 +240,13 @@ typedef struct
     uint64_t max_read_size;             /* max size of reading from the file at a time. 4*1024*1024 (4MiB) is default value. */
 } lsmash_file_parameters_t;
 
-/* Allocate a ROOT.
- * The allocated ROOT can be deallocate by lsmash_destroy_root().
- *
- * Return the address of an allocated ROOT if successful.
- * Return NULL otherwise. */
-lsmash_root_t *lsmash_create_root( void );
+typedef int (*lsmash_adhoc_remux_callback)( void *param, uint64_t done, uint64_t total );
+typedef struct
+{
+    uint64_t                    buffer_size;
+    lsmash_adhoc_remux_callback func;
+    void                       *param;
+} lsmash_adhoc_remux_t;
 
 /* Open a file where the path is given.
  * And if successful, set up the parameters by 'open_mode'.
@@ -254,10 +289,7 @@ int lsmash_close_file
 
 /* Associate a file with a ROOT and allocate the handle of that file.
  * The all allocated handles can be deallocated by lsmash_destroy_root().
- *
- * Note:
- *   At present, the added file is only referenced by all tracks of the movie defined in the same file.
- *   External data references are not implemented yet, but will come in the near future.
+ * If the ROOT has no associated file yet, the first associated file is activated.
  *
  * Return the address of the allocated handle of the added file if successful.
  * Return NULL otherwise. */
@@ -278,38 +310,38 @@ int64_t lsmash_read_file
     lsmash_file_parameters_t *param
 );
 
-/* Open the movie file to which the path is given, and allocate and set up the ROOT of the file.
- * The allocated ROOT can be deallocated by lsmash_destroy_root().
- *
- * Users can specify "-" for 'filename'.
- * In this case,
- *   (1) read from stdin when 'mode' contains LSMASH_FILE_MODE_READ,
- * or
- *   (2) write into stdout when 'mode' contains LSMASH_FILE_MODE_WRITE_FRAGMENTED.
- *
- * Note that 'filename' must be encoded by UTF-8 if 'mode' contains LSMASH_FILE_MODE_WRITE.
- * On Windows, lsmash_convert_ansi_to_utf8() may help you.
- *
- * WARNING: This function is deprecated!
- *
- * Return the address of an allocated ROOT of the file if successful.
- * Return NULL otherwise. */
-lsmash_root_t *lsmash_open_movie
-(
-    const char       *filename,     /* the path of a file you want to open. */
-    lsmash_file_mode  mode          /* mode for opening file */
-);
-
-/* Deallocate a given ROOT. */
-void lsmash_destroy_root
-(
-    lsmash_root_t *root     /* the address of a ROOT you want to deallocate */
-);
-
-/* Deallocate all boxes in a given ROOT. */
+/* Deallocate all boxes within the current active file in a given ROOT. */
 void lsmash_discard_boxes
 (
-    lsmash_root_t *root     /* the address of a ROOT you want to deallocate all boxes in it */
+    lsmash_root_t *root     /* the address of a ROOT you want to deallocate all boxes within the active file in it */
+);
+
+/* Activate a file associated with a ROOT.
+ *
+ * Return 0 if successful.
+ * Return a negative value otherwise. */
+int lsmash_activate_file
+(
+    lsmash_root_t *root,
+    lsmash_file_t *file
+);
+
+/* Switch from the current segment file to the following media segment file.
+ * After switching, the followed segment file can be closed unless that file is an initialization segment.
+ *
+ * The first followed segment file must be also an initialization segment.
+ * The second or later segment files must not be an initialization segment.
+ * For media segment files flagging LSMASH_FILE_MODE_INDEX, 'remux' must be set.
+ *
+ * Users shall call lsmash_flush_pooled_samples() for each track before calling this function.
+ *
+ * Return 0 if successful.
+ * Return a negative value otherwise. */
+int lsmash_switch_media_segment
+(
+    lsmash_root_t        *root,
+    lsmash_file_t        *successor,
+    lsmash_adhoc_remux_t *remux
 );
 
 /****************************************************************************
@@ -380,8 +412,8 @@ void *lsmash_realloc
  * Return NULL otherwise. */
 void *lsmash_memdup
 (
-    void  *ptr,     /* an address to the source of data to be copied */
-    size_t size     /* number of bytes to copy */
+    const void *ptr,    /* an address to the source of data to be copied */
+    size_t      size    /* number of bytes to copy */
 );
 
 /* Deallocate a given memory block.
@@ -615,7 +647,7 @@ uint8_t *lsmash_export_box
 typedef lsmash_box_type_t lsmash_codec_type_t;
 
 #define LSMASH_CODEC_TYPE_INITIALIZER LSMASH_BOX_TYPE_INITIALIZER
-#define LSMASH_CODEC_TYPE_UNSPECIFIED ((lsmash_codec_type_t)static_lsmash_box_type_unspecified)
+#define LSMASH_CODEC_TYPE_UNSPECIFIED LSMASH_BOX_TYPE_UNSPECIFIED
 
 #define DEFINE_ISOM_CODEC_TYPE( BOX_TYPE_NAME, BOX_TYPE_FOURCC ) \
     static const lsmash_codec_type_t BOX_TYPE_NAME = LSMASH_ISO_BOX_TYPE_INITIALIZER( BOX_TYPE_FOURCC )
@@ -645,6 +677,7 @@ DEFINE_ISOM_CODEC_TYPE( ISOM_CODEC_TYPE_SEVC_AUDIO,  LSMASH_4CC( 's', 'e', 'v', 
 DEFINE_ISOM_CODEC_TYPE( ISOM_CODEC_TYPE_SQCP_AUDIO,  LSMASH_4CC( 's', 'q', 'c', 'p' ) );    /* 13K Voice */
 DEFINE_ISOM_CODEC_TYPE( ISOM_CODEC_TYPE_SSMV_AUDIO,  LSMASH_4CC( 's', 's', 'm', 'v' ) );    /* SMV Voice */
 DEFINE_ISOM_CODEC_TYPE( ISOM_CODEC_TYPE_TWOS_AUDIO,  LSMASH_4CC( 't', 'w', 'o', 's' ) );    /* Uncompressed 16-bit audio */
+DEFINE_ISOM_CODEC_TYPE( ISOM_CODEC_TYPE_WMA_AUDIO,   LSMASH_4CC( 'w', 'm', 'a', ' ' ) );    /* Windows Media Audio V2 or V3 (not registered at MP4RA) */
 
 DEFINE_QTFF_CODEC_TYPE( QT_CODEC_TYPE_23NI_AUDIO,    LSMASH_4CC( '2', '3', 'n', 'i' ) );    /* 32-bit little endian integer uncompressed */
 DEFINE_QTFF_CODEC_TYPE( QT_CODEC_TYPE_MAC3_AUDIO,    LSMASH_4CC( 'M', 'A', 'C', '3' ) );    /* MACE 3:1 */
@@ -903,11 +936,13 @@ typedef enum
     LSMASH_CODEC_SUPPORT_FLAG_REMUX = LSMASH_CODEC_SUPPORT_FLAG_MUX | LSMASH_CODEC_SUPPORT_FLAG_DEMUX,
 } lsmash_codec_support_flag;
 
-#define LSMASH_BASE_SUMMARY                     \
-    lsmash_summary_type           summary_type; \
-    lsmash_codec_type_t           sample_type;  \
-    lsmash_codec_specific_list_t *opaque;       \
-    uint32_t                      max_au_length;     /* buffer length for 1 access unit, typically max size of 1 audio/video frame */
+#define LSMASH_BASE_SUMMARY                                                                         \
+    lsmash_summary_type           summary_type;                                                     \
+    lsmash_codec_type_t           sample_type;                                                      \
+    lsmash_codec_specific_list_t *opaque;                                                           \
+    uint32_t                      max_au_length;    /* buffer length for 1 access unit,             \
+                                                     * typically max size of 1 audio/video frame */ \
+    uint32_t                      data_ref_index;   /* the index of a data reference */
 
 typedef struct
 {
@@ -1042,10 +1077,10 @@ lsmash_codec_support_flag lsmash_check_codec_support
 
 /****************************************************************************
  * Audio Description Layer
- *   NOTE: Currently assuming AAC-LC.
  ****************************************************************************/
 /* Audio Object Types */
-typedef enum {
+typedef enum
+{
     MP4A_AUDIO_OBJECT_TYPE_NULL                           = 0,
     MP4A_AUDIO_OBJECT_TYPE_AAC_MAIN                       = 1,  /* ISO/IEC 14496-3 subpart 4 */
     MP4A_AUDIO_OBJECT_TYPE_AAC_LC                         = 2,  /* ISO/IEC 14496-3 subpart 4 */
@@ -1089,7 +1124,8 @@ typedef enum {
 } lsmash_mp4a_AudioObjectType;
 
 /* See ISO/IEC 14496-3 Signaling of SBR, SBR Signaling and Corresponding Decoder Behavior */
-typedef enum {
+typedef enum
+{
     MP4A_AAC_SBR_NOT_SPECIFIED = 0x0,   /* not mention to SBR presence. Implicit signaling. */
     MP4A_AAC_SBR_NONE,                  /* explicitly signals SBR does not present. Useless in general. */
     MP4A_AAC_SBR_BACKWARD_COMPATIBLE,   /* explicitly signals SBR present. Recommended method to signal SBR. */
@@ -1099,21 +1135,26 @@ typedef enum {
 typedef struct
 {
     LSMASH_BASE_SUMMARY
-    // mp4a_audioProfileLevelIndication pli;   /* I wonder we should have this or not. */
-    lsmash_mp4a_AudioObjectType aot;        /* Detailed codec type. If not mp4a, just ignored. */
-    uint32_t frequency;                     /* the audio sampling rate (Hz)
-                                             * For some audio, this field is used as a nominal value.
-                                             * For instance, even if the stream is HE-AAC v1/SBR, this is base AAC's one. */
-    uint32_t channels;                      /* the number of audio channels
-                                             * Even if the stream is HE-AAC v2/SBR+PS, this is base AAC's one. */
-    uint32_t sample_size;                   /* For uncompressed audio, the number of bits in each uncompressed sample for a single channel
-                                             * For some compressed audio, such as audio that uses MDCT, this field shall be nonsense and then set to 16. */
-    uint32_t samples_in_frame;              /* the number of decoded PCM samples in an audio frame at 'frequency'.
-                                             * Even if the stream is HE-AAC/aacPlus/SBR(+PS), this is base AAC's one, so 1024. */
-    lsmash_mp4a_aac_sbr_mode sbr_mode;      /* SBR treatment. Currently we always set this as mp4a_AAC_SBR_NOT_SPECIFIED(Implicit signaling).
-                                             * User can set this for treatment in other way. */
-    uint32_t bytes_per_frame;               /* If constant, this value is set to the number of bytes per audio frame.
-                                             * Otherwise set to 0. */
+    lsmash_mp4a_AudioObjectType aot;    /* detailed codec type
+                                         *   If neither ISOM_CODEC_TYPE_MP4A_AUDIO nor QT_CODEC_TYPE_MP4A_AUDIO, just ignored. */
+    uint32_t frequency;                 /* the audio sampling rate (in Hz) at the default output playback
+                                         *   For some audio, this field is used as a nominal value.
+                                         *   For HE-AAC v1/SBR stream, this is base AAC's one.
+                                         *   For ISOM_CODEC_TYPE_AC_3_AUDIO and ISOM_CODEC_TYPE_EC_3_AUDIO, this shall be
+                                         *   equal to the sampling rate (in Hz) of the stream and the media timescale. */
+    uint32_t channels;                  /* the number of audio channels at the default output playback
+                                         *   Even if the stream is HE-AAC v2/SBR+PS, this is base AAC's one. */
+    uint32_t sample_size;               /* For uncompressed audio,
+                                         *   the number of bits in each uncompressed sample for a single channel.
+                                         * For some compressed audio, such as audio that uses MDCT,
+                                         *   N/A (not applicable), and may be set to 16. */
+    uint32_t samples_in_frame;          /* the number of decoded PCM samples in an audio frame at 'frequency'
+                                         *   Even if the stream is HE-AAC/aacPlus/SBR(+PS), this is base AAC's one, so 1024. */
+    lsmash_mp4a_aac_sbr_mode sbr_mode;  /* SBR treatment
+                                         *   Currently we always set this as mp4a_AAC_SBR_NOT_SPECIFIED (Implicit signaling).
+                                         *   User can set this for treatment in other way. */
+    uint32_t bytes_per_frame;           /* the number of bytes per audio frame
+                                         *   If variable, shall be set to 0. */
 } lsmash_audio_summary_t;
 
 /* Facilitate to make exdata (typically DecoderSpecificInfo or AudioSpecificConfig). */
@@ -1292,7 +1333,6 @@ enum
 typedef struct
 {
     LSMASH_BASE_SUMMARY
-    // mp4sys_visualProfileLevelIndication pli;    /* I wonder we should have this or not. */
     // lsmash_mp4v_VideoObjectType vot;            /* Detailed codec type. If not mp4v, just ignored. */
     uint32_t           timescale;           /* media timescale
                                              * User can't set this parameter manually. */
@@ -1447,14 +1487,17 @@ typedef struct
 
 typedef struct
 {
-    uint8_t                   allow_earlier;
+    lsmash_random_access_flag ra_flags;         /* random access flags */
+    lsmash_post_roll_t        post_roll;
+    lsmash_pre_roll_t         pre_roll;
+    uint8_t                   allow_earlier;    /* only for QuickTime file format */
     uint8_t                   leading;
     uint8_t                   independent;
     uint8_t                   disposable;
     uint8_t                   redundant;
-    lsmash_random_access_flag ra_flags;
-    lsmash_post_roll_t        post_roll;
-    lsmash_pre_roll_t         pre_roll;
+    uint8_t                   reserved[3];      /* non-output
+                                                 * broken link
+                                                 * ??? */
 } lsmash_sample_property_t;
 
 typedef struct
@@ -1464,7 +1507,8 @@ typedef struct
     uint8_t                 *data;      /* sample data */
     uint64_t                 dts;       /* Decoding TimeStamp in units of media timescale */
     uint64_t                 cts;       /* Composition TimeStamp in units of media timescale */
-    uint32_t                 index;
+    uint64_t                 pos;       /* absolute file offset of sample data (read-only) */
+    uint32_t                 index;     /* index of sample description */
     lsmash_sample_property_t prop;
 } lsmash_sample_t;
 
@@ -1685,6 +1729,13 @@ typedef struct
     PRIVATE char data_handler_name_shadow[256];
 } lsmash_media_parameters_t;
 
+typedef struct
+{
+    uint32_t index;     /* the index of a data reference */
+    char    *location;  /* URL; location of referenced media file */
+    /* Probably, additional string fields such as thing to indicate URN will be added in the future. */
+} lsmash_data_reference_t;
+
 /* Set all the given media parameters to default. */
 void lsmash_initialize_media_parameters
 (
@@ -1805,6 +1856,70 @@ uint32_t lsmash_get_composition_to_decode_shift
 uint16_t lsmash_pack_iso_language
 (
     char *iso_language      /* a string of ISO 639-2/T language code */
+);
+
+/* Count the number of data references in a track.
+ *
+ * Return the number of data references in a track if no error.
+ * Return 0 otherwise. */
+uint32_t lsmash_count_data_reference
+(
+    lsmash_root_t *root,
+    uint32_t       track_ID
+);
+
+/* Get the location of a data reference in a track by specifying the index in 'data_ref'.
+ * The string fields in 'data_ref' may be allocated if referencing external media data.
+ * If referencing self-contained media data, the all string fields are set to NULL.
+ * You can deallocate the allocated fields by lsmash_free().
+ * Also you can deallocate all of the allocated fields by lsmash_cleanup_data_reference() at a time.
+ *
+ * Return 0 if successful.
+ * Return a negative value otherwise. */
+int lsmash_get_data_reference
+(
+    lsmash_root_t           *root,
+    uint32_t                 track_ID,
+    lsmash_data_reference_t *data_ref
+);
+
+/* Deallocate all of allocated fields in a given data reference at a time.
+ * The deallocated fields are set to NULL. */
+void lsmash_cleanup_data_reference
+(
+    lsmash_data_reference_t *data_ref
+);
+
+/* Create a data reference in a track and specify its location on playback for writing.
+ * If no settings for data references in a track, the location of the first data reference is specified to
+ * the location of the same file implicitly.
+ * Note that referenced files shall be used as a media, i.e. LSMASH_FILE_MODE_MEDIA shall be set to the 'mode'
+ * in the lsmash_file_parameters_t before calling lsmash_set_file().
+ *
+ * As restrictions of the libary,
+ *   WARNING1: The box structured media files cannot be used as a reference data yet.
+ *   WARNING2: The external media files cannot be used as a reference data for movie fragments yet.
+ *
+ * Return 0 if successful.
+ * Return a negative value otherwise. */
+int lsmash_create_data_reference
+(
+    lsmash_root_t           *root,
+    uint32_t                 track_ID,
+    lsmash_data_reference_t *data_ref,
+    lsmash_file_t           *file
+);
+
+/* Assign a data reference in a track to a read file.
+ *
+ * Return 0 if successful.
+ * Return a negative value otherwise. */
+int lsmash_assign_data_reference
+(
+    lsmash_root_t *root,
+    uint32_t       track_ID,
+    uint32_t       data_ref_index,
+    lsmash_file_t *file
 );
 
 /****************************************************************************
@@ -2049,16 +2164,6 @@ int lsmash_modify_explicit_timeline_map
  ****************************************************************************/
 typedef struct
 {
-    lsmash_brand_type  major_brand;         /* deprecated: the best used brand */
-    lsmash_brand_type *brands;              /* deprecated: the list of compatible brands */
-    uint32_t number_of_brands;              /* deprecated: the number of compatible brands used in the movie */
-    uint32_t minor_version;                 /* deprecated: minor version of best used brand */
-    double   max_chunk_duration;            /* deprecated: max duration per chunk in seconds. 0.5 is default value. */
-    double   max_async_tolerance;           /* deprecated:
-                                             *   max tolerance, in seconds, for amount of interleaving asynchronization between tracks.
-                                             *   2.0 is default value. At least twice of max_chunk_duration is used. */
-    uint64_t max_chunk_size;                /* deprecated: max size per chunk in bytes. 4*1024*1024 (4MiB) is default value. */
-    uint64_t max_read_size;                 /* deprecated: max size of reading from a chunk at a time. 4*1024*1024 (4MiB) is default value. */
     uint32_t timescale;                     /* movie timescale: timescale for the entire presentation */
     uint64_t duration;                      /* the duration, expressed in movie timescale, of the longest track
                                              * You can't set this parameter manually. */
@@ -2070,16 +2175,7 @@ typedef struct
     int32_t  preview_time;                  /* the time value in the movie at which the preview begins */
     int32_t  preview_duration;              /* the duration of the movie preview in movie timescale units */
     int32_t  poster_time;                   /* the time value of the time of the movie poster */
-    /* Any user shouldn't use the following parameter. */
-    PRIVATE lsmash_brand_type brands_shadow[50];
 } lsmash_movie_parameters_t;
-
-typedef int (*lsmash_adhoc_remux_callback)( void *param, uint64_t done, uint64_t total );
-typedef struct {
-    uint64_t                    buffer_size;
-    lsmash_adhoc_remux_callback func;
-    void                       *param;
-} lsmash_adhoc_remux_t;
 
 /* Set all the given movie parameters to default. */
 void lsmash_initialize_movie_parameters
@@ -2504,7 +2600,12 @@ void lsmash_sort_timestamps_composition_order
 /****************************************************************************
  * Tools for creating CODEC Specific Information Extensions (Magic Cookies)
  ****************************************************************************/
-/** MPEG-4 stream tools **/
+/* MPEG-4 Systems Specific Information
+ *   Mandatory :
+ *     ISOM_CODEC_TYPE_MP4A_AUDIO
+ *       QT_CODEC_TYPE_MP4A_AUDIO
+ *     ISOM_CODEC_TYPE_MP4V_AUDIO
+ *     ISOM_CODEC_TYPE_MP4S_AUDIO */
 /* objectTypeIndication */
 typedef enum
 {
@@ -2596,9 +2697,9 @@ typedef enum
     MP4SYS_STREAM_TYPE_StreamingText           = 0x0D,  /* StreamingText */
 } lsmash_mp4sys_stream_type;
 
-/* Decoder Specific Information
- * an opaque container with information for a specific media decoder
- * The existence and semantics of decoder specific information depends on the values of streamType and objectTypeIndication. */
+/* MPEG-4 Systems Decoder Specific Information
+ *   an opaque container with information for a specific media decoder
+ *   The existence and semantics of decoder specific information depends on the values of streamType and objectTypeIndication. */
 typedef struct lsmash_mp4sys_decoder_specific_info_tag lsmash_mp4sys_decoder_specific_info_t;
 
 /* Note: bufferSizeDB, maxBitrate and avgBitrate are calculated internally when calling lsmash_finish_movie().
@@ -2648,7 +2749,13 @@ int lsmash_get_mp4sys_decoder_specific_info
     uint32_t                           *payload_length
 );
 
-/* AC-3 tools to make exdata (AC-3 specific info). */
+/* AC-3 Specific Information
+ *   Mandatory :
+ *     ISOM_CODEC_TYPE_AC_3_AUDIO
+ *
+ * Unlike MPEG-4 Audio formats, the decoder does not require this for the initialization.
+ * Each AC-3 sample is self-contained.
+ * Users shall set the actual sample rate to 'frequency', which is a member of lsmash_audio_summary_t. */
 typedef struct
 {
     uint8_t fscod;          /* the same value as the fscod field in the AC-3 bitstream */
@@ -2672,11 +2779,17 @@ uint8_t *lsmash_create_ac3_specific_info
     uint32_t                         *data_length
 );
 
-/* Enhanced AC-3 tools to make exdata (Enhanced AC-3 specific info). */
+/* Enhanced AC-3 Specific Information
+ *   Mandatory :
+ *     ISOM_CODEC_TYPE_EC_3_AUDIO
+ *
+ * Unlike MPEG-4 Audio formats, the decoder does not require this for the initialization.
+ * Each Enhanced AC-3 sample is self-contained.
+ * Note that this cannot document reduced sample rates (24000, 22050 or 16000 Hz).
+ * Therefore, users shall set the actual sample rate to 'frequency', which is a member of lsmash_audio_summary_t. */
 typedef struct
 {
     uint8_t  fscod;         /* the same value as the fscod field in the independent substream */
-    uint8_t  fscod2;        /* Any user must not use this. */
     uint8_t  bsid;          /* the same value as the bsid field in the independent substream */
     uint8_t  bsmod;         /* the same value as the bsmod field in the independent substream
                              * If the bsmod field is not present in the independent substream, this field shall be set to 0. */
@@ -2715,7 +2828,15 @@ uint8_t *lsmash_create_eac3_specific_info
     uint32_t                          *data_length
 );
 
-/* DTS audio tools to make exdata (DTS specific info). */
+/* DTS Audio Specific Information
+ *   Mandatory :
+ *     ISOM_CODEC_TYPE_DTSC_AUDIO
+ *     ISOM_CODEC_TYPE_DTSH_AUDIO
+ *     ISOM_CODEC_TYPE_DTSL_AUDIO
+ *     ISOM_CODEC_TYPE_DTSE_AUDIO
+ *
+ * Unlike MPEG-4 Audio formats, the decoder does not require this for the initialization.
+ * Each DTS Audio sample is self-contained. */
 typedef enum
 {
     DTS_CORE_SUBSTREAM_CORE_FLAG = 0x00000001,
@@ -2817,7 +2938,10 @@ void lsmash_remove_dts_reserved_box
     lsmash_dts_specific_parameters_t *param
 );
 
-/* Apple Lossless Audio tools */
+/* Apple Lossless Audio Specific Information
+ *   Mandatory :
+ *     ISOM_CODEC_TYPE_ALAC_AUDIO
+ *       QT_CODEC_TYPE_ALAC_AUDIO */
 typedef struct
 {
     uint32_t frameLength;       /* the frames per packet when no explicit frames per packet setting is present in the packet header
@@ -2840,10 +2964,18 @@ uint8_t *lsmash_create_alac_specific_info
     uint32_t                          *data_length
 );
 
-/* MPEG-4 Bitrate information.
- *   Though you need not to set these fields manually since lsmash_finish_movie() calls the function
- *   that calculates these values internally, these fields are optional.
- *   Therefore, if you want to add this info, append this as an extension via LSMASH_CODEC_SPECIFIC_DATA_TYPE_ISOM_VIDEO_H264_BITRATE at least. */
+/* MPEG-4 Bitrate Information.
+ *   Optional :
+ *     ISOM_CODEC_TYPE_AVC1_VIDEO
+ *     ISOM_CODEC_TYPE_AVC2_VIDEO
+ *     ISOM_CODEC_TYPE_AVC3_VIDEO
+ *     ISOM_CODEC_TYPE_AVC4_VIDEO
+ *     ISOM_CODEC_TYPE_HVC1_VIDEO
+ *     ISOM_CODEC_TYPE_HEV1_VIDEO
+ *
+ * Though you need not to set these fields manually since lsmash_finish_movie() calls the function
+ * that calculates these values internally, these fields are optional.
+ * Therefore, if you want to add this info, append this as an extension via LSMASH_CODEC_SPECIFIC_DATA_TYPE_ISOM_VIDEO_H264_BITRATE at least. */
 typedef struct
 {
     uint32_t bufferSizeDB;  /* the size of the decoding buffer for the elementary stream in bytes */
@@ -2861,9 +2993,15 @@ typedef enum
     DCR_NALU_APPEND_POSSIBLE                  = 1,  /* It is possible to append the NAL unit into the Decoder Configuration Record. */
 } lsmash_dcr_nalu_appendable;
 
-/* H.264 tools to make exdata (AVC specific info).
- *   All members in lsmash_h264_specific_parameters_t except for lengthSizeMinusOne shall be automatically set up
- *   when appending SPS NAL units by calling lsmash_append_h264_parameter_set(). */
+/* H.264/AVC Specific Information
+ *   Mandatory :
+ *     ISOM_CODEC_TYPE_AVC1_VIDEO
+ *     ISOM_CODEC_TYPE_AVC2_VIDEO
+ *     ISOM_CODEC_TYPE_AVC3_VIDEO
+ *     ISOM_CODEC_TYPE_AVC4_VIDEO
+ *
+ * All members in lsmash_h264_specific_parameters_t except for lengthSizeMinusOne shall be automatically set up
+ * when appending SPS NAL units by calling lsmash_append_h264_parameter_set(). */
 typedef enum
 {
     H264_PARAMETER_SET_TYPE_SPS    = 0,     /* SPS (Sequence Parameter Set) */
@@ -2938,11 +3076,15 @@ uint8_t *lsmash_create_h264_specific_info
     uint32_t                          *data_length
 );
 
-/* HEVC tools to make exdata (HEVC specific info).
- *   All members in lsmash_hevc_specific_parameters_t except for avgFrameRate and lengthSizeMinusOne shall be
- *   automatically set up when appending VPS and SPS NAL units by calling lsmash_append_hevc_dcr_nalu().
- *   It is recommended that you should append VPS, SPS and PPS in this order so that a parameter set can reference
- *   another parameter set. */
+/* H.265/HEVC Specific Information
+ *   Mandatory :
+ *     ISOM_CODEC_TYPE_HVC1_VIDEO
+ *     ISOM_CODEC_TYPE_HEV1_VIDEO
+ *
+ * All members in lsmash_hevc_specific_parameters_t except for avgFrameRate and lengthSizeMinusOne shall be
+ * automatically set up when appending VPS and SPS NAL units by calling lsmash_append_hevc_dcr_nalu().
+ * It is recommended that you should append VPS, SPS and PPS in this order so that a parameter set can reference
+ * another parameter set. */
 typedef enum
 {
     /* Parameter sets
@@ -3086,7 +3228,11 @@ uint8_t *lsmash_create_hevc_specific_info
     uint32_t                          *data_length
 );
 
-/* VC-1 tools to make exdata (VC-1 specific info). */
+/* VC-1 Specific Information
+ *   Mandatory :
+ *     ISOM_CODEC_TYPE_VC_1_VIDEO
+ *
+ * We support only advanced profile at present. */
 typedef struct lsmash_vc1_header_tag lsmash_vc1_header_t;
 
 typedef struct
@@ -3332,25 +3478,25 @@ typedef struct
  * When audio stream has 3 or more number of channels, this extension shall be present. */
 typedef enum
 {
-    QT_CHANNEL_LABEL_UNKNOWN                = 0xffffffff,   /* unknown or unspecified other use */
-    QT_CHANNEL_LABEL_UNUSED                 = 0,            /* channel is present, but has no intended use or destination */
-    QT_CHANNEL_LABEL_USE_COORDINATES        = 100,          /* channel is described by the coordinates fields. */
+    QT_CHANNEL_LABEL_UNKNOWN                = (signed)0xffffffff,   /* unknown or unspecified other use */
+    QT_CHANNEL_LABEL_UNUSED                 = 0,                    /* channel is present, but has no intended use or destination */
+    QT_CHANNEL_LABEL_USE_COORDINATES        = 100,                  /* channel is described by the coordinates fields. */
 
     QT_CHANNEL_LABEL_LEFT                   = 1,
     QT_CHANNEL_LABEL_RIGHT                  = 2,
     QT_CHANNEL_LABEL_CENTER                 = 3,
     QT_CHANNEL_LABEL_LFE_SCREEN             = 4,
-    QT_CHANNEL_LABEL_LEFT_SURROUND          = 5,            /* WAVE: "Back Left" */
-    QT_CHANNEL_LABEL_RIGHT_SUROUND          = 6,            /* WAVE: "Back Right" */
+    QT_CHANNEL_LABEL_LEFT_SURROUND          = 5,                    /* WAVE: "Back Left" */
+    QT_CHANNEL_LABEL_RIGHT_SUROUND          = 6,                    /* WAVE: "Back Right" */
     QT_CHANNEL_LABEL_LEFT_CENTER            = 7,
     QT_CHANNEL_LABEL_RIGHT_CENTER           = 8,
-    QT_CHANNEL_LABEL_CENTER_SURROUND        = 9,            /* WAVE: "Back Center" or plain "Rear Surround" */
-    QT_CHANNEL_LABEL_LEFT_SURROUND_DIRECT   = 10,           /* WAVE: "Side Left" */
-    QT_CHANNEL_LABEL_RIGHT_SURROUND_DIRECT  = 11,           /* WAVE: "Side Right" */
+    QT_CHANNEL_LABEL_CENTER_SURROUND        = 9,                    /* WAVE: "Back Center" or plain "Rear Surround" */
+    QT_CHANNEL_LABEL_LEFT_SURROUND_DIRECT   = 10,                   /* WAVE: "Side Left" */
+    QT_CHANNEL_LABEL_RIGHT_SURROUND_DIRECT  = 11,                   /* WAVE: "Side Right" */
     QT_CHANNEL_LABEL_TOP_CENTER_SURROUND    = 12,
-    QT_CHANNEL_LABEL_VERTICAL_HEIGHT_LEFT   = 13,           /* WAVE: "Top Front Left" */
-    QT_CHANNEL_LABEL_VERTICAL_HEIGHT_CENTER = 14,           /* WAVE: "Top Front Center" */
-    QT_CHANNEL_LABEL_VERTICAL_HEIGHT_RIGHT  = 15,           /* WAVE: "Top Front Right" */
+    QT_CHANNEL_LABEL_VERTICAL_HEIGHT_LEFT   = 13,                   /* WAVE: "Top Front Left" */
+    QT_CHANNEL_LABEL_VERTICAL_HEIGHT_CENTER = 14,                   /* WAVE: "Top Front Center" */
+    QT_CHANNEL_LABEL_VERTICAL_HEIGHT_RIGHT  = 15,                   /* WAVE: "Top Front Right" */
 
     QT_CHANNEL_LABEL_TOP_BACK_LEFT          = 16,
     QT_CHANNEL_LABEL_TOP_BACK_CENTER        = 17,
@@ -3361,14 +3507,14 @@ typedef enum
     QT_CHANNEL_LABEL_LEFT_WIDE              = 35,
     QT_CHANNEL_LABEL_RIGHT_WIDE             = 36,
     QT_CHANNEL_LABEL_LFE2                   = 37,
-    QT_CHANNEL_LABEL_LEFT_TOTAL             = 38,           /* matrix encoded 4 channels */
-    QT_CHANNEL_LABEL_RIGHT_TOTAL            = 39,           /* matrix encoded 4 channels */
+    QT_CHANNEL_LABEL_LEFT_TOTAL             = 38,                   /* matrix encoded 4 channels */
+    QT_CHANNEL_LABEL_RIGHT_TOTAL            = 39,                   /* matrix encoded 4 channels */
     QT_CHANNEL_LABEL_HEARING_IMPAIRED       = 40,
     QT_CHANNEL_LABEL_NARRATION              = 41,
     QT_CHANNEL_LABEL_MONO                   = 42,
     QT_CHANNEL_LABEL_DIALOG_CENTRIC_MIX     = 43,
 
-    QT_CHANNEL_LABEL_CENTER_SURROUND_DIRECT = 44,           /* back center, non diffuse */
+    QT_CHANNEL_LABEL_CENTER_SURROUND_DIRECT = 44,                   /* back center, non diffuse */
 
     QT_CHANNEL_LABEL_HAPTIC                 = 45,
 
@@ -3645,7 +3791,7 @@ typedef enum
     QT_CHANNEL_LAYOUT_ALAC_7_1                 = QT_CHANNEL_LAYOUT_MPEG_7_1_B,      /* C Lc Rc L R Ls Rs LFE */
 
     QT_CHANNEL_LAYOUT_DISCRETE_IN_ORDER        = 147<<16,                           /* needs to be ORed with the actual number of channels */
-    QT_CHANNEL_LAYOUT_UNKNOWN                  = 0xffff0000,                        /* needs to be ORed with the actual number of channels */
+    QT_CHANNEL_LAYOUT_UNKNOWN                  = (signed)0xffff0000,                /* needs to be ORed with the actual number of channels */
 } lsmash_channel_layout_tag;
 
 typedef struct

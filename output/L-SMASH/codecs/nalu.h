@@ -20,6 +20,12 @@
 
 /* This file is available under an ISC license. */
 
+#define NALU_DEFAULT_BUFFER_SIZE      (1<<16)
+#define NALU_DEFAULT_NALU_LENGTH_SIZE 4     /* We always use 4 bytes length. */
+#define NALU_SHORT_START_CODE_LENGTH  3
+#define NALU_LONG_START_CODE_LENGTH   4
+#define NALU_NO_START_CODE_FOUND      UINT64_MAX
+
 static inline uint64_t nalu_get_codeNum
 (
     lsmash_bits_t *bits
@@ -139,7 +145,7 @@ static inline int nalu_get_max_ps_length
     {
         isom_dcr_ps_entry_t *ps = (isom_dcr_ps_entry_t *)entry->data;
         if( !ps )
-            return -1;
+            return LSMASH_ERR_NAMELESS;
         if( ps->unused )
             continue;
         *max_ps_length = LSMASH_MAX( *max_ps_length, ps->nalUnitLength );
@@ -158,7 +164,7 @@ static inline int nalu_get_ps_count
     {
         isom_dcr_ps_entry_t *ps = (isom_dcr_ps_entry_t *)entry->data;
         if( !ps )
-            return -1;
+            return LSMASH_ERR_NAMELESS;
         if( ps->unused )
             continue;
         ++(*ps_count);
@@ -177,7 +183,7 @@ static inline int nalu_check_same_ps_existence
     {
         isom_dcr_ps_entry_t *ps = (isom_dcr_ps_entry_t *)entry->data;
         if( !ps )
-            return -1;
+            return LSMASH_ERR_NAMELESS;
         if( ps->unused )
             continue;
         if( ps->nalUnitLength == ps_length && !memcmp( ps->nalUnit, ps_data, ps_length ) )
@@ -197,18 +203,18 @@ static inline int nalu_get_dcr_ps
     {
         isom_dcr_ps_entry_t *data = lsmash_malloc( sizeof(isom_dcr_ps_entry_t) );
         if( !data )
-            return -1;
-        if( lsmash_add_entry( list, data ) )
+            return LSMASH_ERR_MEMORY_ALLOC;
+        if( lsmash_add_entry( list, data ) < 0 )
         {
             lsmash_free( data );
-            return -1;
+            return LSMASH_ERR_MEMORY_ALLOC;
         }
         data->nalUnitLength = lsmash_bs_get_be16( bs );
         data->nalUnit       = lsmash_bs_get_bytes( bs, data->nalUnitLength );
         if( !data->nalUnit )
         {
             lsmash_remove_entries( list, isom_remove_dcr_ps );
-            return -1;
+            return LSMASH_ERR_NAMELESS;
         }
     }
     return 0;
@@ -221,4 +227,27 @@ static inline int nalu_check_next_short_start_code
 )
 {
     return ((buf_pos + 2) < buf_end) && !buf_pos[0] && !buf_pos[1] && (buf_pos[2] == 0x01);
+}
+
+/* Return the offset from the beginning of stream if a start code is found.
+ * Return NALU_NO_START_CODE_FOUND otherwise. */
+static inline uint64_t nalu_find_first_start_code
+(
+    lsmash_bs_t *bs
+)
+{
+    uint64_t first_sc_head_pos = 0;
+    while( 1 )
+    {
+        if( lsmash_bs_is_end( bs, first_sc_head_pos + NALU_LONG_START_CODE_LENGTH ) )
+            return NALU_NO_START_CODE_FOUND;
+        /* Invalid if encountered any value of non-zero before the first start code. */
+        if( lsmash_bs_show_byte( bs, first_sc_head_pos ) )
+            return NALU_NO_START_CODE_FOUND;
+        /* The first NALU of an AU in decoding order shall have long start code (0x00000001). */
+        if( 0x00000001 == lsmash_bs_show_be32( bs, first_sc_head_pos ) )
+            break;
+        ++first_sc_head_pos;
+    }
+    return first_sc_head_pos;
 }

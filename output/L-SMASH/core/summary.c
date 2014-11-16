@@ -39,10 +39,10 @@
 int lsmash_setup_AudioSpecificConfig( lsmash_audio_summary_t *summary )
 {
     if( !summary )
-        return -1;
+        return LSMASH_ERR_FUNCTION_PARAM;
     lsmash_bs_t* bs = lsmash_bs_create();
     if( !bs )
-        return -1;
+        return LSMASH_ERR_MEMORY_ALLOC;
     mp4a_AudioSpecificConfig_t *asc =
         mp4a_create_AudioSpecificConfig( summary->aot,
                                          summary->frequency,
@@ -53,7 +53,7 @@ int lsmash_setup_AudioSpecificConfig( lsmash_audio_summary_t *summary )
     if( !asc )
     {
         lsmash_bs_cleanup( bs );
-        return -1;
+        return LSMASH_ERR_NAMELESS;
     }
     mp4a_put_AudioSpecificConfig( bs, asc );
     void *new_asc;
@@ -62,12 +62,12 @@ int lsmash_setup_AudioSpecificConfig( lsmash_audio_summary_t *summary )
     mp4a_remove_AudioSpecificConfig( asc );
     lsmash_bs_cleanup( bs );
     if( !new_asc )
-        return -1;
+        return LSMASH_ERR_NAMELESS;
     lsmash_codec_specific_t *specific = lsmash_malloc_zero( sizeof(lsmash_codec_specific_t) );
     if( !specific )
     {
         lsmash_free( new_asc );
-        return -1;
+        return LSMASH_ERR_MEMORY_ALLOC;
     }
     specific->type              = LSMASH_CODEC_SPECIFIC_DATA_TYPE_UNKNOWN;
     specific->format            = LSMASH_CODEC_SPECIFIC_FORMAT_UNSTRUCTURED;
@@ -75,11 +75,11 @@ int lsmash_setup_AudioSpecificConfig( lsmash_audio_summary_t *summary )
     specific->size              = new_length;
     specific->data.unstructured = lsmash_memdup( new_asc, new_length );
     if( !specific->data.unstructured
-     || lsmash_add_entry( &summary->opaque->list, specific ) )
+     || lsmash_add_entry( &summary->opaque->list, specific ) < 0 )
     {
         lsmash_free( new_asc );
         lsmash_destroy_codec_specific_data( specific );
-        return -1;
+        return LSMASH_ERR_MEMORY_ALLOC;
     }
     return 0;
 }
@@ -108,7 +108,8 @@ lsmash_summary_t *lsmash_create_summary( lsmash_summary_type summary_type )
         lsmash_free( summary );
         return NULL;
     }
-    summary->summary_type = summary_type;
+    summary->summary_type   = summary_type;
+    summary->data_ref_index = 1;
     return summary;
 }
 
@@ -133,37 +134,44 @@ void lsmash_cleanup_summary( lsmash_summary_t *summary )
 int lsmash_add_codec_specific_data( lsmash_summary_t *summary, lsmash_codec_specific_t *specific )
 {
     if( !summary || !summary->opaque || !specific )
-        return -1;
+        return LSMASH_ERR_FUNCTION_PARAM;
     lsmash_codec_specific_t *dup = isom_duplicate_codec_specific_data( specific );
     if( !dup )
-        return -1;
-    if( lsmash_add_entry( &summary->opaque->list, dup ) )
+        return LSMASH_ERR_NAMELESS;
+    if( lsmash_add_entry( &summary->opaque->list, dup ) < 0 )
     {
         lsmash_destroy_codec_specific_data( dup );
-        return -1;
+        return LSMASH_ERR_MEMORY_ALLOC;
     }
     return 0;
 }
 
 uint32_t lsmash_count_summary( lsmash_root_t *root, uint32_t track_ID )
 {
-    if( !root || track_ID == 0 )
+    if( isom_check_initializer_present( root ) < 0 || track_ID == 0 )
         return 0;
-    isom_trak_t *trak = isom_get_trak( root->file, track_ID );
-    if( !trak || !trak->mdia || !trak->mdia->mdhd || !trak->mdia->hdlr
-     || !trak->mdia->minf || !trak->mdia->minf->stbl || !trak->mdia->minf->stbl->stsd )
+    isom_trak_t *trak = isom_get_trak( root->file->initializer, track_ID );
+    if( !trak
+     || !trak->mdia
+     || !trak->mdia->mdhd
+     || !trak->mdia->hdlr
+     || !trak->mdia->minf
+     || !trak->mdia->minf->stbl
+     || !trak->mdia->minf->stbl->stsd )
         return 0;
     return trak->mdia->minf->stbl->stsd->list.entry_count;
 }
 
 lsmash_summary_t *lsmash_get_summary( lsmash_root_t *root, uint32_t track_ID, uint32_t description_number )
 {
-    if( !root || track_ID == 0 || description_number == 0 )
+    if( isom_check_initializer_present( root ) < 0 || track_ID == 0 || description_number == 0 )
         return NULL;
-    isom_trak_t *trak = isom_get_trak( root->file, track_ID );
+    isom_trak_t *trak = isom_get_trak( root->file->initializer, track_ID );
     if( !trak
      || !trak->mdia
-     || !trak->mdia->mdhd || !trak->mdia->hdlr || !trak->mdia->minf
+     || !trak->mdia->mdhd
+     || !trak->mdia->hdlr
+     || !trak->mdia->minf
      || !trak->mdia->minf->stbl
      || !trak->mdia->minf->stbl->stsd )
         return NULL;
@@ -193,7 +201,7 @@ lsmash_summary_t *lsmash_get_summary( lsmash_root_t *root, uint32_t track_ID, ui
 int lsmash_compare_summary( lsmash_summary_t *a, lsmash_summary_t *b )
 {
     if( !a || !b )
-        return -1;
+        return LSMASH_ERR_FUNCTION_PARAM;
     if( a->summary_type != b->summary_type
      || !lsmash_check_box_type_identical( a->sample_type, b->sample_type ) )
         return 1;

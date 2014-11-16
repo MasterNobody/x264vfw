@@ -20,10 +20,6 @@
 
 /* This file is available under an ISC license. */
 
-#define HEVC_DEFAULT_BUFFER_SIZE      (1<<16)
-#define HEVC_DEFAULT_NALU_LENGTH_SIZE 4     /* We always use 4 bytes length. */
-#define HEVC_SHORT_START_CODE_LENGTH  3
-
 enum
 {
     HEVC_NALU_TYPE_TRAIL_N        = 0,
@@ -78,9 +74,11 @@ struct lsmash_hevc_parameter_arrays_tag
 
 typedef struct
 {
-    uint8_t  nal_unit_type;
-    uint8_t  TemporalId;
-    uint16_t length;
+    unsigned forbidden_zero_bit : 1;
+    unsigned nal_unit_type      : 7;   /* +1 bit for HEVC_NALU_TYPE_UNKNOWN */
+    unsigned nuh_layer_id       : 6;
+    unsigned TemporalId         : 3;
+    unsigned length             : 15;
 } hevc_nalu_header_t;
 
 /* Profile, Tier and Level */
@@ -204,6 +202,9 @@ typedef struct
     uint8_t   entropy_coding_sync_enabled_flag;
     uint32_t  num_tile_columns_minus1;
     uint32_t  num_tile_rows_minus1;
+#define SIZEOF_PPS_EXCLUDING_HEAP (sizeof(hevc_pps_t) - offsetof( hevc_pps_t, col_alloc_size ))
+    size_t    col_alloc_size;
+    size_t    row_alloc_size;
     uint32_t *colWidth;
     uint32_t *colBd;
     uint32_t *rowHeight;
@@ -219,9 +220,9 @@ typedef struct
 
 typedef struct
 {
-    uint8_t  present;
-    uint8_t  broken_link_flag;
-    uint32_t recovery_poc_cnt;
+    uint8_t present;
+    uint8_t broken_link_flag;
+    int32_t recovery_poc_cnt;
 } hevc_recovery_point_t;
 
 typedef struct
@@ -249,30 +250,31 @@ typedef struct
 /* Picture */
 typedef enum
 {
-    HEVC_PICTURE_TYPE_IDR   = 0,
-    HEVC_PICTURE_TYPE_I     = 1,
-    HEVC_PICTURE_TYPE_I_P   = 2,
-    HEVC_PICTURE_TYPE_I_P_B = 3,
-    HEVC_PICTURE_TYPE_NONE  = 4,
+    HEVC_PICTURE_TYPE_I     = 0,
+    HEVC_PICTURE_TYPE_I_P   = 1,
+    HEVC_PICTURE_TYPE_I_P_B = 2,
+    HEVC_PICTURE_TYPE_IDR   = 3,
+    HEVC_PICTURE_TYPE_CRA   = 4,
+    HEVC_PICTURE_TYPE_BLA   = 5,
+    HEVC_PICTURE_TYPE_NONE  = 6,
 } hevc_picture_type;
 
 typedef struct
 {
     hevc_picture_type type;
-    uint8_t           irap;
-    uint8_t           idr;
-    uint8_t           broken_link;
-    uint8_t           radl;
-    uint8_t           rasl;
-    uint8_t           sublayer_nonref;
-    uint8_t           closed_rap;
-    uint8_t           first;
-    uint8_t           random_accessible;
+    uint8_t           irap;             /* 1: IDR, CRA or BLA picture */
+    uint8_t           idr;              /* 1: IDR picture */
+    uint8_t           broken_link;      /* 1: BLA picture or picture with broken link flag */
+    uint8_t           radl;             /* 1: RADL picture */
+    uint8_t           rasl;             /* 1: RASL picture */
+    uint8_t           sublayer_nonref;  /* 1: sub-layer non-reference picture */
+    uint8_t           closed_rap;       /* 1: no undecodable leading picture in CVS */
+    uint8_t           random_accessible;/* 1: RAP or starting point of GDR */
     uint8_t           TemporalId;
-    uint8_t           independent;
-    uint8_t           field_coded;
+    uint8_t           independent;      /* 1: intra coded picture */
+    uint8_t           field_coded;      /* 1: field coded picture */
     uint8_t           pic_parameter_set_id;
-    uint8_t           has_primary;
+    uint8_t           has_primary;      /* 1: an independent slice segment is present. */
     uint8_t           delta;
     /* POC */
     uint16_t          poc_lsb;
@@ -280,7 +282,7 @@ typedef struct
     int32_t           tid0_poc_msb;
     int32_t           tid0_poc_lsb;
     /* */
-    uint32_t          recovery_poc_cnt;
+    int32_t           recovery_poc_cnt;
 } hevc_picture_info_t;
 
 /* Access unit */
@@ -299,15 +301,15 @@ typedef struct hevc_info_tag hevc_info_t;
 
 typedef struct
 {
-    lsmash_stream_buffers_t *sb;
-    uint8_t                 *rbsp;
+    lsmash_multiple_buffers_t *bank;
+    uint8_t                   *rbsp;
 } hevc_stream_buffer_t;
 
 struct hevc_info_tag
 {
     lsmash_hevc_specific_parameters_t hvcC_param;
     lsmash_hevc_specific_parameters_t hvcC_param_next;
-    hevc_nalu_header_t   nalu_header;
+    hevc_nalu_header_t   nuh;
     lsmash_entry_list_t  vps_list[1];
     lsmash_entry_list_t  sps_list[1];
     lsmash_entry_list_t  pps_list[1];
@@ -319,6 +321,7 @@ struct hevc_info_tag
     hevc_access_unit_t   au;
     uint8_t              prev_nalu_type;
     uint8_t              hvcC_pending;
+    uint8_t              eos;           /* end of sequence */
     uint64_t             ebsp_head_pos;
     lsmash_bits_t       *bits;
     hevc_stream_buffer_t buffer;
@@ -326,16 +329,21 @@ struct hevc_info_tag
 
 int hevc_setup_parser
 (
-    hevc_info_t               *info,
-    lsmash_stream_buffers_t   *sb,
-    int                        parse_only,
-    lsmash_stream_buffers_type type,
-    void                      *stream
+    hevc_info_t *info,
+    int          parse_only
 );
 
 void hevc_cleanup_parser
 (
     hevc_info_t *info
+);
+
+uint64_t hevc_find_next_start_code
+(
+    lsmash_bs_t        *bs,
+    hevc_nalu_header_t *nuh,
+    uint64_t           *start_code_length,
+    uint64_t           *trailing_zero_bytes
 );
 
 int hevc_calculate_poc
@@ -381,13 +389,6 @@ int hevc_supplement_buffer
     uint32_t              size
 );
 
-int hevc_check_nalu_header
-(
-    hevc_nalu_header_t      *nalu_header,
-    lsmash_stream_buffers_t *sb,
-    int                      use_long_start_code
-);
-
 int hevc_parse_vps
 (
     hevc_info_t *info,
@@ -418,7 +419,7 @@ int hevc_parse_sei
     hevc_vps_t         *vps,
     hevc_sps_t         *sps,
     hevc_sei_t         *sei,
-    hevc_nalu_header_t *nalu_header,
+    hevc_nalu_header_t *nuh,
     uint8_t            *rbsp_buffer,
     uint8_t            *ebsp,
     uint64_t            ebsp_size
@@ -426,7 +427,7 @@ int hevc_parse_sei
 int hevc_parse_slice_segment_header
 (
     hevc_info_t        *info,
-    hevc_nalu_header_t *nalu_header,
+    hevc_nalu_header_t *nuh,
     uint8_t            *rbsp_buffer,
     uint8_t            *ebsp,
     uint64_t            ebsp_size

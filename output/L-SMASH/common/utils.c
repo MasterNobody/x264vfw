@@ -50,12 +50,20 @@ double lsmash_int2float64( uint64_t value )
 /*---- others ----*/
 void lsmash_log
 (
-    void            *hp,
+    const void      *class,
     lsmash_log_level level,
     const char      *message,
     ...
 )
 {
+    /* Dereference lsmash_class_t pointer if 'class' is non-NULL. */
+    lsmash_class_t *cls = class ? (lsmash_class_t *)*(intptr_t *)class : NULL;
+    if( cls && cls->log_level_offset )
+    {
+        lsmash_log_level log_level = *(lsmash_log_level *)((int8_t *)class + cls->log_level_offset);
+        if( level > log_level )
+            return;
+    }
     char *prefix;
     va_list args;
     va_start( args, message );
@@ -74,14 +82,21 @@ void lsmash_log
             prefix = "Unknown";
             break;
     }
-    /* Dereference lsmash_class_t pointer if hp is non-NULL. */
-    lsmash_class_t *class = hp ? (lsmash_class_t *)*(intptr_t *)hp : NULL;
-    if( class )
-        fprintf( stderr, "[%s: %s]: ", class->name, prefix );
+    if( cls )
+        fprintf( stderr, "[%s: %s]: ", cls->name, prefix );
     else
         fprintf( stderr, "[%s]: ", prefix );
     vfprintf( stderr, message, args );
     va_end( args );
+}
+
+void lsmash_log_refresh_line
+(
+    const void *class   /* unused, but for forward compatibility */
+)
+{
+    /* Assume 80 characters per line. */
+    fprintf( stderr, "%80c", '\r' );
 }
 
 uint32_t lsmash_count_bits

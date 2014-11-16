@@ -1,9 +1,9 @@
 /*****************************************************************************
- * internal.h:
+ * file.h
  *****************************************************************************
- * Copyright (C) 2010-2014 L-SMASH project
+ * Copyright (C) 2014 L-SMASH project
  *
- * Authors:  Takashi Hirata <silverfilain@gmail.com>
+ * Authors: Yusuke Nakamura <muken.the.vfrmaniac@gmail.com>
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -20,25 +20,24 @@
 
 /* This file is available under an ISC license. */
 
-#ifndef INTERNAL_H
-#define INTERNAL_H
+int isom_check_compatibility
+(
+    lsmash_file_t *file
+);
 
-#include "osdep.h" /* must be placed before stdio.h */
-#include <stdio.h>
-#include <assert.h>
+int isom_check_mandatory_boxes
+(
+    lsmash_file_t *file
+);
 
-#ifndef lsmash_fseek
-#define lsmash_fseek fseeko
-#define lsmash_ftell ftello
-#endif
-
-#include "lsmash.h"
-
-#include "utils.h"
-#include "memint.h"
-#include "bytes.h"
-#include "bits.h"
-#include "multibuf.h"
-#include "list.h"
-
-#endif
+int isom_rearrange_data
+(
+    lsmash_file_t        *file,
+    lsmash_adhoc_remux_t *remux,
+    uint8_t              *buf[2],
+    size_t                read_num,
+    size_t                size,
+    uint64_t              read_pos,
+    uint64_t              write_pos,
+    uint64_t              file_size
+);

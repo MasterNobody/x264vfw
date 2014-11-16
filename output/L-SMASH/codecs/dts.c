@@ -57,38 +57,49 @@ typedef enum
     DTS_SYNCWORD_SUBSTREAM_CORE = 0x02b09261,
 } dts_syncword;
 
+/* Loudspeaker Masks (up to 32-bit) for
+ *   - nuCoreSpkrActivityMask
+ *   - nuXXChSpkrLayoutMask
+ *   - DownMixChMapMask
+ *   - nChMask
+ *   - nSpkrMask */
 typedef enum
 {
-    DTS_XXCH_LOUDSPEAKER_MASK_C    = 0x00000001,    /* Centre in front of listener */
-    DTS_XXCH_LOUDSPEAKER_MASK_L    = 0x00000002,    /* Left in front */
-    DTS_XXCH_LOUDSPEAKER_MASK_R    = 0x00000004,    /* Right in front */
-    DTS_XXCH_LOUDSPEAKER_MASK_LS   = 0x00000008,    /* Left surround on side in rear */
-    DTS_XXCH_LOUDSPEAKER_MASK_RS   = 0x00000010,    /* Right surround on side in rear */
-    DTS_XXCH_LOUDSPEAKER_MASK_LFE1 = 0x00000020,    /* Low frequency effects subwoofer */
-    DTS_XXCH_LOUDSPEAKER_MASK_CS   = 0x00000040,    /* Centre surround in rear */
-    DTS_XXCH_LOUDSPEAKER_MASK_LSR  = 0x00000080,    /* Left surround in rear */
-    DTS_XXCH_LOUDSPEAKER_MASK_RSR  = 0x00000100,    /* Right surround in rear */
-    DTS_XXCH_LOUDSPEAKER_MASK_LSS  = 0x00000200,    /* Left surround on side */
-    DTS_XXCH_LOUDSPEAKER_MASK_RSS  = 0x00000400,    /* Right surround on side */
-    DTS_XXCH_LOUDSPEAKER_MASK_LC   = 0x00000800,    /* Between left and centre in front */
-    DTS_XXCH_LOUDSPEAKER_MASK_RC   = 0x00001000,    /* Between right and centre in front */
-    DTS_XXCH_LOUDSPEAKER_MASK_LH   = 0x00002000,    /* Left height in front */
-    DTS_XXCH_LOUDSPEAKER_MASK_CH   = 0x00004000,    /* Centre Height in front */
-    DTS_XXCH_LOUDSPEAKER_MASK_RH   = 0x00008000,    /* Right Height in front */
-    DTS_XXCH_LOUDSPEAKER_MASK_LFE2 = 0x00010000,    /* Second low frequency effects subwoofer */
-    DTS_XXCH_LOUDSPEAKER_MASK_LW   = 0x00020000,    /* Left on side in front */
-    DTS_XXCH_LOUDSPEAKER_MASK_RW   = 0x00040000,    /* Right on side in front */
-    DTS_XXCH_LOUDSPEAKER_MASK_OH   = 0x00080000,    /* Over the listener's head */
-    DTS_XXCH_LOUDSPEAKER_MASK_LHS  = 0x00100000,    /* Left height on side */
-    DTS_XXCH_LOUDSPEAKER_MASK_RHS  = 0x00200000,    /* Right height on side */
-    DTS_XXCH_LOUDSPEAKER_MASK_CHR  = 0x00400000,    /* Centre height in rear */
-    DTS_XXCH_LOUDSPEAKER_MASK_LHR  = 0x00800000,    /* Left height in rear */
-    DTS_XXCH_LOUDSPEAKER_MASK_RHR  = 0x01000000,    /* Right height in rear */
-    DTS_XXCH_LOUDSPEAKER_MASK_CL   = 0x02000000,    /* Centre in the plane lower than listener's ears */
-    DTS_XXCH_LOUDSPEAKER_MASK_LL   = 0x04000000,    /* Left in the plane lower than listener's ears */
-    DTS_XXCH_LOUDSPEAKER_MASK_RL   = 0x08000000,    /* Right in the plane lower than listener's ears */
+    DTS_LOUDSPEAKER_MASK32_C    = 0x00000001,    /* Centre in front of listener */
+    DTS_LOUDSPEAKER_MASK32_L    = 0x00000002,    /* Left in front */
+    DTS_LOUDSPEAKER_MASK32_R    = 0x00000004,    /* Right in front */
+    DTS_LOUDSPEAKER_MASK32_LS   = 0x00000008,    /* Left surround on side in rear */
+    DTS_LOUDSPEAKER_MASK32_RS   = 0x00000010,    /* Right surround on side in rear */
+    DTS_LOUDSPEAKER_MASK32_LFE1 = 0x00000020,    /* Low frequency effects subwoofer */
+    DTS_LOUDSPEAKER_MASK32_CS   = 0x00000040,    /* Centre surround in rear */
+    DTS_LOUDSPEAKER_MASK32_LSR  = 0x00000080,    /* Left surround in rear */
+    DTS_LOUDSPEAKER_MASK32_RSR  = 0x00000100,    /* Right surround in rear */
+    DTS_LOUDSPEAKER_MASK32_LSS  = 0x00000200,    /* Left surround on side */
+    DTS_LOUDSPEAKER_MASK32_RSS  = 0x00000400,    /* Right surround on side */
+    DTS_LOUDSPEAKER_MASK32_LC   = 0x00000800,    /* Between left and centre in front */
+    DTS_LOUDSPEAKER_MASK32_RC   = 0x00001000,    /* Between right and centre in front */
+    DTS_LOUDSPEAKER_MASK32_LH   = 0x00002000,    /* Left height in front */
+    DTS_LOUDSPEAKER_MASK32_CH   = 0x00004000,    /* Centre Height in front */
+    DTS_LOUDSPEAKER_MASK32_RH   = 0x00008000,    /* Right Height in front */
+    DTS_LOUDSPEAKER_MASK32_LFE2 = 0x00010000,    /* Second low frequency effects subwoofer */
+    DTS_LOUDSPEAKER_MASK32_LW   = 0x00020000,    /* Left on side in front */
+    DTS_LOUDSPEAKER_MASK32_RW   = 0x00040000,    /* Right on side in front */
+    DTS_LOUDSPEAKER_MASK32_OH   = 0x00080000,    /* Over the listener's head */
+    DTS_LOUDSPEAKER_MASK32_LHS  = 0x00100000,    /* Left height on side */
+    DTS_LOUDSPEAKER_MASK32_RHS  = 0x00200000,    /* Right height on side */
+    DTS_LOUDSPEAKER_MASK32_CHR  = 0x00400000,    /* Centre height in rear */
+    DTS_LOUDSPEAKER_MASK32_LHR  = 0x00800000,    /* Left height in rear */
+    DTS_LOUDSPEAKER_MASK32_RHR  = 0x01000000,    /* Right height in rear */
+    DTS_LOUDSPEAKER_MASK32_CL   = 0x02000000,    /* Centre in the plane lower than listener's ears */
+    DTS_LOUDSPEAKER_MASK32_LL   = 0x04000000,    /* Left in the plane lower than listener's ears */
+    DTS_LOUDSPEAKER_MASK32_RL   = 0x08000000,    /* Right in the plane lower than listener's ears */
 } dts_loudspeaker_mask;
 
+/* Loudspeaker Masks (up to 16-bit) for
+ *  - nuSpkrActivityMask
+ *  - nuStndrSpkrLayoutMask
+ *  - nuMixOutChMask
+ *  - ChannelLayout of DTSSpecificBox */
 typedef enum
 {
     DTS_CHANNEL_LAYOUT_C       = 0x0001,    /* Centre in front of listener */
@@ -156,15 +167,15 @@ struct lsmash_dts_reserved_box_tag
 int lsmash_append_dts_reserved_box( lsmash_dts_specific_parameters_t *param, uint8_t *box_data, uint32_t box_size )
 {
     if( !param || !box_data || box_size == 0 )
-        return -1;
+        return LSMASH_ERR_FUNCTION_PARAM;
     param->box = lsmash_malloc( sizeof(lsmash_dts_reserved_box_t) );
     if( !param->box )
-        return -1;
+        return LSMASH_ERR_MEMORY_ALLOC;
     param->box->data = lsmash_memdup( box_data, box_size );
     if( !param->box->data )
     {
         lsmash_freep( &param->box );
-        return -1;
+        return LSMASH_ERR_MEMORY_ALLOC;
     }
     param->box->size = box_size;
     return 0;
@@ -174,8 +185,7 @@ void lsmash_remove_dts_reserved_box( lsmash_dts_specific_parameters_t *param )
 {
     if( !param->box )
         return;
-    if( param->box->data )
-        lsmash_free( param->box->data );
+    lsmash_free( param->box->data );
     lsmash_freep( &param->box );
 }
 
@@ -287,40 +297,29 @@ int lsmash_setup_dts_specific_parameters_from_frame( lsmash_dts_specific_paramet
     lsmash_bs_t   bs      = { 0 };
     uint8_t buffer[DTS_MAX_EXSS_SIZE] = { 0 };
     bs.buffer.data  = buffer;
+    bs.buffer.store = data_length;
     bs.buffer.alloc = DTS_MAX_EXSS_SIZE;
-    dts_info_t  handler = { 0 };
-    dts_info_t *info    = &handler;
-    uint32_t overall_wasted_data_length = 0;
-    info->buffer_pos = info->buffer;
-    info->buffer_end = info->buffer;
+    dts_info_t *info = &(dts_info_t){ .bits = &bits };
     info->bits = &bits;
     lsmash_bits_init( &bits, &bs );
+    memcpy( buffer, data, LSMASH_MIN( data_length, DTS_MAX_EXSS_SIZE ) );
     dts_setup_parser( info );
+    uint64_t next_frame_pos = 0;
     while( 1 )
     {
+        int err;
+        /* Seek to the head of the next syncframe. */
+        bs.buffer.pos = LSMASH_MIN( data_length, next_frame_pos );
         /* Check the remainder length of the buffer.
          * If there is enough length, then continue to parse the frame in it.
          * The length 10 is the required byte length to get frame size. */
-        uint32_t remainder_length = info->buffer_end - info->buffer_pos;
-        if( !info->no_more_read && remainder_length < DTS_MAX_EXSS_SIZE )
-        {
-            if( remainder_length )
-                memmove( info->buffer, info->buffer_pos, remainder_length );
-            uint32_t wasted_data_length = LSMASH_MIN( data_length, DTS_MAX_EXSS_SIZE );
-            memcpy( info->buffer + remainder_length, data + overall_wasted_data_length, wasted_data_length );
-            data_length                -= wasted_data_length;
-            overall_wasted_data_length += wasted_data_length;
-            remainder_length           += wasted_data_length;
-            info->buffer_pos   = info->buffer;
-            info->buffer_end   = info->buffer + remainder_length;
-            info->no_more_read = (data_length < 10);
-        }
-        if( remainder_length < 10 && info->no_more_read )
+        uint64_t remain_size = lsmash_bs_get_remaining_buffer_size( &bs );
+        if( bs.eob || (bs.eof && remain_size < 10) )
             goto setup_param;   /* No more valid data. */
         /* Parse substream frame. */
         dts_substream_type prev_substream_type = info->substream_type;
         info->substream_type = dts_get_substream_type( info );
-        int (*dts_parse_frame)( dts_info_t *, uint8_t *, uint32_t ) = NULL;
+        int (*dts_parse_frame)( dts_info_t * ) = NULL;
         switch( info->substream_type )
         {
             /* Decide substream frame parser and check if this frame and the previous frame belong to the same AU. */
@@ -332,20 +331,21 @@ int lsmash_setup_dts_specific_parameters_from_frame( lsmash_dts_specific_paramet
             case DTS_SUBSTREAM_TYPE_EXTENSION :
             {
                 uint8_t prev_exss_index = info->exss_index;
-                if( dts_get_exss_index( info, &info->exss_index ) )
-                    return -1;
+                if( (err = dts_get_exss_index( info, &info->exss_index )) < 0 )
+                    return err;
                 if( prev_substream_type == DTS_SUBSTREAM_TYPE_EXTENSION && info->exss_index <= prev_exss_index )
                     goto setup_param;
                 dts_parse_frame = dts_parse_extension_substream;
                 break;
             }
             default :
-                return -1;
+                /* An unknown stream type is detected. */
+                return LSMASH_ERR_NAMELESS;
         }
         info->frame_size = 0;
-        if( dts_parse_frame( info, info->buffer_pos, LSMASH_MIN( remainder_length, DTS_MAX_EXSS_SIZE ) ) )
-            return -1;  /* Failed to parse. */
-        info->buffer_pos += info->frame_size;
+        if( (err = dts_parse_frame( info )) < 0 )
+            return err; /* Failed to parse. */
+        next_frame_pos += info->frame_size;
     }
 setup_param:
     dts_update_specific_param( info );
@@ -376,42 +376,48 @@ static int dts_get_channel_count_from_channel_layout( uint16_t channel_layout )
 #undef DTS_CHANNEL_PAIR_MASK
 }
 
-static uint32_t dts_get_channel_layout_from_xxch_mask( uint32_t mask )
+static uint32_t dts_get_channel_layout_from_ls_mask32( uint32_t mask )
 {
     uint32_t layout = 0;
-    if( mask & DTS_XXCH_LOUDSPEAKER_MASK_C )
+    if( mask & DTS_LOUDSPEAKER_MASK32_C )
         layout |= DTS_CHANNEL_LAYOUT_C;
-    if( mask & (DTS_XXCH_LOUDSPEAKER_MASK_L | DTS_XXCH_LOUDSPEAKER_MASK_R) )
+    if( mask & (DTS_LOUDSPEAKER_MASK32_L | DTS_LOUDSPEAKER_MASK32_R) )
         layout |= DTS_CHANNEL_LAYOUT_L_R;
-    if( mask & (DTS_XXCH_LOUDSPEAKER_MASK_LS | DTS_XXCH_LOUDSPEAKER_MASK_RS) )
+    if( mask & (DTS_LOUDSPEAKER_MASK32_LS | DTS_LOUDSPEAKER_MASK32_RS) )
         layout |= DTS_CHANNEL_LAYOUT_LS_RS;
-    if( mask & DTS_XXCH_LOUDSPEAKER_MASK_LFE1 )
+    if( mask & DTS_LOUDSPEAKER_MASK32_LFE1 )
         layout |= DTS_CHANNEL_LAYOUT_LFE1;
-    if( mask & DTS_XXCH_LOUDSPEAKER_MASK_CS )
+    if( mask & DTS_LOUDSPEAKER_MASK32_CS )
         layout |= DTS_CHANNEL_LAYOUT_CS;
-    if( mask & (DTS_XXCH_LOUDSPEAKER_MASK_LH | DTS_XXCH_LOUDSPEAKER_MASK_RH) )
+    if( mask & (DTS_LOUDSPEAKER_MASK32_LH | DTS_LOUDSPEAKER_MASK32_RH) )
         layout |= DTS_CHANNEL_LAYOUT_LH_RH;
-    if( mask & (DTS_XXCH_LOUDSPEAKER_MASK_LSR | DTS_XXCH_LOUDSPEAKER_MASK_RSR) )
+    if( mask & (DTS_LOUDSPEAKER_MASK32_LSR | DTS_LOUDSPEAKER_MASK32_RSR) )
         layout |= DTS_CHANNEL_LAYOUT_LSR_RSR;
-    if( mask & DTS_XXCH_LOUDSPEAKER_MASK_CH )
+    if( mask & DTS_LOUDSPEAKER_MASK32_CH )
         layout |= DTS_CHANNEL_LAYOUT_CH;
-    if( mask & DTS_XXCH_LOUDSPEAKER_MASK_OH )
+    if( mask & DTS_LOUDSPEAKER_MASK32_OH )
         layout |= DTS_CHANNEL_LAYOUT_OH;
-    if( mask & (DTS_XXCH_LOUDSPEAKER_MASK_LC | DTS_XXCH_LOUDSPEAKER_MASK_RC) )
+    if( mask & (DTS_LOUDSPEAKER_MASK32_LC | DTS_LOUDSPEAKER_MASK32_RC) )
         layout |= DTS_CHANNEL_LAYOUT_LC_RC;
-    if( mask & (DTS_XXCH_LOUDSPEAKER_MASK_LW | DTS_XXCH_LOUDSPEAKER_MASK_RW) )
+    if( mask & (DTS_LOUDSPEAKER_MASK32_LW | DTS_LOUDSPEAKER_MASK32_RW) )
         layout |= DTS_CHANNEL_LAYOUT_LW_RW;
-    if( mask & (DTS_XXCH_LOUDSPEAKER_MASK_LSS | DTS_XXCH_LOUDSPEAKER_MASK_RSS) )
+    if( mask & (DTS_LOUDSPEAKER_MASK32_LSS | DTS_LOUDSPEAKER_MASK32_RSS) )
         layout |= DTS_CHANNEL_LAYOUT_LSS_RSS;
-    if( mask & DTS_XXCH_LOUDSPEAKER_MASK_LFE2 )
+    if( mask & DTS_LOUDSPEAKER_MASK32_LFE2 )
         layout |= DTS_CHANNEL_LAYOUT_LFE2;
-    if( mask & (DTS_XXCH_LOUDSPEAKER_MASK_LHS | DTS_XXCH_LOUDSPEAKER_MASK_RHS) )
+    if( mask & (DTS_LOUDSPEAKER_MASK32_LHS | DTS_LOUDSPEAKER_MASK32_RHS) )
         layout |= DTS_CHANNEL_LAYOUT_LHS_RHS;
-    if( mask & DTS_XXCH_LOUDSPEAKER_MASK_CHR )
+    if( mask & DTS_LOUDSPEAKER_MASK32_CHR )
         layout |= DTS_CHANNEL_LAYOUT_CHR;
-    if( mask & (DTS_XXCH_LOUDSPEAKER_MASK_LHR | DTS_XXCH_LOUDSPEAKER_MASK_RHR) )
+    if( mask & (DTS_LOUDSPEAKER_MASK32_LHR | DTS_LOUDSPEAKER_MASK32_RHR) )
         layout |= DTS_CHANNEL_LAYOUT_LHR_RHR;
     return layout;
+}
+
+/* for channels which cannot be expressed by ChannelLayout; CL, LL and RL */
+static inline uint8_t dts_get_lower_channels_from_ls_mask32( uint32_t mask )
+{
+    return (mask >> 25) & 0x7;
 }
 
 static void dts_parse_xll_navigation( lsmash_bits_t *bits, dts_xll_info_t *xll, int nuBits4ExSSFsize, uint64_t *bits_pos )
@@ -601,7 +607,7 @@ static int dts_parse_asset_descriptor( dts_info_t *info, uint64_t *bits_pos )
             break;
     }
     dts_bits_get( bits, nuAssetDescriptFsize * 8 - (*bits_pos - asset_descriptor_pos), bits_pos );  /* Skip remaining part of Audio asset descriptor. */
-    return bits->bs->error ? -1 : 0;
+    return bits->bs->error ? LSMASH_ERR_NAMELESS : 0;
 }
 
 static int dts_parse_xxch( dts_info_t *info, uint64_t *bits_pos, dts_xxch_info_t *xxch )
@@ -621,9 +627,8 @@ static int dts_parse_xxch( dts_info_t *info, uint64_t *bits_pos, dts_xxch_info_t
      * (Lsr and Rsr) from the XXCh stream to get the original 7.1 speaker layout (C, L, R, LFE1, Lss,
      * Rsr, Lsr and Rsr) and configures its outputs accordingly. */
     uint32_t xxch_mask = dts_bits_get( bits, nuBits4SpkrMaskXXCh, bits_pos );           /* nuCoreSpkrActivityMask         (nuBits4SpkrMaskXXCh) */
-    xxch->channel_layout |= dts_get_channel_layout_from_xxch_mask( xxch_mask );
-    /* Store channels which cannot be expressed by ChannelLayout; CL, LL and RL. */
-    xxch->lower_planes = (xxch_mask >> 25) & 0x7;
+    xxch->channel_layout |= dts_get_channel_layout_from_ls_mask32( xxch_mask );
+    xxch->lower_planes    = dts_get_lower_channels_from_ls_mask32( xxch_mask );
     dts_bits_get( bits, nuHeaderSizeXXCh * 8 - (*bits_pos - xxch_pos), bits_pos );      /* Skip remaining part of XXCH Frame Header. */
     for( int nChSet = 0; nChSet < nuNumChSetsInXXCh; nChSet++ )
     {
@@ -634,8 +639,8 @@ static int dts_parse_xxch( dts_info_t *info, uint64_t *bits_pos, dts_xxch_info_t
         if( nuBits4SpkrMaskXXCh > 6 )
         {
             xxch_mask = dts_bits_get( bits, nuBits4SpkrMaskXXCh - 6, bits_pos ) << 6;   /* nuXXChSpkrLayoutMask           (nuBits4SpkrMaskXXCh - 6) */
-            xxch->channel_layout |= dts_get_channel_layout_from_xxch_mask( xxch_mask );
-            xxch->lower_planes   |= (xxch_mask >> 25) & 0x7;
+            xxch->channel_layout |= dts_get_channel_layout_from_ls_mask32( xxch_mask );
+            xxch->lower_planes   |= dts_get_lower_channels_from_ls_mask32( xxch_mask );
         }
 #if 0   /* FIXME: Can we detect stereo downmixing from only XXCH data within the core substream? */
         if( dts_bits_get( bits, 1, bits_pos ) )                                         /* bDownMixCoeffCodeEmbedded      (1) */
@@ -656,22 +661,24 @@ static int dts_parse_core_xxch( dts_info_t *info, uint64_t *bits_pos, dts_core_i
 {
     if( core->extension_audio_descriptor == 0
      || core->extension_audio_descriptor == 3 )
-        return -1;
-    if( dts_parse_xxch( info, bits_pos, &core->xxch ) < 0 )
-        return -1;
+        return LSMASH_ERR_INVALID_DATA;
+    int err = dts_parse_xxch( info, bits_pos, &core->xxch );
+    if( err < 0 )
+        return err;
     info->flags |= DTS_CORE_SUBSTREAM_XXCH_FLAG;
-    return info->bits->bs->error ? -1 : 0;
+    return info->bits->bs->error ? LSMASH_ERR_NAMELESS : 0;
 }
 
 static int dts_parse_exss_xxch( dts_info_t *info, uint64_t *bits_pos, dts_core_info_t *core )
 {
     lsmash_bits_t *bits = info->bits;
     if( DTS_SYNCWORD_XXCH != dts_bits_get( bits, 32, bits_pos ) )
-        return -1;
-    if( dts_parse_xxch( info, bits_pos, &core->xxch ) < 0 )
-        return -1;
+        return LSMASH_ERR_INVALID_DATA;
+    int err = dts_parse_xxch( info, bits_pos, &core->xxch );
+    if( err < 0 )
+        return err;
     info->flags |= DTS_EXT_SUBSTREAM_XXCH_FLAG;
-    return bits->bs->error ? -1 : 0;
+    return bits->bs->error ? LSMASH_ERR_NAMELESS : 0;
 }
 
 static int dts_parse_core_x96( dts_info_t *info, uint64_t *bits_pos, dts_core_info_t *core )
@@ -694,7 +701,7 @@ static int dts_parse_core_x96( dts_info_t *info, uint64_t *bits_pos, dts_core_in
     core->sampling_frequency *= 2;
     core->frame_duration     *= 2;
     info->flags |= DTS_CORE_SUBSTREAM_X96_FLAG;
-    return bits->bs->error ? -1 : 0;
+    return bits->bs->error ? LSMASH_ERR_NAMELESS : 0;
 }
 
 static int dts_parse_core_xch( dts_info_t *info, uint64_t *bits_pos, dts_core_info_t *core )
@@ -720,7 +727,7 @@ static int dts_parse_core_xch( dts_info_t *info, uint64_t *bits_pos, dts_core_in
                                                                                  * byte align (2) */
     core->channel_layout |= DTS_CHANNEL_LAYOUT_CS;
     info->flags |= DTS_CORE_SUBSTREAM_XCH_FLAG;
-    return bits->bs->error ? -1 : 0;
+    return bits->bs->error ? LSMASH_ERR_NAMELESS : 0;
 }
 
 static int dts_parse_exss_xbr( dts_info_t *info, uint64_t *bits_pos )
@@ -729,11 +736,11 @@ static int dts_parse_exss_xbr( dts_info_t *info, uint64_t *bits_pos )
     /* XBR Frame Header */
     uint64_t xbr_pos = *bits_pos;
     if( DTS_SYNCWORD_XBR != dts_bits_get( bits, 32, bits_pos ) )            /* SYNCXBR        (32) */
-        return -1;
+        return LSMASH_ERR_INVALID_DATA;
     uint64_t nHeaderSizeXBR = dts_bits_get( bits, 6, bits_pos ) + 1;        /* nHeaderSizeXBR (6) */
     dts_bits_get( bits, nHeaderSizeXBR * 8 - (*bits_pos - xbr_pos), bits_pos );     /* Skip the remaining bits in XBR Frame Header. */
     info->flags |= DTS_EXT_SUBSTREAM_XBR_FLAG;
-    return bits->bs->error ? -1 : 0;
+    return bits->bs->error ? LSMASH_ERR_NAMELESS : 0;
 }
 
 static int dts_parse_exss_x96( dts_info_t *info, uint64_t *bits_pos, dts_core_info_t *core )
@@ -742,7 +749,7 @@ static int dts_parse_exss_x96( dts_info_t *info, uint64_t *bits_pos, dts_core_in
     /* DTS_EXSUB_STREAM_X96 Frame Header */
     uint64_t x96_pos = *bits_pos;
     if( DTS_SYNCWORD_X96K != dts_bits_get( bits, 32, bits_pos ) )           /* SYNCX96        (32) */
-        return -1;
+        return LSMASH_ERR_INVALID_DATA;
     uint64_t nHeaderSizeX96 = dts_bits_get( bits, 6, bits_pos ) + 1;        /* nHeaderSizeXBR (6) */
     dts_bits_get( bits, nHeaderSizeX96 * 8 - (*bits_pos - x96_pos), bits_pos );     /* Skip the remaining bits in DTS_EXSUB_STREAM_X96 Frame Header. */
     /* What the fuck! The specification drops 'if' sentence.
@@ -750,7 +757,7 @@ static int dts_parse_exss_x96( dts_info_t *info, uint64_t *bits_pos, dts_core_in
     core->sampling_frequency *= 2;
     core->frame_duration     *= 2;
     info->flags |= DTS_EXT_SUBSTREAM_X96_FLAG;
-    return bits->bs->error ? -1 : 0;
+    return bits->bs->error ? LSMASH_ERR_NAMELESS : 0;
 }
 
 static int dts_parse_exss_lbr( dts_info_t *info, uint64_t *bits_pos, dts_audio_asset_t *asset )
@@ -758,7 +765,7 @@ static int dts_parse_exss_lbr( dts_info_t *info, uint64_t *bits_pos, dts_audio_a
     lsmash_bits_t  *bits = info->bits;
     dts_lbr_info_t *lbr  = &asset->lbr;
     if( DTS_SYNCWORD_LBR != dts_bits_get( bits, 32, bits_pos ) )        /* SYNCEXTLBR              (32) */
-        return -1;
+        return LSMASH_ERR_INVALID_DATA;
     int ucFmtInfoCode = dts_bits_get( bits, 8, bits_pos );
     if( ucFmtInfoCode == 2 )
     {
@@ -796,9 +803,9 @@ static int dts_parse_exss_lbr( dts_info_t *info, uint64_t *bits_pos, dts_audio_a
         lbr->sample_size        = (nLBRCompressedFlags & LBR_FLAG_24_BIT_SAMPLES) ? 24 : 16;
     }
     else if( ucFmtInfoCode != 1 )
-        return -1;      /* unknown */
+        return LSMASH_ERR_NAMELESS; /* unknown */
     info->flags |= DTS_EXT_SUBSTREAM_LBR_FLAG;
-    return bits->bs->error ? -1 : 0;
+    return bits->bs->error ? LSMASH_ERR_NAMELESS : 0;
 }
 
 static int dts_parse_exss_xll( dts_info_t *info, uint64_t *bits_pos, dts_audio_asset_t *asset )
@@ -808,7 +815,7 @@ static int dts_parse_exss_xll( dts_info_t *info, uint64_t *bits_pos, dts_audio_a
     /* Common Header */
     uint64_t xll_pos = *bits_pos;
     if( DTS_SYNCWORD_XLL != dts_bits_get( bits, 32, bits_pos ) )                                /* SYNCXLL                        (32) */
-        return -1;
+        return LSMASH_ERR_INVALID_DATA;
     dts_bits_get( bits, 4, bits_pos );                                                          /* nVersion                       (4) */
     uint64_t nHeaderSize       = dts_bits_get( bits, 8, bits_pos ) + 1;                         /* nHeaderSize                    (8) */
     int      nBits4FrameFsize  = dts_bits_get( bits, 5, bits_pos ) + 1;                         /* nBits4FrameFsize               (5) */
@@ -862,11 +869,12 @@ static int dts_parse_exss_xll( dts_info_t *info, uint64_t *bits_pos, dts_audio_a
             int bHierChSet = dts_bits_get( bits, 1, bits_pos );                                 /* bHierChSet                     (1) */
             if( bDownmixCoeffCodeEmbedded )
             {
-                /* N: the number of channels in the current channel set + 1 (+1 for the down scaling coefficients that prevent overflow)
+                /* N: the number of channels in the current channel set
+                 *    for non-primary channel set, adding +1 for the down scaling coefficients that prevent overflow
                  * M: the number of channels that the current channel set is mixed into
                  * Downmix coefficients are transmitted using 9-bit codes. */
                 static const int downmix_channel_count_table[8] = { 1, 2, 2, 3, 3, 4, 4, 0 };
-                int N = nChSetLLChannel + 1;
+                int N = nChSetLLChannel + (bPrimaryChSet ? 0 : 1);
                 int M = bPrimaryChSet ? downmix_channel_count_table[nLLDownmixType] : sum_nChSetLLChannel;
                 int nDownmixCoeffs = N * M;
                 dts_bits_get( bits, nDownmixCoeffs * 9, bits_pos );                             /* DownmixCoeffs                  (nDownmixCoeffs * 9) */
@@ -876,7 +884,11 @@ static int dts_parse_exss_xll( dts_info_t *info, uint64_t *bits_pos, dts_audio_a
             if( bHierChSet )
                 sum_nChSetLLChannel += nChSetLLChannel;
             if( dts_bits_get( bits, 1, bits_pos ) )                                             /* bChMaskEnabled                 (1) */
-                xll->channel_layout |= dts_bits_get( bits, nBits4ChMask, bits_pos );            /* nChMask                        (nBits4ChMask) */
+            {
+                uint32_t nChMask = dts_bits_get( bits, nBits4ChMask, bits_pos );                /* nChMask                        (nBits4ChMask) */
+                xll->channel_layout |= dts_get_channel_layout_from_ls_mask32( nChMask );
+                xll->lower_planes   |= dts_get_lower_channels_from_ls_mask32( nChMask );
+            }
             else
                 dts_bits_get( bits, 25 * nChSetLLChannel, bits_pos );                           /* RadiusDelta[ch]                (9)
                                                                                                  * Theta[ch]                      (9)
@@ -896,7 +908,11 @@ static int dts_parse_exss_xll( dts_info_t *info, uint64_t *bits_pos, dts_audio_a
                     int pnNumSpeakers = dts_bits_get( bits, 6, bits_pos ) + 1;                  /* pnNumSpeakers[nSpkrConf]       (6) */
                     int bSpkrMaskEnabled = dts_bits_get( bits, 1, bits_pos );                   /* bSpkrMaskEnabled               (1) */
                     if( bSpkrMaskEnabled )
-                        xll->channel_layout |= dts_bits_get( bits, nBits4ChMask, bits_pos );    /* nSpkrMask[nSpkrConf]           (nBits4ChMask) */
+                    {
+                        uint32_t nSpkrMask = dts_bits_get( bits, nBits4ChMask, bits_pos );      /* nSpkrMask[nSpkrConf]           (nBits4ChMask) */
+                        xll->channel_layout |= dts_get_channel_layout_from_ls_mask32( nSpkrMask );
+                        xll->lower_planes   |= dts_get_lower_channels_from_ls_mask32( nSpkrMask );
+                    }
                     for( int nSpkr = 0; nSpkr < pnNumSpeakers; nSpkr++ )
                     {
                         if( !bSpkrMaskEnabled )
@@ -936,7 +952,7 @@ static int dts_parse_exss_xll( dts_info_t *info, uint64_t *bits_pos, dts_audio_a
         dts_bits_get( bits, nChSetHeaderSize * 8 - (*bits_pos - xll_pos), bits_pos );   /* Skip the remaining bits in Channel Set Sub-Header. */
     }
     info->flags |= DTS_EXT_SUBSTREAM_XLL_FLAG;
-    return bits->bs->error ? -1 : 0;
+    return bits->bs->error ? LSMASH_ERR_NAMELESS : 0;
 }
 
 static uint16_t dts_generate_channel_layout_from_core( int channel_arrangement )
@@ -971,21 +987,21 @@ static int dts_parse_core( dts_info_t *info, uint64_t *bits_pos, dts_core_info_t
     int frame_type = dts_bits_get( bits, 1, bits_pos );                         /* FTYPE           (1) */
     int deficit_sample_count = dts_bits_get( bits, 5, bits_pos );               /* SHORT           (5) */
     if( frame_type == 1 && deficit_sample_count != 31 )
-        return -1;      /* Any normal frame (FTYPE == 1) must have SHORT == 31. */
+        return LSMASH_ERR_INVALID_DATA; /* Any normal frame (FTYPE == 1) must have SHORT == 31. */
     int crc_present_flag = dts_bits_get( bits, 1, bits_pos );                   /* CPF             (1) */
     int num_of_pcm_sample_blocks = dts_bits_get( bits, 7, bits_pos ) + 1;       /* NBLKS           (7) */
     if( num_of_pcm_sample_blocks <= 5 )
-        return -1;
+        return LSMASH_ERR_INVALID_DATA;
     core->frame_duration = 32 * num_of_pcm_sample_blocks;
     if( frame_type == 1
      && core->frame_duration != 256
      && core->frame_duration != 512  && core->frame_duration != 1024
      && core->frame_duration != 2048 && core->frame_duration != 4096 )
-        return -1;      /* For any normal frame, the actual number of PCM core samples per channel must be
-                         * either 4096, 2048, 1024, 512, or 256 samples per channel. */
+        return LSMASH_ERR_INVALID_DATA; /* For any normal frame, the actual number of PCM core samples per channel must be
+                                         * either 4096, 2048, 1024, 512, or 256 samples per channel. */
     core->frame_size = dts_bits_get( bits, 14, bits_pos ) + 1;                  /* FSIZE           (14) */
     if( core->frame_size < DTS_MIN_CORE_SIZE )
-        return -1;
+        return LSMASH_ERR_INVALID_DATA;
     core->channel_arrangement = dts_bits_get( bits, 6, bits_pos );              /* AMODE           (6) */
     core->channel_layout = dts_generate_channel_layout_from_core( core->channel_arrangement );
     int core_audio_sampling_frequency = dts_bits_get( bits, 4, bits_pos );      /* SFREQ           (4) */
@@ -998,7 +1014,7 @@ static int dts_parse_core( dts_info_t *info, uint64_t *bits_pos, dts_core_info_t
         };
     core->sampling_frequency = sampling_frequency_table[core_audio_sampling_frequency];
     if( core->sampling_frequency == 0 )
-        return -1;      /* invalid */
+        return LSMASH_ERR_INVALID_DATA; /* invalid */
     dts_bits_get( bits, 10, bits_pos );                                         /* Skip remainder 10 bits.
                                                                                  * RATE            (5)
                                                                                  * MIX             (1)
@@ -1013,7 +1029,7 @@ static int dts_parse_core( dts_info_t *info, uint64_t *bits_pos, dts_core_info_t
     dts_bits_get( bits, 1, bits_pos );                                          /* ASPF            (1) */
     int low_frequency_effects_flag = dts_bits_get( bits, 2, bits_pos );         /* LFF             (2) */
     if( low_frequency_effects_flag == 0x3 )
-        return -1;      /* invalid */
+        return LSMASH_ERR_INVALID_DATA; /* invalid */
     if( low_frequency_effects_flag )
         core->channel_layout |= DTS_CHANNEL_LAYOUT_LFE1;
     dts_bits_get( bits, 8 + crc_present_flag * 16, bits_pos );                  /* HFLAG           (1)
@@ -1025,7 +1041,7 @@ static int dts_parse_core( dts_info_t *info, uint64_t *bits_pos, dts_core_info_t
     static const uint8_t source_resolution_table[8] = { 16, 16, 20, 20, 0, 24, 24, 0 };
     core->pcm_resolution = source_resolution_table[PCMR];
     if( core->pcm_resolution == 0 )
-        return -1;      /* invalid */
+        return LSMASH_ERR_INVALID_DATA; /* invalid */
     dts_bits_get( bits, 6, bits_pos );                                          /* SUMF            (1)
                                                                                  * SUMS            (1)
                                                                                  * DIALNORM/UNSPEC (4) */
@@ -1035,53 +1051,57 @@ static int dts_parse_core( dts_info_t *info, uint64_t *bits_pos, dts_core_info_t
         uint64_t frame_size_bits = core->frame_size * 8;
         while( (*bits_pos + 24) < frame_size_bits )
         {
+            int err;
             syncword = ((syncword << 8) & 0xffffff00) | dts_bits_get( bits, 8, bits_pos );
             switch( syncword )
             {
                 case DTS_SYNCWORD_XXCH :
-                    if( dts_parse_core_xxch( info, bits_pos, core ) )
-                        return -1;
+                    if( (err = dts_parse_core_xxch( info, bits_pos, core )) < 0 )
+                        return err;
                     syncword = dts_bits_get( bits, 24, bits_pos );
                     break;
                 case DTS_SYNCWORD_X96K :
-                    if( dts_parse_core_x96( info, bits_pos, core ) )
-                        return -1;
+                    if( (err = dts_parse_core_x96( info, bits_pos, core )) < 0 )
+                        return err;
                     syncword = dts_bits_get( bits, 24, bits_pos );
                     break;
                 case DTS_SYNCWORD_XCH :
-                    if( dts_parse_core_xch( info, bits_pos, core ) )
-                        return -1;
+                    if( (err = dts_parse_core_xch( info, bits_pos, core )) < 0 )
+                        return err;
                     break;
                 default :
                     continue;
             }
         }
     }
-    return bits->bs->error ? -1 : 0;
+    return bits->bs->error ? LSMASH_ERR_NAMELESS : 0;
 }
 
 static int dts_parse_exss_core( dts_info_t *info, uint64_t *bits_pos, dts_audio_asset_t *asset )
 {
     lsmash_bits_t *bits = info->bits;
     if( DTS_SYNCWORD_SUBSTREAM_CORE != dts_bits_get( bits, 32, bits_pos ) )
-        return -1;
-    if( dts_parse_core( info, bits_pos, &asset->core ) < 0 )
-        return -1;
+        return LSMASH_ERR_INVALID_DATA;
+    int err = dts_parse_core( info, bits_pos, &asset->core );
+    if( err < 0 )
+        return err;
     info->flags |= DTS_EXT_SUBSTREAM_CORE_FLAG;
-    return bits->bs->error ? -1 : 0;
+    return bits->bs->error ? LSMASH_ERR_NAMELESS : 0;
 }
 
-int dts_parse_core_substream( dts_info_t *info, uint8_t *data, uint32_t data_length )
+int dts_parse_core_substream( dts_info_t *info )
 {
     lsmash_bits_t *bits = info->bits;
-    if( lsmash_bits_import_data( info->bits, data, data_length ) )
-        return -1;
     uint64_t bits_pos = 0;
+    int err;
     if( DTS_SYNCWORD_CORE != dts_bits_get( bits, 32, &bits_pos ) )
+    {
+        err = LSMASH_ERR_INVALID_DATA;
         goto parse_fail;
+    }
     /* By default the core substream data, if present, has the nuBcCoreExtSSIndex = 0 and the nuBcCoreAssetIndex = 0. */
     dts_extension_info_t *exss = &info->exss[0];
-    if( dts_parse_core( info, &bits_pos, &exss->asset[0].core ) < 0 )
+    if( (err = dts_parse_core( info, &bits_pos, &exss->asset[0].core )) < 0 )
         goto parse_fail;
     exss->bBcCorePresent    [0] = 1;
     exss->nuBcCoreExtSSIndex[0] = 0;
@@ -1090,18 +1110,16 @@ int dts_parse_core_substream( dts_info_t *info, uint8_t *data, uint32_t data_len
     info->exss_count      = 0;
     info->core            = exss->asset[0].core;
     info->frame_size      = exss->asset[0].core.frame_size;
-    lsmash_bits_empty( bits );
+    lsmash_bits_get_align( bits );
     return 0;
 parse_fail:
-    lsmash_bits_empty( bits );
-    return -1;
+    lsmash_bits_get_align( bits );
+    return err;
 }
 
-int dts_parse_extension_substream( dts_info_t *info, uint8_t *data, uint32_t data_length )
+int dts_parse_extension_substream( dts_info_t *info )
 {
     lsmash_bits_t *bits = info->bits;
-    if( lsmash_bits_import_data( info->bits, data, data_length ) )
-        return -1;
     uint64_t bits_pos = 0;
     dts_bits_get( bits, 40, &bits_pos );                                                    /* SYNCEXTSSH                    (32)
                                                                                              * UserDefinedBits               (8) */
@@ -1116,7 +1134,7 @@ int dts_parse_extension_substream( dts_info_t *info, uint8_t *data, uint32_t dat
     uint32_t nuExtSSHeaderSize = dts_bits_get( bits, nuBits4Header, &bits_pos ) + 1;        /* nuExtSSHeaderSize             (8 or 12) */
     info->frame_size = dts_bits_get( bits, nuBits4ExSSFsize, &bits_pos ) + 1;               /* nuExtSSFsize                  (16 or 20) */
     if( info->frame_size < 10 )
-        return -1;
+        return LSMASH_ERR_INVALID_DATA;
     exss->bStaticFieldsPresent = dts_bits_get( bits, 1, &bits_pos );                        /* bStaticFieldsPresent          (1) */
     if( exss->bStaticFieldsPresent )
     {
@@ -1160,8 +1178,9 @@ int dts_parse_extension_substream( dts_info_t *info, uint8_t *data, uint32_t dat
     }
     for( uint8_t nAst = 0; nAst < exss->nuNumAssets; nAst++ )
         exss->asset[nAst].size = dts_bits_get( bits, nuBits4ExSSFsize, &bits_pos ) + 1;     /* nuAssetFsize[nAst] - 1        (nuBits4ExSSFsize) */
+    int err;
     for( uint8_t nAst = 0; nAst < exss->nuNumAssets; nAst++ )
-        if( dts_parse_asset_descriptor( info, &bits_pos ) )
+        if( (err = dts_parse_asset_descriptor( info, &bits_pos )) < 0 )
             goto parse_fail;
     for( uint8_t nAuPr = 0; nAuPr < exss->nuNumAudioPresnt; nAuPr++ )
         exss->bBcCorePresent[nAuPr] = dts_bits_get( bits, 1, &bits_pos );
@@ -1185,7 +1204,7 @@ int dts_parse_extension_substream( dts_info_t *info, uint8_t *data, uint32_t dat
                 {
                     /* Core component */
                     uint64_t core_pos = bits_pos;
-                    if( dts_parse_exss_core( info, &bits_pos, asset ) < 0 )
+                    if( (err = dts_parse_exss_core( info, &bits_pos, asset )) < 0 )
                         goto parse_fail;
                     dts_bits_get( bits, asset->core.frame_size * 8 - (bits_pos - core_pos), &bits_pos );
                 }
@@ -1193,7 +1212,7 @@ int dts_parse_extension_substream( dts_info_t *info, uint8_t *data, uint32_t dat
                 {
                     /* XBR extension */
                     uint64_t xbr_pos = bits_pos;
-                    if( dts_parse_exss_xbr( info, &bits_pos ) < 0 )
+                    if( (err = dts_parse_exss_xbr( info, &bits_pos )) < 0 )
                         goto parse_fail;
                     dts_bits_get( bits, asset->xbr_size * 8 - (bits_pos - xbr_pos), &bits_pos );
                 }
@@ -1201,7 +1220,7 @@ int dts_parse_extension_substream( dts_info_t *info, uint8_t *data, uint32_t dat
                 {
                     /* XXCH extension */
                     uint64_t xxch_pos = bits_pos;
-                    if( dts_parse_exss_xxch( info, &bits_pos, &asset->core ) < 0 )
+                    if( (err = dts_parse_exss_xxch( info, &bits_pos, &asset->core )) < 0 )
                         goto parse_fail;
                     dts_bits_get( bits, asset->core.xxch.size * 8 - (bits_pos - xxch_pos), &bits_pos );
                 }
@@ -1209,7 +1228,7 @@ int dts_parse_extension_substream( dts_info_t *info, uint8_t *data, uint32_t dat
                 {
                     /* X96 extension */
                     uint64_t x96_pos = bits_pos;
-                    if( dts_parse_exss_x96( info, &bits_pos, &asset->core ) < 0 )
+                    if( (err = dts_parse_exss_x96( info, &bits_pos, &asset->core )) < 0 )
                         goto parse_fail;
                     dts_bits_get( bits, asset->x96_size * 8 - (bits_pos - x96_pos), &bits_pos );
                 }
@@ -1217,7 +1236,7 @@ int dts_parse_extension_substream( dts_info_t *info, uint8_t *data, uint32_t dat
                 {
                     /* LBR component */
                     uint64_t lbr_pos = bits_pos;
-                    if( dts_parse_exss_lbr( info, &bits_pos, asset ) < 0 )
+                    if( (err = dts_parse_exss_lbr( info, &bits_pos, asset )) < 0 )
                         goto parse_fail;
                     dts_bits_get( bits, asset->lbr.size * 8 - (bits_pos - lbr_pos), &bits_pos );
                 }
@@ -1225,18 +1244,18 @@ int dts_parse_extension_substream( dts_info_t *info, uint8_t *data, uint32_t dat
                 {
                     /* Lossless extension */
                     uint64_t xll_pos = bits_pos;
-                    if( dts_parse_exss_xll( info, &bits_pos, asset ) < 0 )
+                    if( (err = dts_parse_exss_xll( info, &bits_pos, asset )) < 0 )
                         goto parse_fail;
                     dts_bits_get( bits, asset->xll.size * 8 - (bits_pos - xll_pos), &bits_pos );
                 }
                 break;
             }
             case 1 : /* DTS-HD Loss-less coding mode without CBR component */
-                if( dts_parse_exss_xll( info, &bits_pos, asset ) < 0 )
+                if( (err = dts_parse_exss_xll( info, &bits_pos, asset )) < 0 )
                     goto parse_fail;
                 break;
             case 2 : /* DTS-HD Low bit-rate mode */
-                if( dts_parse_exss_lbr( info, &bits_pos, asset ) < 0 )
+                if( (err = dts_parse_exss_lbr( info, &bits_pos, asset )) < 0 )
                     goto parse_fail;
                 break;
             case 3 : /* Auxiliary coding mode */
@@ -1246,20 +1265,20 @@ int dts_parse_extension_substream( dts_info_t *info, uint8_t *data, uint32_t dat
         dts_bits_get( bits, asset->size * 8 - (bits_pos - asset_pos), &bits_pos );
     }
     dts_bits_get( bits, info->frame_size * 8 - bits_pos, &bits_pos );
-    lsmash_bits_empty( bits );
+    lsmash_bits_get_align( bits );
     if( info->exss_count < DTS_MAX_NUM_EXSS )
         info->exss_count += 1;
     return 0;
 parse_fail:
-    lsmash_bits_empty( bits );
-    return -1;
+    lsmash_bits_get_align( bits );
+    return err;
 }
 
 dts_substream_type dts_get_substream_type( dts_info_t *info )
 {
-    if( info->buffer_end - info->buffer_pos < 4 )
+    if( lsmash_bs_get_remaining_buffer_size( info->bits->bs ) < 4 )
         return DTS_SUBSTREAM_TYPE_NONE;
-    uint8_t *buffer = info->buffer_pos;
+    uint8_t *buffer = lsmash_bs_get_buffer_data( info->bits->bs );
     uint32_t syncword = LSMASH_4CC( buffer[0], buffer[1], buffer[2], buffer[3] );
     switch( syncword )
     {
@@ -1274,9 +1293,9 @@ dts_substream_type dts_get_substream_type( dts_info_t *info )
 
 int dts_get_exss_index( dts_info_t *info, uint8_t *exss_index )
 {
-    if( info->buffer_end - info->buffer_pos < 6 )
-        return -1;
-    *exss_index = info->buffer_pos[5] >> 6;
+    if( lsmash_bs_get_remaining_buffer_size( info->bits->bs ) < 6 )
+        return LSMASH_ERR_INVALID_DATA;
+    *exss_index = lsmash_bs_show_byte( info->bits->bs, 5 ) >> 6;
     return 0;
 }
 
@@ -1288,6 +1307,7 @@ int dts_get_max_channel_count( dts_info_t *info )
         dts_extension_info_t *exss = &info->exss[nExtSSIndex];
         for( uint8_t nAuPr = 0; nAuPr < exss->nuNumAudioPresnt; nAuPr++ )
         {
+            /* Get the channel layout of an audio presentation from a core component. */
             uint16_t channel_layout = 0;
             int      channel_count  = 0;
             if( exss->bBcCorePresent    [nAuPr]
@@ -1302,12 +1322,15 @@ int dts_get_max_channel_count( dts_info_t *info )
                 else
                     channel_layout = core->channel_layout;
             }
+            channel_count += dts_get_channel_count_from_channel_layout( channel_layout );
+            max_channel_count = LSMASH_MAX( max_channel_count, channel_count );
+            /* Get the channel layouts of an audio presentation from extension substreams. */
             uint16_t ext_channel_layout = 0;
             uint16_t lbr_channel_layout = 0;
             uint16_t xll_channel_layout = 0;
+            uint8_t  xll_lower_channels = 0;
             for( int nSS = 0; nSS <= nExtSSIndex; nSS++ )
                 if( (exss->nuActiveExSSMask[nAuPr] >> nSS) & 0x1 )
-                {
                     for( uint8_t nAst = 0; nAst < exss->nuNumAssets; nAst++ )
                         if( (exss->nuActiveAssetMask[nAuPr][nSS] >> nAst) & 0x1 )
                         {
@@ -1315,15 +1338,17 @@ int dts_get_max_channel_count( dts_info_t *info )
                             ext_channel_layout |= asset->channel_layout;
                             lbr_channel_layout |= asset->lbr.channel_layout;
                             xll_channel_layout |= asset->xll.channel_layout;
+                            xll_lower_channels |= asset->xll.lower_planes;
                         }
-                }
-            channel_count += dts_get_channel_count_from_channel_layout( channel_layout );
-            max_channel_count = LSMASH_MAX( max_channel_count, channel_count );
+            /* Audio asset descriptors */
             channel_count = dts_get_channel_count_from_channel_layout( ext_channel_layout );
             max_channel_count = LSMASH_MAX( max_channel_count, channel_count );
+            /* LBR components */
             channel_count = dts_get_channel_count_from_channel_layout( lbr_channel_layout );
             max_channel_count = LSMASH_MAX( max_channel_count, channel_count );
-            channel_count = dts_get_channel_count_from_channel_layout( xll_channel_layout );
+            /* Lossless extensions */
+            channel_count = dts_get_channel_count_from_channel_layout( xll_channel_layout )
+                          + lsmash_count_bits( xll_lower_channels );
             max_channel_count = LSMASH_MAX( max_channel_count, channel_count );
         }
     }
@@ -1344,7 +1369,7 @@ void dts_update_specific_param( dts_info_t *info )
         }
     }
     /* DTSSamplingFrequency and FrameDuration */
-    for( int nExtSSIndex = 0; nExtSSIndex < DTS_MAX_NUM_EXSS; nExtSSIndex++ )
+    for( int nExtSSIndex = exss_index_start; nExtSSIndex < DTS_MAX_NUM_EXSS; nExtSSIndex++ )
     {
         dts_extension_info_t *exss = &info->exss[nExtSSIndex];
         if( exss->nuNumAudioPresnt == 0 || exss->nuNumAssets == 0 )
@@ -1379,7 +1404,7 @@ void dts_update_specific_param( dts_info_t *info )
         ++ param->FrameDuration;
     /* pcmSampleDepth */
     param->pcmSampleDepth = 0;
-    for( int nExtSSIndex = 0; nExtSSIndex < DTS_MAX_NUM_EXSS; nExtSSIndex++ )
+    for( int nExtSSIndex = exss_index_start; nExtSSIndex < DTS_MAX_NUM_EXSS; nExtSSIndex++ )
     {
         dts_extension_info_t *exss = &info->exss[nExtSSIndex];
         if( exss->nuNumAudioPresnt == 0 || exss->nuNumAssets == 0 )
@@ -1473,7 +1498,7 @@ void dts_update_specific_param( dts_info_t *info )
      * complete information on channels coded in the audio stream including core and extensions */
     param->ChannelLayout = 0;
     if( param->RepresentationType == 0 )
-        for( int nExtSSIndex = 0; nExtSSIndex < DTS_MAX_NUM_EXSS; nExtSSIndex++ )
+        for( int nExtSSIndex = exss_index_start; nExtSSIndex < DTS_MAX_NUM_EXSS; nExtSSIndex++ )
         {
             dts_extension_info_t *exss = &info->exss[nExtSSIndex];
             if( exss->nuNumAudioPresnt == 0 || exss->nuNumAssets == 0 )
@@ -1503,7 +1528,7 @@ int dts_construct_specific_parameters( lsmash_codec_specific_t *dst, lsmash_code
 {
     assert( dst && dst->data.structured && src && src->data.unstructured );
     if( src->size < DTS_SPECIFIC_BOX_MIN_LENGTH )
-        return -1;
+        return LSMASH_ERR_INVALID_DATA;
     lsmash_dts_specific_parameters_t *param = (lsmash_dts_specific_parameters_t *)dst->data.structured;
     uint8_t *data = src->data.unstructured;
     uint64_t size = LSMASH_GET_BE32( data );
@@ -1516,7 +1541,7 @@ int dts_construct_specific_parameters( lsmash_codec_specific_t *dst, lsmash_code
         data += 8;
     }
     if( size != src->size )
-        return -1;
+        return LSMASH_ERR_INVALID_DATA;
     param->DTSSamplingFrequency = LSMASH_GET_BE32( &data[0] );
     param->maxBitrate           = LSMASH_GET_BE32( &data[4] );
     param->avgBitrate           = LSMASH_GET_BE32( &data[8] );
@@ -1558,7 +1583,7 @@ int dts_print_codec_specific( FILE *fp, lsmash_file_t *file, isom_box_t *box, in
     lsmash_ifprintf( fp, indent, "position = %"PRIu64"\n", box->pos );
     lsmash_ifprintf( fp, indent, "size = %"PRIu64"\n", box->size );
     if( box->size < DTS_SPECIFIC_BOX_MIN_LENGTH )
-        return -1;
+        return LSMASH_ERR_INVALID_DATA;
     uint8_t *data = box->binary;
     isom_skip_box_common( &data );
     uint32_t DTSSamplingFrequency = LSMASH_GET_BE32( &data[0] );

@@ -20,11 +20,6 @@
 
 /* This file is available under an ISC license. */
 
-#define H264_DEFAULT_BUFFER_SIZE      (1<<16)
-#define H264_DEFAULT_NALU_LENGTH_SIZE 4     /* We always use 4 bytes length. */
-#define H264_SHORT_START_CODE_LENGTH  3
-
-
 enum
 {
     H264_NALU_TYPE_UNSPECIFIED0  = 0,   /* Unspecified */
@@ -65,9 +60,10 @@ struct lsmash_h264_parameter_sets_tag
 
 typedef struct
 {
-    uint8_t  nal_ref_idc;
-    uint8_t  nal_unit_type;
-    uint16_t length;
+    unsigned forbidden_zero_bit : 1;
+    unsigned nal_ref_idc        : 2;
+    unsigned nal_unit_type      : 5;
+    uint8_t  length;
 } h264_nalu_header_t;
 
 typedef struct
@@ -205,7 +201,7 @@ typedef struct
     uint8_t           independent;
     uint8_t           disposable;   /* 1: nal_ref_idc == 0, 0: otherwise */
     uint8_t           has_redundancy;
-    uint8_t           incomplete_au_has_primary;
+    uint8_t           has_primary;
     uint8_t           pic_parameter_set_id;
     uint8_t           field_pic_flag;
     uint8_t           bottom_field_flag;
@@ -226,26 +222,30 @@ typedef struct
     /* */
     uint32_t          recovery_frame_cnt;
     uint32_t          frame_num;
-    uint8_t          *au;
-    uint32_t          au_length;
-    uint8_t          *incomplete_au;
-    uint32_t          incomplete_au_length;
-    uint32_t          au_number;
 } h264_picture_info_t;
+
+typedef struct
+{
+    uint8_t            *data;
+    uint8_t            *incomplete_data;
+    uint32_t            length;
+    uint32_t            incomplete_length;
+    uint32_t            number;
+    h264_picture_info_t picture;
+} h264_access_unit_t;
 
 typedef struct h264_info_tag h264_info_t;
 
 typedef struct
 {
-    lsmash_stream_buffers_t *sb;
-    uint8_t                 *rbsp;
+    lsmash_multiple_buffers_t *bank;
+    uint8_t                   *rbsp;
 } h264_stream_buffer_t;
 
 struct h264_info_tag
 {
     lsmash_h264_specific_parameters_t avcC_param;
     lsmash_h264_specific_parameters_t avcC_param_next;
-    h264_nalu_header_t   nalu_header;
     lsmash_entry_list_t  sps_list  [1]; /* contains entries as h264_sps_t */
     lsmash_entry_list_t  pps_list  [1]; /* contains entries as h264_pps_t */
     lsmash_entry_list_t  slice_list[1]; /* for slice data partition */
@@ -253,26 +253,30 @@ struct h264_info_tag
     h264_pps_t           pps;           /* active PPS */
     h264_sei_t           sei;           /* active SEI */
     h264_slice_info_t    slice;         /* active slice */
-    h264_picture_info_t  picture;
+    h264_access_unit_t   au;
     uint8_t              prev_nalu_type;
     uint8_t              avcC_pending;
-    uint64_t             ebsp_head_pos;
     lsmash_bits_t       *bits;
     h264_stream_buffer_t buffer;
 };
 
 int h264_setup_parser
 (
-    h264_info_t               *info,
-    lsmash_stream_buffers_t   *sb,
-    int                        parse_only,
-    lsmash_stream_buffers_type type,
-    void                      *stream
+    h264_info_t *info,
+    int          parse_only
 );
 
 void h264_cleanup_parser
 (
     h264_info_t *info
+);
+
+uint64_t h264_find_next_start_code
+(
+    lsmash_bs_t        *bs,
+    h264_nalu_header_t *nuh,
+    uint64_t           *start_code_length,
+    uint64_t           *trailing_zero_bytes
 );
 
 int h264_calculate_poc
@@ -312,15 +316,8 @@ int h264_find_au_delimit_by_nalu_type
 int h264_supplement_buffer
 (
     h264_stream_buffer_t *buffer,
-    h264_picture_info_t  *picture,
+    h264_access_unit_t   *au,
     uint32_t              size
-);
-
-int h264_check_nalu_header
-(
-    h264_nalu_header_t      *nalu_header,
-    lsmash_stream_buffers_t *sb,
-    int                      use_long_start_code
 );
 
 int h264_parse_sps
@@ -352,7 +349,7 @@ int h264_parse_sei
 int h264_parse_slice
 (
     h264_info_t        *info,
-    h264_nalu_header_t *nalu_header,
+    h264_nalu_header_t *nuh,
     uint8_t            *rbsp_buffer,
     uint8_t            *ebsp,
     uint64_t            ebsp_size

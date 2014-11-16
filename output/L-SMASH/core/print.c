@@ -173,7 +173,8 @@ static inline int isom_print_simple( FILE *fp, isom_box_t *box, int level, char 
         lsmash_ifprintf( fp, indent, "position = %"PRIu64"\n", box->pos );
         lsmash_ifprintf( fp, indent, "size = %"PRIu64"\n", box->size );
         lsmash_ifprintf( fp, indent++, "usertype\n" );
-        lsmash_ifprintf( fp, indent, "type = %s\n", isom_4cc2str( box->type.user.fourcc ) );
+        if( isom_is_printable_4cc( box->type.user.fourcc ) )
+            lsmash_ifprintf( fp, indent, "type = %s\n", isom_4cc2str( box->type.user.fourcc ) );
         lsmash_ifprintf( fp, indent, "name = %s\n", name );
         lsmash_ifprintf( fp, indent, "uuid = 0x%08"PRIx32"-%04"PRIx16"-%04"PRIx16"-%04"PRIx16"-%04"PRIx16"0x%08"PRIx32"\n",
                          box->type.user.fourcc,
@@ -225,7 +226,8 @@ static int isom_print_unknown( FILE *fp, lsmash_file_t *file, isom_box_t *box, i
         lsmash_ifprintf( fp, indent, "position = %"PRIu64"\n", box->pos );
         lsmash_ifprintf( fp, indent, "size = %"PRIu64"\n", box->size );
         lsmash_ifprintf( fp, indent++, "usertype\n" );
-        lsmash_ifprintf( fp, indent, "type = %s\n", isom_4cc2str( box->type.user.fourcc ) );
+        if( isom_is_printable_4cc( box->type.user.fourcc ) )
+            lsmash_ifprintf( fp, indent, "type = %s\n", isom_4cc2str( box->type.user.fourcc ) );
         lsmash_ifprintf( fp, indent, "uuid = 0x%08"PRIx32"-%04"PRIx16"-%04"PRIx16"-%04"PRIx16"-%04"PRIx16"%08"PRIx32"\n",
                          box->type.user.fourcc,
                          (box->type.user.id[0] << 8) | box->type.user.id[1], (box->type.user.id[2] << 8) | box->type.user.id[3],
@@ -497,7 +499,12 @@ static int isom_print_ctab( FILE *fp, lsmash_file_t *file, isom_box_t *box, int 
 
 static int isom_print_iods( FILE *fp, lsmash_file_t *file, isom_box_t *box, int level )
 {
-    return isom_print_simple( fp, box, level, "Object Descriptor Box" );
+    extern void mp4sys_print_descriptor( FILE *, void *, int );
+    isom_iods_t *iods = (isom_iods_t *)box;
+    int indent = level;
+    isom_print_box_common( fp, indent, box, "Object Descriptor Box" );
+    mp4sys_print_descriptor( fp, iods->OD, indent + 1 );
+    return 0;
 }
 
 static int isom_print_trak( FILE *fp, lsmash_file_t *file, isom_box_t *box, int level )
@@ -713,7 +720,8 @@ static int isom_print_hmhd( FILE *fp, lsmash_file_t *file, isom_box_t *box, int 
 
 static int isom_print_nmhd( FILE *fp, lsmash_file_t *file, isom_box_t *box, int level )
 {
-    return isom_print_simple( fp, box, level, "Null Media Header Box" );
+    isom_print_box_common( fp, level, box, "Null Media Header Box" );
+    return 0;
 }
 
 static int isom_print_gmhd( FILE *fp, lsmash_file_t *file, isom_box_t *box, int level )
@@ -1250,7 +1258,7 @@ static int isom_print_tx3g_description( FILE *fp, lsmash_file_t *file, isom_box_
 static int isom_print_ftab( FILE *fp, lsmash_file_t *file, isom_box_t *box, int level )
 {
     if( !((isom_ftab_t *)box)->list )
-        return -1;
+        return LSMASH_ERR_INVALID_DATA;
     isom_ftab_t *ftab = (isom_ftab_t *)box;
     int indent = level;
     uint16_t i = 0;
@@ -1268,6 +1276,18 @@ static int isom_print_ftab( FILE *fp, lsmash_file_t *file, isom_box_t *box, int 
     return 0;
 }
 
+static int isom_print_mp4s_description( FILE *fp, lsmash_file_t *file, isom_box_t *box, int level )
+{
+    isom_mp4s_entry_t *mp4s = (isom_mp4s_entry_t *)box;
+    int indent = level;
+    lsmash_ifprintf( fp, indent++, "[%s: MPEG-4 Systems Description]\n", isom_4cc2str( mp4s->type.fourcc ) );
+    lsmash_ifprintf( fp, indent, "position = %"PRIu64"\n", mp4s->pos );
+    lsmash_ifprintf( fp, indent, "size = %"PRIu64"\n", mp4s->size );
+    isom_ifprintf_sample_description_common_reserved( fp, indent, mp4s->reserved );
+    lsmash_ifprintf( fp, indent, "data_reference_index = %"PRIu16"\n", mp4s->data_reference_index );
+    return 0;
+}
+
 static int isom_print_sample_description_extesion( FILE *fp, lsmash_file_t *file, isom_box_t *box, int level )
 {
     extern int mp4sys_print_codec_specific( FILE *, lsmash_file_t *, isom_box_t *, int );
@@ -1279,6 +1299,7 @@ static int isom_print_sample_description_extesion( FILE *fp, lsmash_file_t *file
     extern int eac3_print_codec_specific( FILE *, lsmash_file_t *, isom_box_t *, int );
     extern int dts_print_codec_specific( FILE *, lsmash_file_t *, isom_box_t *, int );
     extern int alac_print_codec_specific( FILE *, lsmash_file_t *, isom_box_t *, int );
+    extern int wma_print_codec_specific( FILE *, lsmash_file_t *, isom_box_t *, int );
     static struct print_description_extension_table_tag
     {
         lsmash_box_type_t type;
@@ -1312,6 +1333,7 @@ static int isom_print_sample_description_extesion( FILE *fp, lsmash_file_t *file
         ADD_PRINT_DESCRIPTION_EXTENSION_TABLE_ELEMENT( ISOM_BOX_TYPE_DEC3, eac3_print_codec_specific );
         ADD_PRINT_DESCRIPTION_EXTENSION_TABLE_ELEMENT( ISOM_BOX_TYPE_DDTS, dts_print_codec_specific );
         ADD_PRINT_DESCRIPTION_EXTENSION_TABLE_ELEMENT( ISOM_BOX_TYPE_ALAC, alac_print_codec_specific );
+        ADD_PRINT_DESCRIPTION_EXTENSION_TABLE_ELEMENT( ISOM_BOX_TYPE_WFEX, wma_print_codec_specific );
         ADD_PRINT_DESCRIPTION_EXTENSION_TABLE_ELEMENT( ISOM_BOX_TYPE_FTAB, isom_print_ftab );
         ADD_PRINT_DESCRIPTION_EXTENSION_TABLE_ELEMENT(   QT_BOX_TYPE_ESDS, mp4sys_print_codec_specific );
         ADD_PRINT_DESCRIPTION_EXTENSION_TABLE_ELEMENT(   QT_BOX_TYPE_ALAC, alac_print_codec_specific );
@@ -1327,7 +1349,7 @@ static int isom_print_sample_description_extesion( FILE *fp, lsmash_file_t *file
 static int isom_print_stts( FILE *fp, lsmash_file_t *file, isom_box_t *box, int level )
 {
     if( !((isom_stts_t *)box)->list )
-        return -1;
+        return LSMASH_ERR_INVALID_DATA;
     isom_stts_t *stts = (isom_stts_t *)box;
     int indent = level;
     uint32_t i = 0;
@@ -1346,7 +1368,7 @@ static int isom_print_stts( FILE *fp, lsmash_file_t *file, isom_box_t *box, int 
 static int isom_print_ctts( FILE *fp, lsmash_file_t *file, isom_box_t *box, int level )
 {
     if( !((isom_ctts_t *)box)->list )
-        return -1;
+        return LSMASH_ERR_INVALID_DATA;
     isom_ctts_t *ctts = (isom_ctts_t *)box;
     int indent = level;
     uint32_t i = 0;
@@ -1399,7 +1421,7 @@ static int isom_print_cslg( FILE *fp, lsmash_file_t *file, isom_box_t *box, int 
 static int isom_print_stss( FILE *fp, lsmash_file_t *file, isom_box_t *box, int level )
 {
     if( !((isom_stss_t *)box)->list )
-        return -1;
+        return LSMASH_ERR_INVALID_DATA;
     isom_stss_t *stss = (isom_stss_t *)box;
     int indent = level;
     uint32_t i = 0;
@@ -1413,7 +1435,7 @@ static int isom_print_stss( FILE *fp, lsmash_file_t *file, isom_box_t *box, int 
 static int isom_print_stps( FILE *fp, lsmash_file_t *file, isom_box_t *box, int level )
 {
     if( !((isom_stps_t *)box)->list )
-        return -1;
+        return LSMASH_ERR_INVALID_DATA;
     isom_stps_t *stps = (isom_stps_t *)box;
     int indent = level;
     uint32_t i = 0;
@@ -1427,7 +1449,7 @@ static int isom_print_stps( FILE *fp, lsmash_file_t *file, isom_box_t *box, int 
 static int isom_print_sdtp( FILE *fp, lsmash_file_t *file, isom_box_t *box, int level )
 {
     if( !((isom_sdtp_t *)box)->list )
-        return -1;
+        return LSMASH_ERR_INVALID_DATA;
     isom_sdtp_t *sdtp = (isom_sdtp_t *)box;
     int indent = level;
     uint32_t i = 0;
@@ -1472,7 +1494,7 @@ static int isom_print_sdtp( FILE *fp, lsmash_file_t *file, isom_box_t *box, int 
 static int isom_print_stsc( FILE *fp, lsmash_file_t *file, isom_box_t *box, int level )
 {
     if( !((isom_stsc_t *)box)->list )
-        return -1;
+        return LSMASH_ERR_INVALID_DATA;
     isom_stsc_t *stsc = (isom_stsc_t *)box;
     int indent = level;
     uint32_t i = 0;
@@ -1512,7 +1534,7 @@ static int isom_print_stsz( FILE *fp, lsmash_file_t *file, isom_box_t *box, int 
 static int isom_print_stco( FILE *fp, lsmash_file_t *file, isom_box_t *box, int level )
 {
     if( !((isom_stco_t *)box)->list )
-        return -1;
+        return LSMASH_ERR_INVALID_DATA;
     isom_stco_t *stco = (isom_stco_t *)box;
     int indent = level;
     uint32_t i = 0;
@@ -1534,7 +1556,7 @@ static int isom_print_stco( FILE *fp, lsmash_file_t *file, isom_box_t *box, int 
 static int isom_print_sgpd( FILE *fp, lsmash_file_t *file, isom_box_t *box, int level )
 {
     if( !((isom_sgpd_t *)box)->list )
-        return -1;
+        return LSMASH_ERR_INVALID_DATA;
     isom_sgpd_t *sgpd = (isom_sgpd_t *)box;
     int indent = level;
     uint32_t i = 0;
@@ -1563,6 +1585,7 @@ static int isom_print_sgpd( FILE *fp, lsmash_file_t *file, isom_box_t *box, int 
             }
             break;
         case ISOM_GROUP_TYPE_ROLL :
+        case ISOM_GROUP_TYPE_PROL :
             for( lsmash_entry_t *entry = sgpd->list->head; entry; entry = entry->next )
             {
                 if( sgpd->version == 1 && !sgpd->default_length )
@@ -1580,7 +1603,7 @@ static int isom_print_sgpd( FILE *fp, lsmash_file_t *file, isom_box_t *box, int 
 static int isom_print_sbgp( FILE *fp, lsmash_file_t *file, isom_box_t *box, int level )
 {
     if( !((isom_sbgp_t *)box)->list )
-        return -1;
+        return LSMASH_ERR_INVALID_DATA;
     isom_sbgp_t *sbgp = (isom_sbgp_t *)box;
     int indent = level;
     int is_fragment = sbgp->parent && lsmash_check_box_type_identical( sbgp->parent->type, ISOM_BOX_TYPE_TRAF );
@@ -1618,7 +1641,7 @@ static int isom_print_chpl( FILE *fp, lsmash_file_t *file, isom_box_t *box, int 
     if( !chpl->version )
     {
         if( !file || !file->moov || !file->moov->mvhd )
-            return -1;
+            return LSMASH_ERR_INVALID_DATA;
         timescale = file->moov->mvhd->timescale;
     }
     else
@@ -1671,7 +1694,7 @@ static int isom_print_meta( FILE *fp, lsmash_file_t *file, isom_box_t *box, int 
 static int isom_print_keys( FILE *fp, lsmash_file_t *file, isom_box_t *box, int level )
 {
     if( !((isom_keys_t *)box)->list )
-        return -1;
+        return LSMASH_ERR_INVALID_DATA;
     isom_keys_t *keys = (isom_keys_t *)box;
     int indent = level;
     uint32_t i = 1;
@@ -1983,7 +2006,7 @@ static int isom_print_data( FILE *fp, lsmash_file_t *file, isom_box_t *box, int 
         {
             /* RIAA-PA (RIAA Parental advisory) 8-bit integer */
             lsmash_ifprintf( fp, indent, "value = %"PRIu8, data->value[0] );
-            if( data->value[0] == -1 )
+            if( (signed)data->value[0] == -1 )
                 fprintf( fp, " (no)" );
             else if( data->value[0] == 1 )
                 fprintf( fp, " (yes)" );
@@ -2277,12 +2300,12 @@ static int isom_print_mfro( FILE *fp, lsmash_file_t *file, isom_box_t *box, int 
 int lsmash_print_movie( lsmash_root_t *root, const char *filename )
 {
     if( !root )
-        return -1;
+        return LSMASH_ERR_FUNCTION_PARAM;
     lsmash_file_t *file = root->file;
     if( !file
      || !file->print
      || !(file->flags & LSMASH_FILE_MODE_DUMP) )
-        return -1;
+        return LSMASH_ERR_FUNCTION_PARAM;
     FILE *destination;
     if( !strcmp( filename, "-" ) )
         destination = stdout;
@@ -2293,10 +2316,16 @@ int lsmash_print_movie( lsmash_root_t *root, const char *filename )
     for( lsmash_entry_t *entry = file->print->head; entry; entry = entry->next )
     {
         isom_print_entry_t *data = (isom_print_entry_t *)entry->data;
-        if( !data || !data->box || data->func( destination, file, data->box, data->level ) )
+        if( !data || !data->box )
         {
             fclose( destination );
-            return -1;
+            return LSMASH_ERR_NAMELESS;
+        }
+        int ret = data->func( destination, file, data->box, data->level );
+        if( ret < 0 )
+        {
+            fclose( destination );
+            return ret;
         }
     }
     fclose( destination );
@@ -2312,7 +2341,7 @@ static isom_print_box_t isom_select_print_func( isom_box_t *box )
         isom_box_t *parent = box->parent;
         if( lsmash_check_box_type_identical( parent->type, ISOM_BOX_TYPE_STSD ) )
         {
-            lsmash_codec_type_t sample_type = (lsmash_codec_type_t)box->type;
+            lsmash_codec_type_t sample_type = box->type;
             if( lsmash_check_codec_type_identical( sample_type, LSMASH_CODEC_TYPE_RAW ) )
             {
                 if( box->manager & LSMASH_VIDEO_DESCRIPTION )
@@ -2427,6 +2456,7 @@ static isom_print_box_t isom_select_print_func( isom_box_t *box )
                 ADD_PRINT_DESCRIPTION_TABLE_ELEMENT( ISOM_CODEC_TYPE_SQCP_AUDIO,  isom_print_audio_description );
                 ADD_PRINT_DESCRIPTION_TABLE_ELEMENT( ISOM_CODEC_TYPE_SSMV_AUDIO,  isom_print_audio_description );
                 ADD_PRINT_DESCRIPTION_TABLE_ELEMENT( ISOM_CODEC_TYPE_TWOS_AUDIO,  isom_print_audio_description );
+                ADD_PRINT_DESCRIPTION_TABLE_ELEMENT( ISOM_CODEC_TYPE_WMA_AUDIO,   isom_print_audio_description );
                 ADD_PRINT_DESCRIPTION_TABLE_ELEMENT( QT_CODEC_TYPE_MP4A_AUDIO,    isom_print_audio_description );
                 ADD_PRINT_DESCRIPTION_TABLE_ELEMENT( QT_CODEC_TYPE_23NI_AUDIO,    isom_print_audio_description );
                 ADD_PRINT_DESCRIPTION_TABLE_ELEMENT( QT_CODEC_TYPE_MAC3_AUDIO,    isom_print_audio_description );
@@ -2459,6 +2489,7 @@ static isom_print_box_t isom_select_print_func( isom_box_t *box )
                 ADD_PRINT_DESCRIPTION_TABLE_ELEMENT( QT_CODEC_TYPE_NOT_SPECIFIED, isom_print_audio_description );
                 ADD_PRINT_DESCRIPTION_TABLE_ELEMENT( QT_CODEC_TYPE_TEXT_TEXT,     isom_print_text_description );
                 ADD_PRINT_DESCRIPTION_TABLE_ELEMENT( ISOM_CODEC_TYPE_TX3G_TEXT,   isom_print_tx3g_description );
+                ADD_PRINT_DESCRIPTION_TABLE_ELEMENT( ISOM_CODEC_TYPE_MP4S_SYSTEM, isom_print_mp4s_description );
                 ADD_PRINT_DESCRIPTION_TABLE_ELEMENT( LSMASH_CODEC_TYPE_UNSPECIFIED, NULL );
 #undef ADD_PRINT_DESCRIPTION_TABLE_ELEMENT
             }
@@ -2607,7 +2638,7 @@ static isom_print_box_t isom_select_print_func( isom_box_t *box )
 
 static inline void isom_print_remove_plastic_box( isom_box_t *box )
 {
-    if( box->manager & LSMASH_ABSENT_IN_ROOT )
+    if( box->manager & LSMASH_ABSENT_IN_FILE )
         /* free flagged box */
         isom_remove_box_by_itself( box );
 }
@@ -2623,16 +2654,17 @@ int isom_add_print_func( lsmash_file_t *file, void *box, int level )
     if( !data )
     {
         isom_print_remove_plastic_box( box );
-        return -1;
+        return LSMASH_ERR_MEMORY_ALLOC;
     }
     data->level = level;
     data->box   = (isom_box_t *)box;
     data->func  = isom_select_print_func( (isom_box_t *)box );
-    if( !data->func || lsmash_add_entry( file->print, data ) < 0 )
+    assert( data->func );
+    if( lsmash_add_entry( file->print, data ) < 0 )
     {
         isom_print_remove_plastic_box( data->box );
         lsmash_free( data );
-        return -1;
+        return LSMASH_ERR_MEMORY_ALLOC;
     }
     return 0;
 }

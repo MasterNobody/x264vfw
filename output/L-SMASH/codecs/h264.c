@@ -35,7 +35,6 @@
 #include "h264.h"
 #include "nalu.h"
 
-#define IF_INVALID_VALUE( x ) if( x )
 #define IF_EXCEED_INT32( x ) if( (x) < INT32_MIN || (x) > INT32_MAX )
 #define H264_REQUIRES_AVCC_EXTENSION( x ) ((x) == 100 || (x) == 110 || (x) == 122 || (x) == 144)
 #define H264_POC_DEBUG_PRINT 0
@@ -86,51 +85,150 @@ void h264_cleanup_parser
     lsmash_remove_entries( info->slice_list, NULL );
     lsmash_destroy_h264_parameter_sets( &info->avcC_param );
     lsmash_destroy_h264_parameter_sets( &info->avcC_param_next );
-    lsmash_stream_buffers_cleanup( info->buffer.sb );
+    lsmash_destroy_multiple_buffers( info->buffer.bank );
     lsmash_bits_adhoc_cleanup( info->bits );
     info->bits = NULL;
 }
 
 int h264_setup_parser
 (
-    h264_info_t               *info,
-    lsmash_stream_buffers_t   *sb,
-    int                        parse_only,
-    lsmash_stream_buffers_type type,
-    void                      *stream
+    h264_info_t *info,
+    int          parse_only
 )
 {
-    assert( sb );
-    if( !info )
-        return -1;
+    assert( info );
     memset( info, 0, sizeof(h264_info_t) );
-    info->avcC_param     .lengthSizeMinusOne = H264_DEFAULT_NALU_LENGTH_SIZE - 1;
-    info->avcC_param_next.lengthSizeMinusOne = H264_DEFAULT_NALU_LENGTH_SIZE - 1;
-    h264_stream_buffer_t *hb = &info->buffer;
-    hb->sb = sb;
-    lsmash_stream_buffers_setup( sb, type, stream );
-    sb->bank = lsmash_create_multiple_buffers( parse_only ? 2 : 4, H264_DEFAULT_BUFFER_SIZE );
+    info->avcC_param     .lengthSizeMinusOne = NALU_DEFAULT_NALU_LENGTH_SIZE - 1;
+    info->avcC_param_next.lengthSizeMinusOne = NALU_DEFAULT_NALU_LENGTH_SIZE - 1;
+    h264_stream_buffer_t *sb = &info->buffer;
+    sb->bank = lsmash_create_multiple_buffers( parse_only ? 1 : 3, NALU_DEFAULT_BUFFER_SIZE );
     if( !sb->bank )
-        return -1;
-    sb->start = lsmash_withdraw_buffer( sb->bank, 1 );
-    hb->rbsp  = lsmash_withdraw_buffer( sb->bank, 2 );
-    sb->pos   = sb->start;
-    sb->end   = sb->start;
+        return LSMASH_ERR_MEMORY_ALLOC;
+    sb->rbsp = lsmash_withdraw_buffer( sb->bank, 1 );
     if( !parse_only )
     {
-        info->picture.au            = lsmash_withdraw_buffer( sb->bank, 3 );
-        info->picture.incomplete_au = lsmash_withdraw_buffer( sb->bank, 4 );
+        info->au.data            = lsmash_withdraw_buffer( sb->bank, 2 );
+        info->au.incomplete_data = lsmash_withdraw_buffer( sb->bank, 3 );
     }
     info->bits = lsmash_bits_adhoc_create();
     if( !info->bits )
     {
-        lsmash_stream_buffers_cleanup( sb );
-        return -1;
+        lsmash_destroy_multiple_buffers( sb->bank );
+        return LSMASH_ERR_MEMORY_ALLOC;
     }
     lsmash_init_entry_list( info->sps_list );
     lsmash_init_entry_list( info->pps_list );
     lsmash_init_entry_list( info->slice_list );
     return 0;
+}
+
+static int h264_check_nalu_header
+(
+    lsmash_bs_t             *bs,
+    h264_nalu_header_t      *nuh,
+    int                      use_long_start_code
+)
+{
+    uint8_t temp8 = lsmash_bs_show_byte( bs, use_long_start_code ? NALU_LONG_START_CODE_LENGTH : NALU_SHORT_START_CODE_LENGTH );
+    nuh->forbidden_zero_bit = (temp8 >> 7) & 0x01;
+    nuh->nal_ref_idc        = (temp8 >> 5) & 0x03;
+    nuh->nal_unit_type      =  temp8       & 0x1f;
+    nuh->length             = 1;
+    if( nuh->nal_unit_type == H264_NALU_TYPE_PREFIX
+     || nuh->nal_unit_type == H264_NALU_TYPE_SLICE_EXT
+     || nuh->nal_unit_type == H264_NALU_TYPE_SLICE_EXT_DVC )
+    {
+        /* We don't support these types of NALU. */
+        //nuh->length += 3;
+        return LSMASH_ERR_PATCH_WELCOME;
+    }
+    if( nuh->forbidden_zero_bit )
+        return LSMASH_ERR_INVALID_DATA;
+    /* SPS and PPS require long start code (0x00000001).
+     * Also AU delimiter requires it too because this type of NALU shall be the first NALU of any AU if present. */
+    if( !use_long_start_code
+     && (nuh->nal_unit_type == H264_NALU_TYPE_SPS
+      || nuh->nal_unit_type == H264_NALU_TYPE_PPS
+      || nuh->nal_unit_type == H264_NALU_TYPE_AUD) )
+        return LSMASH_ERR_INVALID_DATA;
+    if( nuh->nal_ref_idc )
+    {
+        /* nal_ref_idc shall be equal to 0 for all NALUs having nal_unit_type equal to 6, 9, 10, 11, or 12. */
+        if( nuh->nal_unit_type == H264_NALU_TYPE_SEI
+         || nuh->nal_unit_type == H264_NALU_TYPE_AUD
+         || nuh->nal_unit_type == H264_NALU_TYPE_EOS
+         || nuh->nal_unit_type == H264_NALU_TYPE_EOB
+         || nuh->nal_unit_type == H264_NALU_TYPE_FD )
+            return LSMASH_ERR_INVALID_DATA;
+    }
+    else
+        /* nal_ref_idc shall not be equal to 0 for NALUs with nal_unit_type equal to 5. */
+        if( nuh->nal_unit_type == H264_NALU_TYPE_SLICE_IDR )
+            return LSMASH_ERR_INVALID_DATA;
+    return 0;
+}
+
+uint64_t h264_find_next_start_code
+(
+    lsmash_bs_t        *bs,
+    h264_nalu_header_t *nuh,
+    uint64_t           *start_code_length,
+    uint64_t           *trailing_zero_bytes
+)
+{
+    uint64_t length = 0;    /* the length of the latest NALU */
+    uint64_t count  = 0;    /* the number of the trailing zero bytes after the latest NALU */
+    /* Check the type of the current start code. */
+    int long_start_code
+        = (!lsmash_bs_is_end( bs, NALU_LONG_START_CODE_LENGTH )  && 0x00000001 == lsmash_bs_show_be32( bs, 0 )) ? 1
+        : (!lsmash_bs_is_end( bs, NALU_SHORT_START_CODE_LENGTH ) && 0x000001   == lsmash_bs_show_be24( bs, 0 )) ? 0
+        :                                                                                                        -1;
+    if( long_start_code >= 0 && h264_check_nalu_header( bs, nuh, long_start_code ) == 0 )
+    {
+        *start_code_length = long_start_code ? NALU_LONG_START_CODE_LENGTH : NALU_SHORT_START_CODE_LENGTH;
+        uint64_t distance = *start_code_length + nuh->length;
+        /* Find the start code of the next NALU and get the distance from the start code of the latest NALU. */
+        if( !lsmash_bs_is_end( bs, distance + NALU_SHORT_START_CODE_LENGTH ) )
+        {
+            uint32_t sync_bytes = lsmash_bs_show_be24( bs, distance );
+            while( 0x000001 != sync_bytes )
+            {
+                if( lsmash_bs_is_end( bs, ++distance + NALU_SHORT_START_CODE_LENGTH ) )
+                {
+                    distance = lsmash_bs_get_remaining_buffer_size( bs );
+                    break;
+                }
+                sync_bytes <<= 8;
+                sync_bytes  |= lsmash_bs_show_byte( bs, distance + NALU_SHORT_START_CODE_LENGTH - 1 );
+                sync_bytes  &= 0xFFFFFF;
+            }
+        }
+        else
+            distance = lsmash_bs_get_remaining_buffer_size( bs );
+        /* Any NALU has no consecutive zero bytes at the end. */
+        while( 0x00 == lsmash_bs_show_byte( bs, distance - 1 ) )
+        {
+            --distance;
+            ++count;
+        }
+        /* Remove the length of the start code. */
+        length = distance - *start_code_length;
+        /* If there are one or more trailing zero bytes, we treat the last one byte as a part of the next start code.
+         * This makes the next start code a long start code. */
+        if( count )
+            --count;
+    }
+    else
+    {
+        /* No start code. */
+        nuh->forbidden_zero_bit = 1;    /* shall be 0, so invalid */
+        nuh->nal_ref_idc        = 0;    /* arbitrary */
+        nuh->nal_unit_type      = H264_NALU_TYPE_UNSPECIFIED0;
+        nuh->length             = 0;
+        *start_code_length = 0;
+    }
+    *trailing_zero_bytes = count;
+    return length;
 }
 
 static h264_sps_t *h264_get_sps
@@ -153,7 +251,7 @@ static h264_sps_t *h264_get_sps
     if( !sps )
         return NULL;
     sps->seq_parameter_set_id = sps_id;
-    if( lsmash_add_entry( sps_list, sps ) )
+    if( lsmash_add_entry( sps_list, sps ) < 0 )
     {
         lsmash_free( sps );
         return NULL;
@@ -181,7 +279,7 @@ static h264_pps_t *h264_get_pps
     if( !pps )
         return NULL;
     pps->pic_parameter_set_id = pps_id;
-    if( lsmash_add_entry( pps_list, pps ) )
+    if( lsmash_add_entry( pps_list, pps ) < 0 )
     {
         lsmash_free( pps );
         return NULL;
@@ -209,7 +307,7 @@ static h264_slice_info_t *h264_get_slice_info
     if( !slice )
         return NULL;
     slice->slice_id = slice_id;
-    if( lsmash_add_entry( slice_list, slice ) )
+    if( lsmash_add_entry( slice_list, slice ) < 0 )
     {
         lsmash_free( slice );
         return NULL;
@@ -229,10 +327,10 @@ int h264_calculate_poc
 #endif
     h264_pps_t *pps = h264_get_pps( info->pps_list, picture->pic_parameter_set_id );
     if( !pps )
-        return -1;
+        return LSMASH_ERR_NAMELESS;
     h264_sps_t *sps = h264_get_sps( info->sps_list, pps->seq_parameter_set_id );
     if( !sps )
-        return -1;
+        return LSMASH_ERR_NAMELESS;
     int64_t TopFieldOrderCnt    = 0;
     int64_t BottomFieldOrderCnt = 0;
     if( sps->pic_order_cnt_type == 0 )
@@ -266,14 +364,14 @@ int h264_calculate_poc
         else
             PicOrderCntMsb = prevPicOrderCntMsb;
         IF_EXCEED_INT32( PicOrderCntMsb )
-            return -1;
+            return LSMASH_ERR_INVALID_DATA;
         BottomFieldOrderCnt = TopFieldOrderCnt = PicOrderCntMsb + pic_order_cnt_lsb;
         if( !picture->field_pic_flag )
             BottomFieldOrderCnt += picture->delta_pic_order_cnt_bottom;
         IF_EXCEED_INT32( TopFieldOrderCnt )
-            return -1;
+            return LSMASH_ERR_INVALID_DATA;
         IF_EXCEED_INT32( BottomFieldOrderCnt )
-            return -1;
+            return LSMASH_ERR_INVALID_DATA;
         if( !picture->disposable )
         {
             picture->ref_pic_has_mmco5         = picture->has_mmco5;
@@ -296,8 +394,8 @@ int h264_calculate_poc
         uint32_t prevFrameNum       = prev_picture->has_mmco5 ? 0 : prev_picture->frame_num;
         uint32_t prevFrameNumOffset = prev_picture->has_mmco5 ? 0 : prev_picture->FrameNumOffset;
         uint64_t FrameNumOffset     = picture->idr ? 0 : prevFrameNumOffset + (prevFrameNum > frame_num ? sps->MaxFrameNum : 0);
-        IF_INVALID_VALUE( FrameNumOffset > INT32_MAX )
-            return -1;
+        if( FrameNumOffset > INT32_MAX )
+            return LSMASH_ERR_INVALID_DATA;
         int64_t expectedPicOrderCnt;
         if( sps->num_ref_frames_in_pic_order_cnt_cycle )
         {
@@ -323,9 +421,9 @@ int h264_calculate_poc
         if( !picture->field_pic_flag )
             BottomFieldOrderCnt += picture->delta_pic_order_cnt[1];
         IF_EXCEED_INT32( TopFieldOrderCnt )
-            return -1;
+            return LSMASH_ERR_INVALID_DATA;
         IF_EXCEED_INT32( BottomFieldOrderCnt )
-            return -1;
+            return LSMASH_ERR_INVALID_DATA;
         picture->FrameNumOffset = FrameNumOffset;
     }
     else if( sps->pic_order_cnt_type == 2 )
@@ -345,9 +443,9 @@ int h264_calculate_poc
             FrameNumOffset  = prevFrameNumOffset + (prevFrameNum > frame_num ? sps->MaxFrameNum : 0);
             tempPicOrderCnt = 2 * (FrameNumOffset + frame_num) - picture->disposable;
             IF_EXCEED_INT32( FrameNumOffset )
-                return -1;
+                return LSMASH_ERR_INVALID_DATA;
             IF_EXCEED_INT32( tempPicOrderCnt )
-                return -1;
+                return LSMASH_ERR_INVALID_DATA;
         }
         TopFieldOrderCnt    = tempPicOrderCnt;
         BottomFieldOrderCnt = tempPicOrderCnt;
@@ -370,47 +468,6 @@ int h264_calculate_poc
     return 0;
 }
 
-int h264_check_nalu_header
-(
-    h264_nalu_header_t      *nalu_header,
-    lsmash_stream_buffers_t *sb,
-    int                      use_long_start_code
-)
-{
-    uint8_t forbidden_zero_bit =                              (*sb->pos >> 7) & 0x01;
-    uint8_t nal_ref_idc        = nalu_header->nal_ref_idc   = (*sb->pos >> 5) & 0x03;
-    uint8_t nal_unit_type      = nalu_header->nal_unit_type =  *sb->pos       & 0x1f;
-    nalu_header->length = 1;
-    sb->pos += nalu_header->length;
-    if( nal_unit_type == H264_NALU_TYPE_PREFIX
-     || nal_unit_type >= H264_NALU_TYPE_SLICE_EXT )
-        return -1;      /* We don't support yet. */
-    IF_INVALID_VALUE( forbidden_zero_bit )
-        return -1;
-    /* SPS and PPS require long start code (0x00000001).
-     * Also AU delimiter requires it too because this type of NALU shall be the first NALU of any AU if present. */
-    IF_INVALID_VALUE( !use_long_start_code
-                   && (nal_unit_type == H264_NALU_TYPE_SPS
-                    || nal_unit_type == H264_NALU_TYPE_PPS
-                    || nal_unit_type == H264_NALU_TYPE_AUD) )
-        return -1;
-    if( nal_ref_idc )
-    {
-        /* nal_ref_idc shall be equal to 0 for all NALUs having nal_unit_type equal to 6, 9, 10, 11, or 12. */
-        IF_INVALID_VALUE( nal_unit_type == H264_NALU_TYPE_SEI
-                       || nal_unit_type == H264_NALU_TYPE_AUD
-                       || nal_unit_type == H264_NALU_TYPE_EOS
-                       || nal_unit_type == H264_NALU_TYPE_EOB
-                       || nal_unit_type == H264_NALU_TYPE_FD )
-            return -1;
-    }
-    else
-        /* nal_ref_idc shall not be equal to 0 for NALUs with nal_unit_type equal to 5. */
-        IF_INVALID_VALUE( nal_unit_type == H264_NALU_TYPE_SLICE_IDR )
-            return -1;
-    return 0;
-}
-
 static int h264_parse_scaling_list
 (
     lsmash_bits_t *bits,
@@ -422,8 +479,8 @@ static int h264_parse_scaling_list
     for( int i = 0; i < sizeOfScalingList; i++ )
     {
         int64_t delta_scale = nalu_get_exp_golomb_se( bits );
-        IF_INVALID_VALUE( delta_scale < -128 || delta_scale > 127 )
-            return -1;
+        if( delta_scale < -128 || delta_scale > 127 )
+            return LSMASH_ERR_INVALID_DATA;
         nextScale = (nextScale + delta_scale + 256) % 256;
         if( nextScale == 0 )
             break;
@@ -439,8 +496,8 @@ static int h264_parse_hrd_parameters
 {
     /* hrd_parameters() */
     uint64_t cpb_cnt_minus1 = nalu_get_exp_golomb_ue( bits );
-    IF_INVALID_VALUE( cpb_cnt_minus1 > 31 )
-        return -1;
+    if( cpb_cnt_minus1 > 31 )
+        return LSMASH_ERR_INVALID_DATA;
     lsmash_bits_get( bits, 4 );     /* bit_rate_scale */
     lsmash_bits_get( bits, 4 );     /* cpb_size_scale */
     for( uint64_t SchedSelIdx = 0; SchedSelIdx <= cpb_cnt_minus1; SchedSelIdx++ )
@@ -465,15 +522,16 @@ static int h264_parse_sps_minimally
     uint64_t       ebsp_size
 )
 {
-    if( nalu_import_rbsp_from_ebsp( bits, rbsp_buffer, ebsp, ebsp_size ) )
-        return -1;
+    int err = nalu_import_rbsp_from_ebsp( bits, rbsp_buffer, ebsp, ebsp_size );
+    if( err < 0 )
+        return err;
     memset( sps, 0, sizeof(h264_sps_t) );
     sps->profile_idc          = lsmash_bits_get( bits, 8 );
     sps->constraint_set_flags = lsmash_bits_get( bits, 8 );
     sps->level_idc            = lsmash_bits_get( bits, 8 );
     uint64_t seq_parameter_set_id = nalu_get_exp_golomb_ue( bits );
-    IF_INVALID_VALUE( seq_parameter_set_id > 31 )
-        return -1;
+    if( seq_parameter_set_id > 31 )
+        return LSMASH_ERR_INVALID_DATA;
     sps->seq_parameter_set_id = seq_parameter_set_id;
     if( sps->profile_idc == 100 || sps->profile_idc == 110 || sps->profile_idc == 122
      || sps->profile_idc == 244 || sps->profile_idc == 44  || sps->profile_idc == 83
@@ -484,11 +542,11 @@ static int h264_parse_sps_minimally
         if( sps->chroma_format_idc == 3 )
             sps->separate_colour_plane_flag = lsmash_bits_get( bits, 1 );
         uint64_t bit_depth_luma_minus8 = nalu_get_exp_golomb_ue( bits );
-        IF_INVALID_VALUE( bit_depth_luma_minus8 > 6 )
-            return -1;
+        if( bit_depth_luma_minus8 > 6 )
+            return LSMASH_ERR_INVALID_DATA;
         uint64_t bit_depth_chroma_minus8 = nalu_get_exp_golomb_ue( bits );
-        IF_INVALID_VALUE( bit_depth_chroma_minus8 > 6 )
-            return -1;
+        if( bit_depth_chroma_minus8 > 6 )
+            return LSMASH_ERR_INVALID_DATA;
         sps->bit_depth_luma_minus8   = bit_depth_luma_minus8;
         sps->bit_depth_chroma_minus8 = bit_depth_chroma_minus8;
         lsmash_bits_get( bits, 1 );         /* qpprime_y_zero_transform_bypass_flag */
@@ -497,8 +555,8 @@ static int h264_parse_sps_minimally
             int num_loops = sps->chroma_format_idc != 3 ? 8 : 12;
             for( int i = 0; i < num_loops; i++ )
                 if( lsmash_bits_get( bits, 1 )          /* seq_scaling_list_present_flag[i] */
-                 && h264_parse_scaling_list( bits, i < 6 ? 16 : 64 ) )
-                        return -1;
+                 && (err = h264_parse_scaling_list( bits, i < 6 ? 16 : 64 )) < 0 )
+                        return err;
         }
     }
     else
@@ -508,7 +566,7 @@ static int h264_parse_sps_minimally
         sps->bit_depth_luma_minus8      = 0;
         sps->bit_depth_chroma_minus8    = 0;
     }
-    return bits->bs->error ? -1 : 0;
+    return bits->bs->error ? LSMASH_ERR_NAMELESS : 0;
 }
 
 int h264_parse_sps
@@ -522,11 +580,12 @@ int h264_parse_sps
     lsmash_bits_t *bits = info->bits;
     /* seq_parameter_set_data() */
     h264_sps_t temp_sps;
-    if( h264_parse_sps_minimally( bits, &temp_sps, rbsp_buffer, ebsp, ebsp_size ) )
-        return -1;
+    int err = h264_parse_sps_minimally( bits, &temp_sps, rbsp_buffer, ebsp, ebsp_size );
+    if( err < 0 )
+        return err;
     h264_sps_t *sps = h264_get_sps( info->sps_list, temp_sps.seq_parameter_set_id );
     if( !sps )
-        return -1;
+        return LSMASH_ERR_NAMELESS;
     memset( sps, 0, sizeof(h264_sps_t) );
     sps->profile_idc                = temp_sps.profile_idc;
     sps->constraint_set_flags       = temp_sps.constraint_set_flags;
@@ -538,45 +597,45 @@ int h264_parse_sps
     sps->bit_depth_chroma_minus8    = temp_sps.bit_depth_chroma_minus8;
     sps->ChromaArrayType = sps->separate_colour_plane_flag ? 0 : sps->chroma_format_idc;
     uint64_t log2_max_frame_num_minus4 = nalu_get_exp_golomb_ue( bits );
-    IF_INVALID_VALUE( log2_max_frame_num_minus4 > 12 )
-        return -1;
+    if( log2_max_frame_num_minus4 > 12 )
+        return LSMASH_ERR_INVALID_DATA;
     sps->log2_max_frame_num = log2_max_frame_num_minus4 + 4;
     sps->MaxFrameNum = 1 << sps->log2_max_frame_num;
     uint64_t pic_order_cnt_type = nalu_get_exp_golomb_ue( bits );
-    IF_INVALID_VALUE( pic_order_cnt_type > 2 )
-        return -1;
+    if( pic_order_cnt_type > 2 )
+        return LSMASH_ERR_INVALID_DATA;
     sps->pic_order_cnt_type = pic_order_cnt_type;
     if( sps->pic_order_cnt_type == 0 )
     {
         uint64_t log2_max_pic_order_cnt_lsb_minus4 = nalu_get_exp_golomb_ue( bits );
-        IF_INVALID_VALUE( log2_max_pic_order_cnt_lsb_minus4 > 12 )
-            return -1;
+        if( log2_max_pic_order_cnt_lsb_minus4 > 12 )
+            return LSMASH_ERR_INVALID_DATA;
         sps->log2_max_pic_order_cnt_lsb = log2_max_pic_order_cnt_lsb_minus4 + 4;
         sps->MaxPicOrderCntLsb = 1 << sps->log2_max_pic_order_cnt_lsb;
     }
     else if( sps->pic_order_cnt_type == 1 )
     {
         sps->delta_pic_order_always_zero_flag = lsmash_bits_get( bits, 1 );
-        int64_t max_value =  ((uint64_t)1 << 31) - 1;
-        int64_t min_value = -((uint64_t)1 << 31) + 1;
+        static const int64_t max_value =  ((uint64_t)1 << 31) - 1;
+        static const int64_t min_value = -((uint64_t)1 << 31) + 1;
         int64_t offset_for_non_ref_pic = nalu_get_exp_golomb_se( bits );
         if( offset_for_non_ref_pic < min_value || offset_for_non_ref_pic > max_value )
-            return -1;
+            return LSMASH_ERR_INVALID_DATA;
         sps->offset_for_non_ref_pic = offset_for_non_ref_pic;
         int64_t offset_for_top_to_bottom_field = nalu_get_exp_golomb_se( bits );
         if( offset_for_top_to_bottom_field < min_value || offset_for_top_to_bottom_field > max_value )
-            return -1;
+            return LSMASH_ERR_INVALID_DATA;
         sps->offset_for_top_to_bottom_field = offset_for_top_to_bottom_field;
         uint64_t num_ref_frames_in_pic_order_cnt_cycle = nalu_get_exp_golomb_ue( bits );
-        IF_INVALID_VALUE( num_ref_frames_in_pic_order_cnt_cycle > 255 )
-            return -1;
+        if( num_ref_frames_in_pic_order_cnt_cycle > 255 )
+            return LSMASH_ERR_INVALID_DATA;
         sps->num_ref_frames_in_pic_order_cnt_cycle = num_ref_frames_in_pic_order_cnt_cycle;
         sps->ExpectedDeltaPerPicOrderCntCycle = 0;
         for( int i = 0; i < num_ref_frames_in_pic_order_cnt_cycle; i++ )
         {
             int64_t offset_for_ref_frame = nalu_get_exp_golomb_se( bits );
             if( offset_for_ref_frame < min_value || offset_for_ref_frame > max_value )
-                return -1;
+                return LSMASH_ERR_INVALID_DATA;
             sps->offset_for_ref_frame[i] = offset_for_ref_frame;
             sps->ExpectedDeltaPerPicOrderCntCycle += offset_for_ref_frame;
         }
@@ -687,12 +746,12 @@ int h264_parse_sps
         }
         int nal_hrd_parameters_present_flag = lsmash_bits_get( bits, 1 );
         if( nal_hrd_parameters_present_flag
-         && h264_parse_hrd_parameters( bits, &sps->vui.hrd ) )
-            return -1;
+         && (err = h264_parse_hrd_parameters( bits, &sps->vui.hrd )) < 0 )
+            return err;
         int vcl_hrd_parameters_present_flag = lsmash_bits_get( bits, 1 );
         if( vcl_hrd_parameters_present_flag
-         && h264_parse_hrd_parameters( bits, &sps->vui.hrd ) )
-            return -1;
+         && (err = h264_parse_hrd_parameters( bits, &sps->vui.hrd )) < 0 )
+            return err;
         if( nal_hrd_parameters_present_flag || vcl_hrd_parameters_present_flag )
         {
             sps->vui.hrd.present                 = 1;
@@ -719,11 +778,11 @@ int h264_parse_sps
         sps->vui.fixed_frame_rate_flag = 0;
     }
     /* rbsp_trailing_bits() */
-    IF_INVALID_VALUE( !lsmash_bits_get( bits, 1 ) )     /* rbsp_stop_one_bit */
-        return -1;
+    if( !lsmash_bits_get( bits, 1 ) )   /* rbsp_stop_one_bit */
+        return LSMASH_ERR_INVALID_DATA;
     lsmash_bits_empty( bits );
     if( bits->bs->error )
-        return -1;
+        return LSMASH_ERR_NAMELESS;
     sps->present = 1;
     info->sps = *sps;
     return 0;
@@ -738,14 +797,15 @@ static int h264_parse_pps_minimally
     uint64_t       ebsp_size
 )
 {
-    if( nalu_import_rbsp_from_ebsp( bits, rbsp_buffer, ebsp, ebsp_size ) )
-        return -1;
+    int err = nalu_import_rbsp_from_ebsp( bits, rbsp_buffer, ebsp, ebsp_size );
+    if( err < 0 )
+        return err;
     memset( pps, 0, sizeof(h264_pps_t) );
     uint64_t pic_parameter_set_id = nalu_get_exp_golomb_ue( bits );
-    IF_INVALID_VALUE( pic_parameter_set_id > 255 )
-        return -1;
+    if( pic_parameter_set_id > 255 )
+        return LSMASH_ERR_INVALID_DATA;
     pps->pic_parameter_set_id = pic_parameter_set_id;
-    return bits->bs->error ? -1 : 0;
+    return bits->bs->error ? LSMASH_ERR_NAMELESS : 0;
 }
 
 int h264_parse_pps
@@ -759,31 +819,32 @@ int h264_parse_pps
     lsmash_bits_t *bits = info->bits;
     /* pic_parameter_set_rbsp */
     h264_pps_t temp_pps;
-    if( h264_parse_pps_minimally( bits, &temp_pps, rbsp_buffer, ebsp, ebsp_size ) )
-        return -1;
+    int err = h264_parse_pps_minimally( bits, &temp_pps, rbsp_buffer, ebsp, ebsp_size );
+    if( err < 0 )
+        return err;
     h264_pps_t *pps = h264_get_pps( info->pps_list, temp_pps.pic_parameter_set_id );
     if( !pps )
-        return -1;
+        return LSMASH_ERR_NAMELESS;
     memset( pps, 0, sizeof(h264_pps_t) );
     pps->pic_parameter_set_id = temp_pps.pic_parameter_set_id;
     uint64_t seq_parameter_set_id = nalu_get_exp_golomb_ue( bits );
-    IF_INVALID_VALUE( seq_parameter_set_id > 31 )
-        return -1;
+    if( seq_parameter_set_id > 31 )
+        return LSMASH_ERR_INVALID_DATA;
     h264_sps_t *sps = h264_get_sps( info->sps_list, seq_parameter_set_id );
     if( !sps )
-        return -1;
+        return LSMASH_ERR_NAMELESS;
     pps->seq_parameter_set_id = seq_parameter_set_id;
     pps->entropy_coding_mode_flag = lsmash_bits_get( bits, 1 );
     pps->bottom_field_pic_order_in_frame_present_flag = lsmash_bits_get( bits, 1 );
     uint64_t num_slice_groups_minus1 = nalu_get_exp_golomb_ue( bits );
-    IF_INVALID_VALUE( num_slice_groups_minus1 > 7 )
-        return -1;
+    if( num_slice_groups_minus1 > 7 )
+        return LSMASH_ERR_INVALID_DATA;
     pps->num_slice_groups_minus1 = num_slice_groups_minus1;
     if( num_slice_groups_minus1 )        /* num_slice_groups_minus1 */
     {
         uint64_t slice_group_map_type = nalu_get_exp_golomb_ue( bits );
-        IF_INVALID_VALUE( slice_group_map_type > 6 )
-            return -1;
+        if( slice_group_map_type > 6 )
+            return LSMASH_ERR_INVALID_DATA;
         pps->slice_group_map_type = slice_group_map_type;
         if( slice_group_map_type == 0 )
             for( uint64_t iGroup = 0; iGroup <= num_slice_groups_minus1; iGroup++ )
@@ -800,8 +861,8 @@ int h264_parse_pps
         {
             lsmash_bits_get( bits, 1 );         /* slice_group_change_direction_flag */
             uint64_t slice_group_change_rate_minus1 = nalu_get_exp_golomb_ue( bits );
-            IF_INVALID_VALUE( slice_group_change_rate_minus1 > (sps->PicSizeInMapUnits - 1) )
-                return -1;
+            if( slice_group_change_rate_minus1 > (sps->PicSizeInMapUnits - 1) )
+                return LSMASH_ERR_INVALID_DATA;
             pps->SliceGroupChangeRate = slice_group_change_rate_minus1 + 1;
         }
         else if( slice_group_map_type == 6 )
@@ -810,8 +871,8 @@ int h264_parse_pps
             int length = lsmash_ceil_log2( num_slice_groups_minus1 + 1 );
             for( uint64_t i = 0; i <= pic_size_in_map_units_minus1; i++ )
                 /* slice_group_id */
-                IF_INVALID_VALUE( lsmash_bits_get( bits, length ) > num_slice_groups_minus1 )
-                    return -1;
+                if( lsmash_bits_get( bits, length ) > num_slice_groups_minus1 )
+                    return LSMASH_ERR_INVALID_DATA;
         }
     }
     pps->num_ref_idx_l0_default_active_minus1 = nalu_get_exp_golomb_ue( bits );
@@ -832,17 +893,17 @@ int h264_parse_pps
             int num_loops = 6 + (sps->chroma_format_idc != 3 ? 2 : 6) * transform_8x8_mode_flag;
             for( int i = 0; i < num_loops; i++ )
                 if( lsmash_bits_get( bits, 1 )          /* pic_scaling_list_present_flag[i] */
-                 && h264_parse_scaling_list( bits, i < 6 ? 16 : 64 ) )
-                        return -1;
+                 && (err = h264_parse_scaling_list( bits, i < 6 ? 16 : 64 )) < 0 )
+                        return err;
         }
         nalu_get_exp_golomb_se( bits );         /* second_chroma_qp_index_offset */
     }
     /* rbsp_trailing_bits() */
-    IF_INVALID_VALUE( !lsmash_bits_get( bits, 1 ) )     /* rbsp_stop_one_bit */
-        return -1;
+    if( !lsmash_bits_get( bits, 1 ) )   /* rbsp_stop_one_bit */
+        return LSMASH_ERR_INVALID_DATA;
     lsmash_bits_empty( bits );
     if( bits->bs->error )
-        return -1;
+        return LSMASH_ERR_NAMELESS;
     pps->present = 1;
     info->sps = *sps;
     info->pps = *pps;
@@ -859,8 +920,9 @@ int h264_parse_sei
     uint64_t       ebsp_size
 )
 {
-    if( nalu_import_rbsp_from_ebsp( bits, rbsp_buffer, ebsp, ebsp_size ) )
-        return -1;
+    int err = nalu_import_rbsp_from_ebsp( bits, rbsp_buffer, ebsp, ebsp_size );
+    if( err < 0 )
+        return err;
     uint8_t *rbsp_start = rbsp_buffer;
     uint64_t rbsp_pos = 0;
     do
@@ -912,8 +974,8 @@ int h264_parse_sei
         else if( payloadType == 3 )
         {
             /* filler_payload
-             * AVC file format is forbidden to contain this. */
-            return -1;
+             * 'avc1' and 'avc2' samples are forbidden to contain this. */
+            return LSMASH_ERR_PATCH_WELCOME;
         }
         else if( payloadType == 6 )
         {
@@ -935,13 +997,13 @@ skip_sei_message:
     } while( *(rbsp_start + rbsp_pos) != 0x80 );        /* All SEI messages are byte aligned at their end.
                                                          * Therefore, 0x80 shall be rbsp_trailing_bits(). */
     lsmash_bits_empty( bits );
-    return bits->bs->error ? -1 : 0;
+    return bits->bs->error ? LSMASH_ERR_NAMELESS : 0;
 }
 
 static int h264_parse_slice_header
 (
     h264_info_t        *info,
-    h264_nalu_header_t *nalu_header
+    h264_nalu_header_t *nuh
 )
 {
     h264_slice_info_t *slice = &info->slice;
@@ -950,31 +1012,31 @@ static int h264_parse_slice_header
     lsmash_bits_t *bits = info->bits;
     nalu_get_exp_golomb_ue( bits );     /* first_mb_in_slice */
     uint8_t slice_type = slice->type = nalu_get_exp_golomb_ue( bits );
-    IF_INVALID_VALUE( (uint64_t)slice->type > 9 )
-        return -1;
+    if( (uint64_t)slice->type > 9 )
+        return LSMASH_ERR_INVALID_DATA;
     if( slice_type > 4 )
         slice_type = slice->type -= 5;
     uint64_t pic_parameter_set_id = nalu_get_exp_golomb_ue( bits );
-    IF_INVALID_VALUE( pic_parameter_set_id > 255 )
-        return -1;
+    if( pic_parameter_set_id > 255 )
+        return LSMASH_ERR_INVALID_DATA;
     slice->pic_parameter_set_id = pic_parameter_set_id;
     h264_pps_t *pps = h264_get_pps( info->pps_list, pic_parameter_set_id );
     if( !pps )
-        return -1;
+        return LSMASH_ERR_NAMELESS;
     h264_sps_t *sps = h264_get_sps( info->sps_list, pps->seq_parameter_set_id );
     if( !sps )
-        return -1;
+        return LSMASH_ERR_NAMELESS;
     slice->seq_parameter_set_id = pps->seq_parameter_set_id;
-    slice->nal_ref_idc          = nalu_header->nal_ref_idc;
-    slice->IdrPicFlag           = (nalu_header->nal_unit_type == H264_NALU_TYPE_SLICE_IDR);
+    slice->nal_ref_idc          = nuh->nal_ref_idc;
+    slice->IdrPicFlag           = (nuh->nal_unit_type == H264_NALU_TYPE_SLICE_IDR);
     slice->pic_order_cnt_type   = sps->pic_order_cnt_type;
-    IF_INVALID_VALUE( (slice->IdrPicFlag || sps->max_num_ref_frames == 0) && slice_type != 2 && slice_type != 4 )
-        return -1;
+    if( (slice->IdrPicFlag || sps->max_num_ref_frames == 0) && slice_type != 2 && slice_type != 4 )
+        return LSMASH_ERR_INVALID_DATA;
     if( sps->separate_colour_plane_flag )
         lsmash_bits_get( bits, 2 );     /* colour_plane_id */
     uint64_t frame_num = lsmash_bits_get( bits, sps->log2_max_frame_num );
-    IF_INVALID_VALUE( frame_num >= (1 << sps->log2_max_frame_num) || (slice->IdrPicFlag && frame_num) )
-        return -1;
+    if( frame_num >= (1 << sps->log2_max_frame_num) || (slice->IdrPicFlag && frame_num) )
+        return LSMASH_ERR_INVALID_DATA;
     slice->frame_num = frame_num;
     if( !sps->frame_mbs_only_flag )
     {
@@ -985,15 +1047,15 @@ static int h264_parse_slice_header
     if( slice->IdrPicFlag )
     {
         uint64_t idr_pic_id = nalu_get_exp_golomb_ue( bits );
-        IF_INVALID_VALUE( idr_pic_id > 65535 )
-            return -1;
+        if( idr_pic_id > 65535 )
+            return LSMASH_ERR_INVALID_DATA;
         slice->idr_pic_id = idr_pic_id;
     }
     if( sps->pic_order_cnt_type == 0 )
     {
         uint64_t pic_order_cnt_lsb = lsmash_bits_get( bits, sps->log2_max_pic_order_cnt_lsb );
-        IF_INVALID_VALUE( pic_order_cnt_lsb >= sps->MaxPicOrderCntLsb )
-            return -1;
+        if( pic_order_cnt_lsb >= sps->MaxPicOrderCntLsb )
+            return LSMASH_ERR_INVALID_DATA;
         slice->pic_order_cnt_lsb = pic_order_cnt_lsb;
         if( pps->bottom_field_pic_order_in_frame_present_flag && !slice->field_pic_flag )
             slice->delta_pic_order_cnt_bottom = nalu_get_exp_golomb_se( bits );
@@ -1007,8 +1069,8 @@ static int h264_parse_slice_header
     if( pps->redundant_pic_cnt_present_flag )
     {
         uint64_t redundant_pic_cnt = nalu_get_exp_golomb_ue( bits );
-        IF_INVALID_VALUE( redundant_pic_cnt > 127 )
-            return -1;
+        if( redundant_pic_cnt > 127 )
+            return LSMASH_ERR_INVALID_DATA;
         slice->has_redundancy = !!redundant_pic_cnt;
     }
     if( slice_type == H264_SLICE_TYPE_B )
@@ -1020,20 +1082,20 @@ static int h264_parse_slice_header
         if( lsmash_bits_get( bits, 1 ) )            /* num_ref_idx_active_override_flag */
         {
             num_ref_idx_l0_active_minus1 = nalu_get_exp_golomb_ue( bits );
-            IF_INVALID_VALUE( num_ref_idx_l0_active_minus1 > 31 )
-                return -1;
+            if( num_ref_idx_l0_active_minus1 > 31 )
+                return LSMASH_ERR_INVALID_DATA;
             if( slice_type == H264_SLICE_TYPE_B )
             {
                 num_ref_idx_l1_active_minus1 = nalu_get_exp_golomb_ue( bits );
-                IF_INVALID_VALUE( num_ref_idx_l1_active_minus1 > 31 )
-                    return -1;
+                if( num_ref_idx_l1_active_minus1 > 31 )
+                    return LSMASH_ERR_INVALID_DATA;
             }
         }
     }
-    if( nalu_header->nal_unit_type == H264_NALU_TYPE_SLICE_EXT
-     || nalu_header->nal_unit_type == H264_NALU_TYPE_SLICE_EXT_DVC )
+    if( nuh->nal_unit_type == H264_NALU_TYPE_SLICE_EXT
+     || nuh->nal_unit_type == H264_NALU_TYPE_SLICE_EXT_DVC )
     {
-        return -1;      /* No support of MVC yet */
+        return LSMASH_ERR_PATCH_WELCOME;    /* No support of MVC yet */
 #if 0
         /* ref_pic_list_mvc_modification() */
         if( slice_type == H264_SLICE_TYPE_P || slice_type == H264_SLICE_TYPE_B || slice_type == H264_SLICE_TYPE_SP )
@@ -1131,7 +1193,7 @@ static int h264_parse_slice_header
                     }
             }
     }
-    if( nalu_header->nal_ref_idc )
+    if( nuh->nal_ref_idc )
     {
         /* dec_ref_pic_marking() */
         if( slice->IdrPicFlag )
@@ -1161,7 +1223,7 @@ static int h264_parse_slice_header
     }
     /* We needn't read more if not slice data partition A.
      * Skip slice_data() and rbsp_slice_trailing_bits(). */
-    if( nalu_header->nal_unit_type == H264_NALU_TYPE_SLICE_DP_A )
+    if( nuh->nal_unit_type == H264_NALU_TYPE_SLICE_DP_A )
     {
         if( pps->entropy_coding_mode_flag && slice_type != H264_SLICE_TYPE_I && slice_type != H264_SLICE_TYPE_SI )
             nalu_get_exp_golomb_ue( bits );     /* cabac_init_idc */
@@ -1176,30 +1238,30 @@ static int h264_parse_slice_header
          && nalu_get_exp_golomb_ue( bits ) != 1 /* disable_deblocking_filter_idc */ )
         {
             int64_t slice_alpha_c0_offset_div2 = nalu_get_exp_golomb_se( bits );
-            IF_INVALID_VALUE( slice_alpha_c0_offset_div2 < -6 || slice_alpha_c0_offset_div2 > 6 )
-                return -1;
+            if( slice_alpha_c0_offset_div2 < -6 || slice_alpha_c0_offset_div2 > 6 )
+                return LSMASH_ERR_INVALID_DATA;
             int64_t slice_beta_offset_div2     = nalu_get_exp_golomb_se( bits );
-            IF_INVALID_VALUE( slice_beta_offset_div2     < -6 || slice_beta_offset_div2     > 6 )
-                return -1;
+            if( slice_beta_offset_div2     < -6 || slice_beta_offset_div2     > 6 )
+                return LSMASH_ERR_INVALID_DATA;
         }
         if( pps->num_slice_groups_minus1
          && (pps->slice_group_map_type == 3 || pps->slice_group_map_type == 4 || pps->slice_group_map_type == 5) )
         {
             uint64_t temp = ((uint64_t)sps->PicSizeInMapUnits - 1) / pps->SliceGroupChangeRate + 1;
             uint64_t slice_group_change_cycle = lsmash_bits_get( bits, lsmash_ceil_log2( temp + 1 ) );
-            IF_INVALID_VALUE( slice_group_change_cycle > temp )
-                return -1;
+            if( slice_group_change_cycle > temp )
+                return LSMASH_ERR_INVALID_DATA;
         }
         /* end of slice_header() */
         slice->slice_id = nalu_get_exp_golomb_ue( bits );
         h264_slice_info_t *slice_part = h264_get_slice_info( info->slice_list, slice->slice_id );
         if( !slice_part )
-            return -1;
+            return LSMASH_ERR_NAMELESS;
         *slice_part = *slice;
     }
     lsmash_bits_empty( bits );
     if( bits->bs->error )
-        return -1;
+        return LSMASH_ERR_NAMELESS;
     info->sps = *sps;
     info->pps = *pps;
     return 0;
@@ -1208,46 +1270,47 @@ static int h264_parse_slice_header
 int h264_parse_slice
 (
     h264_info_t        *info,
-    h264_nalu_header_t *nalu_header,
+    h264_nalu_header_t *nuh,
     uint8_t            *rbsp_buffer,
     uint8_t            *ebsp,
     uint64_t            ebsp_size
 )
 {
     lsmash_bits_t *bits = info->bits;
-    uint64_t size = nalu_header->nal_unit_type == H264_NALU_TYPE_SLICE_IDR || nalu_header->nal_ref_idc == 0
+    uint64_t size = nuh->nal_unit_type == H264_NALU_TYPE_SLICE_IDR || nuh->nal_ref_idc == 0
                   ? LSMASH_MIN( ebsp_size, 100 )
                   : LSMASH_MIN( ebsp_size, 1000 );
-    if( nalu_import_rbsp_from_ebsp( bits, rbsp_buffer, ebsp, size ) )
-        return -1;
-    if( nalu_header->nal_unit_type != H264_NALU_TYPE_SLICE_DP_B
-     && nalu_header->nal_unit_type != H264_NALU_TYPE_SLICE_DP_C )
-        return h264_parse_slice_header( info, nalu_header );
+    int err = nalu_import_rbsp_from_ebsp( bits, rbsp_buffer, ebsp, size );
+    if( err < 0 )
+        return err;
+    if( nuh->nal_unit_type != H264_NALU_TYPE_SLICE_DP_B
+     && nuh->nal_unit_type != H264_NALU_TYPE_SLICE_DP_C )
+        return h264_parse_slice_header( info, nuh );
     /* slice_data_partition_b_layer_rbsp() or slice_data_partition_c_layer_rbsp() */
     uint64_t slice_id = nalu_get_exp_golomb_ue( bits );
     h264_slice_info_t *slice = h264_get_slice_info( info->slice_list, slice_id );
     if( !slice )
-        return -1;
+        return LSMASH_ERR_NAMELESS;
     h264_pps_t *pps = h264_get_pps( info->pps_list, slice->pic_parameter_set_id );
     if( !pps )
-        return -1;
+        return LSMASH_ERR_NAMELESS;
     h264_sps_t *sps = h264_get_sps( info->sps_list, pps->seq_parameter_set_id );
     if( !sps )
-        return -1;
+        return LSMASH_ERR_NAMELESS;
     slice->seq_parameter_set_id = pps->seq_parameter_set_id;
     if( sps->separate_colour_plane_flag )
         lsmash_bits_get( bits, 2 );     /* colour_plane_id */
     if( pps->redundant_pic_cnt_present_flag )
     {
         uint64_t redundant_pic_cnt = nalu_get_exp_golomb_ue( bits );
-        IF_INVALID_VALUE( redundant_pic_cnt > 127 )
-            return -1;
+        if( redundant_pic_cnt > 127 )
+            return LSMASH_ERR_INVALID_DATA;
         slice->has_redundancy = !!redundant_pic_cnt;
     }
     /* Skip slice_data() and rbsp_slice_trailing_bits(). */
     lsmash_bits_empty( bits );
     if( bits->bs->error )
-        return -1;
+        return LSMASH_ERR_NAMELESS;
     info->sps = *sps;
     info->pps = *pps;
     return 0;
@@ -1270,14 +1333,15 @@ static int h264_get_sps_id
     bs.buffer.data  = buffer;
     bs.buffer.alloc = 6;
     lsmash_bits_init( &bits, &bs );
-    if( nalu_import_rbsp_from_ebsp( &bits, rbsp_buffer, ps_ebsp, LSMASH_MIN( ps_ebsp_length, 6 ) ) )
-        return -1;
+    int err = nalu_import_rbsp_from_ebsp( &bits, rbsp_buffer, ps_ebsp, LSMASH_MIN( ps_ebsp_length, 6 ) );
+    if( err < 0 )
+        return err;
     lsmash_bits_get( &bits, 24 );   /* profile_idc, constraint_set_flags and level_idc */
     uint64_t sec_parameter_set_id = nalu_get_exp_golomb_ue( &bits );
-    IF_INVALID_VALUE( sec_parameter_set_id > 31 )
-        return -1;
+    if( sec_parameter_set_id > 31 )
+        return LSMASH_ERR_INVALID_DATA;
     *ps_id = sec_parameter_set_id;
-    return bs.error ? -1 : 0;
+    return bs.error ? LSMASH_ERR_NAMELESS : 0;
 }
 
 static int h264_get_pps_id
@@ -1297,13 +1361,14 @@ static int h264_get_pps_id
     bs.buffer.data  = buffer;
     bs.buffer.alloc = 4;
     lsmash_bits_init( &bits, &bs );
-    if( nalu_import_rbsp_from_ebsp( &bits, rbsp_buffer, ps_ebsp, LSMASH_MIN( ps_ebsp_length, 4 ) ) )
-        return -1;
+    int err = nalu_import_rbsp_from_ebsp( &bits, rbsp_buffer, ps_ebsp, LSMASH_MIN( ps_ebsp_length, 4 ) );
+    if( err < 0 )
+        return err;
     uint64_t pic_parameter_set_id = nalu_get_exp_golomb_ue( &bits );
-    IF_INVALID_VALUE( pic_parameter_set_id > 255 )
-        return -1;
+    if( pic_parameter_set_id > 255 )
+        return LSMASH_ERR_INVALID_DATA;
     *ps_id = pic_parameter_set_id;
-    return bs.error ? -1 : 0;
+    return bs.error ? LSMASH_ERR_NAMELESS : 0;
 }
 
 static inline int h264_get_ps_id
@@ -1318,7 +1383,7 @@ static inline int h264_get_ps_id
         = ps_type == H264_PARAMETER_SET_TYPE_SPS ? h264_get_sps_id
         : ps_type == H264_PARAMETER_SET_TYPE_PPS ? h264_get_pps_id
         :                                          NULL;
-    return get_ps_id ? get_ps_id( ps_ebsp, ps_ebsp_length, ps_id ) : -1;
+    return get_ps_id ? get_ps_id( ps_ebsp, ps_ebsp_length, ps_id ) : LSMASH_ERR_INVALID_DATA;
 }
 
 static inline lsmash_entry_list_t *h264_get_parameter_set_list
@@ -1357,7 +1422,7 @@ static lsmash_entry_t *h264_get_ps_entry_from_param
         if( !ps )
             return NULL;
         uint8_t param_ps_id;
-        if( get_ps_id( ps->nalUnit + 1, ps->nalUnitLength - 1, &param_ps_id ) )
+        if( get_ps_id( ps->nalUnit + 1, ps->nalUnitLength - 1, &param_ps_id ) < 0 )
             return NULL;
         if( ps_id == param_ps_id )
             return entry;
@@ -1456,9 +1521,9 @@ void h264_update_picture_info_for_slice
 )
 {
     assert( info );
-    picture->has_mmco5                 |= slice->has_mmco5;
-    picture->has_redundancy            |= slice->has_redundancy;
-    picture->incomplete_au_has_primary |= !slice->has_redundancy;
+    picture->has_mmco5      |= slice->has_mmco5;
+    picture->has_redundancy |= slice->has_redundancy;
+    picture->has_primary    |= !slice->has_redundancy;
     h264_update_picture_type( picture, slice );
     /* Mark 'used' on active parameter sets. */
     uint8_t ps_id[2] = { slice->seq_parameter_set_id, slice->pic_parameter_set_id };
@@ -1561,26 +1626,20 @@ int h264_find_au_delimit_by_nalu_type
 
 int h264_supplement_buffer
 (
-    h264_stream_buffer_t *hb,
-    h264_picture_info_t  *picture,
+    h264_stream_buffer_t *sb,
+    h264_access_unit_t   *au,
     uint32_t              size
 )
 {
-    lsmash_stream_buffers_t *sb = hb->sb;
-    uint32_t buffer_pos_offset   = sb->pos - sb->start;
-    uint32_t buffer_valid_length = sb->end - sb->start;
     lsmash_multiple_buffers_t *bank = lsmash_resize_multiple_buffers( sb->bank, size );
     if( !bank )
-        return -1;
-    sb->bank  = bank;
-    sb->start = lsmash_withdraw_buffer( bank, 1 );
-    hb->rbsp  = lsmash_withdraw_buffer( bank, 2 );
-    sb->pos = sb->start + buffer_pos_offset;
-    sb->end = sb->start + buffer_valid_length;
-    if( picture && bank->number_of_buffers == 4 )
+        return LSMASH_ERR_MEMORY_ALLOC;
+    sb->bank = bank;
+    sb->rbsp = lsmash_withdraw_buffer( bank, 1 );
+    if( au && bank->number_of_buffers == 3 )
     {
-        picture->au            = lsmash_withdraw_buffer( bank, 3 );
-        picture->incomplete_au = lsmash_withdraw_buffer( bank, 4 );
+        au->data            = lsmash_withdraw_buffer( bank, 2 );
+        au->incomplete_data = lsmash_withdraw_buffer( bank, 3 );
     }
     return 0;
 }
@@ -1690,20 +1749,20 @@ static inline int h264_validate_ps_type
 )
 {
     if( !ps_data || ps_length < 2 )
-        return -1;
+        return LSMASH_ERR_INVALID_DATA;
     if( ps_type != H264_PARAMETER_SET_TYPE_SPS
      && ps_type != H264_PARAMETER_SET_TYPE_PPS
      && ps_type != H264_PARAMETER_SET_TYPE_SPSEXT )
-        return -1;
+        return LSMASH_ERR_INVALID_DATA;
     uint8_t nalu_type = *((uint8_t *)ps_data) & 0x1f;
     if( nalu_type != H264_NALU_TYPE_SPS
      && nalu_type != H264_NALU_TYPE_PPS
      && nalu_type != H264_NALU_TYPE_SPS_EXT )
-        return -1;
+        return LSMASH_ERR_INVALID_DATA;
     if( (ps_type == H264_PARAMETER_SET_TYPE_SPS    && nalu_type != H264_NALU_TYPE_SPS)
      || (ps_type == H264_PARAMETER_SET_TYPE_PPS    && nalu_type != H264_NALU_TYPE_PPS)
      || (ps_type == H264_PARAMETER_SET_TYPE_SPSEXT && nalu_type != H264_NALU_TYPE_SPS_EXT) )
-        return -1;
+        return LSMASH_ERR_INVALID_DATA;
     return 0;
 }
 
@@ -1711,13 +1770,14 @@ lsmash_dcr_nalu_appendable lsmash_check_h264_parameter_set_appendable
 (
     lsmash_h264_specific_parameters_t *param,
     lsmash_h264_parameter_set_type     ps_type,
-    void                              *ps_data,
+    void                              *_ps_data,
     uint32_t                           ps_length
 )
 {
+    uint8_t *ps_data = _ps_data;
     if( !param )
         return DCR_NALU_APPEND_ERROR;
-    if( h264_validate_ps_type( ps_type, ps_data, ps_length ) )
+    if( h264_validate_ps_type( ps_type, ps_data, ps_length ) < 0 )
         return DCR_NALU_APPEND_ERROR;
     if( ps_type == H264_PARAMETER_SET_TYPE_SPSEXT
      && !H264_REQUIRES_AVCC_EXTENSION( param->AVCProfileIndication ) )
@@ -1733,7 +1793,7 @@ lsmash_dcr_nalu_appendable lsmash_check_h264_parameter_set_appendable
         default : return DCR_NALU_APPEND_ERROR;         /* An error occured. */
     }
     uint32_t max_ps_length;
-    if( nalu_get_max_ps_length( ps_list, &max_ps_length ) )
+    if( nalu_get_max_ps_length( ps_list, &max_ps_length ) < 0 )
         return DCR_NALU_APPEND_ERROR;
     max_ps_length = LSMASH_MAX( max_ps_length, ps_length );
     uint32_t ps_count;
@@ -1757,7 +1817,7 @@ lsmash_dcr_nalu_appendable lsmash_check_h264_parameter_set_appendable
     {
         /* PPS */
         uint8_t pps_id;
-        if( h264_get_pps_id( ps_data + 1, ps_length - 1, &pps_id ) )
+        if( h264_get_pps_id( ps_data + 1, ps_length - 1, &pps_id ) < 0 )
             return DCR_NALU_APPEND_ERROR;
         for( lsmash_entry_t *entry = ps_list->head; entry; entry = entry->next )
         {
@@ -1767,7 +1827,7 @@ lsmash_dcr_nalu_appendable lsmash_check_h264_parameter_set_appendable
             if( ps->unused )
                 continue;
             uint8_t param_pps_id;
-            if( h264_get_pps_id( ps->nalUnit + 1, ps->nalUnitLength - 1, &param_pps_id ) )
+            if( h264_get_pps_id( ps->nalUnit + 1, ps->nalUnitLength - 1, &param_pps_id ) < 0 )
                 return DCR_NALU_APPEND_ERROR;
             if( pps_id == param_pps_id )
                 /* PPS that has the same pic_parameter_set_id already exists with different form. */
@@ -1777,7 +1837,7 @@ lsmash_dcr_nalu_appendable lsmash_check_h264_parameter_set_appendable
     }
     /* SPS */
     h264_sps_t sps;
-    if( h264_parse_sps_minimally( &bits, &sps, rbsp_buffer, ps_data + 1, ps_length - 1 ) )
+    if( h264_parse_sps_minimally( &bits, &sps, rbsp_buffer, ps_data + 1, ps_length - 1 ) < 0 )
         return DCR_NALU_APPEND_ERROR;
     lsmash_bits_empty( &bits );
     /* FIXME; If the sequence parameter sets are marked with different profiles,
@@ -1808,7 +1868,7 @@ lsmash_dcr_nalu_appendable lsmash_check_h264_parameter_set_appendable
         if( ps->unused )
             continue;
         uint8_t param_sps_id;
-        if( h264_get_sps_id( ps->nalUnit + 1, ps->nalUnitLength - 1, &param_sps_id ) )
+        if( h264_get_sps_id( ps->nalUnit + 1, ps->nalUnitLength - 1, &param_sps_id ) < 0 )
             return DCR_NALU_APPEND_ERROR;
         if( sps_id == param_sps_id )
             /* SPS that has the same seq_parameter_set_id already exists with different form. */
@@ -1819,7 +1879,7 @@ lsmash_dcr_nalu_appendable lsmash_check_h264_parameter_set_appendable
             h264_sps_t first_sps;
             if( h264_parse_sps_minimally( &bits, &first_sps, rbsp_buffer,
                                      ps->nalUnit       + 1,
-                                     ps->nalUnitLength - 1 ) )
+                                     ps->nalUnitLength - 1 ) < 0 )
                 return DCR_NALU_APPEND_ERROR;
             if( sps.cropped_width  != first_sps.cropped_width
              || sps.cropped_height != first_sps.cropped_height )
@@ -1889,48 +1949,50 @@ int lsmash_append_h264_parameter_set
 (
     lsmash_h264_specific_parameters_t *param,
     lsmash_h264_parameter_set_type     ps_type,
-    void                              *ps_data,
+    void                              *_ps_data,
     uint32_t                           ps_length
 )
 {
+    uint8_t *ps_data = _ps_data;
     if( !param || !ps_data || ps_length < 2 )
-        return -1;
+        return LSMASH_ERR_FUNCTION_PARAM;
+    if( ps_type != H264_PARAMETER_SET_TYPE_SPS
+     && ps_type != H264_PARAMETER_SET_TYPE_PPS
+     && ps_type != H264_PARAMETER_SET_TYPE_SPSEXT )
+        return LSMASH_ERR_FUNCTION_PARAM;
     if( !param->parameter_sets )
     {
         param->parameter_sets = lsmash_malloc_zero( sizeof(lsmash_h264_parameter_sets_t) );
         if( !param->parameter_sets )
-            return -1;
+            return LSMASH_ERR_MEMORY_ALLOC;
     }
     lsmash_entry_list_t *ps_list = h264_get_parameter_set_list( param, ps_type );
     if( !ps_list )
-        return -1;
-    if( ps_type != H264_PARAMETER_SET_TYPE_SPS
-     && ps_type != H264_PARAMETER_SET_TYPE_PPS
-     && ps_type != H264_PARAMETER_SET_TYPE_SPSEXT )
-        return -1;
+        return LSMASH_ERR_NAMELESS;
     if( ps_type == H264_PARAMETER_SET_TYPE_SPSEXT )
     {
         if( !H264_REQUIRES_AVCC_EXTENSION( param->AVCProfileIndication ) )
             return 0;
         isom_dcr_ps_entry_t *ps = isom_create_ps_entry( ps_data, ps_length );
         if( !ps )
-            return -1;
-        if( lsmash_add_entry( ps_list, ps ) )
+            return LSMASH_ERR_MEMORY_ALLOC;
+        if( lsmash_add_entry( ps_list, ps ) < 0 )
         {
             isom_remove_dcr_ps( ps );
-            return -1;
+            return LSMASH_ERR_MEMORY_ALLOC;
         }
         return 0;
     }
     /* Check if the same parameter set identifier already exists. */
     uint8_t ps_id;
-    if( h264_get_ps_id( ps_data + 1, ps_length - 1, &ps_id, ps_type ) )
-        return -1;
+    int err = h264_get_ps_id( ps_data + 1, ps_length - 1, &ps_id, ps_type );
+    if( err < 0 )
+        return err;
     lsmash_entry_t *entry = h264_get_ps_entry_from_param( param, ps_type, ps_id );
     isom_dcr_ps_entry_t *ps = entry ? (isom_dcr_ps_entry_t *)entry->data : NULL;
     if( ps && !ps->unused )
         /* The same parameter set identifier already exists. */
-        return -1;
+        return LSMASH_ERR_FUNCTION_PARAM;
     int invoke_reorder;
     if( ps )
     {
@@ -1950,11 +2012,11 @@ int lsmash_append_h264_parameter_set
         /* Create a new parameter set and append it into the list. */
         ps = isom_create_ps_entry( ps_data, ps_length );
         if( !ps )
-            return -1;
-        if( lsmash_add_entry( ps_list, ps ) )
+            return LSMASH_ERR_MEMORY_ALLOC;
+        if( lsmash_add_entry( ps_list, ps ) < 0 )
         {
             isom_remove_dcr_ps( ps );
-            return -1;
+            return LSMASH_ERR_MEMORY_ALLOC;
         }
         invoke_reorder = 1;
     }
@@ -1969,10 +2031,10 @@ int lsmash_append_h264_parameter_set
         bs.buffer.alloc = ps_length;
         lsmash_bits_init( &bits, &bs );
         h264_sps_t sps;
-        if( h264_parse_sps_minimally( &bits, &sps, rbsp_buffer, ps_data + 1, ps_length - 1 ) )
+        if( (err = h264_parse_sps_minimally( &bits, &sps, rbsp_buffer, ps_data + 1, ps_length - 1 )) < 0 )
         {
             lsmash_remove_entry_tail( ps_list, isom_remove_dcr_ps );
-            return -1;
+            return err;
         }
         if( ps_list->entry_count == 1 )
             param->profile_compatibility = 0xff;
@@ -1993,16 +2055,17 @@ int h264_try_to_append_parameter_set
 (
     h264_info_t                   *info,
     lsmash_h264_parameter_set_type ps_type,
-    void                          *ps_data,
+    void                          *_ps_data,
     uint32_t                       ps_length
 )
 {
+    uint8_t *ps_data = _ps_data;
     lsmash_dcr_nalu_appendable ret = lsmash_check_h264_parameter_set_appendable( &info->avcC_param, ps_type, ps_data, ps_length );
     lsmash_h264_specific_parameters_t *param;
     switch( ret )
     {
         case DCR_NALU_APPEND_ERROR                     :    /* Error */
-            return -1;
+            return LSMASH_ERR_NAMELESS;
         case DCR_NALU_APPEND_NEW_DCR_REQUIRED          :    /* Mulitiple sample description is needed. */
         case DCR_NALU_APPEND_NEW_SAMPLE_ENTRY_REQUIRED :    /* Mulitiple sample description is needed. */
             param = &info->avcC_param_next;
@@ -2014,15 +2077,16 @@ int h264_try_to_append_parameter_set
         default :   /* No need to append */
             return 0;
     }
+    int err;
     switch( ps_type )
     {
         case H264_PARAMETER_SET_TYPE_SPS :
-            if( h264_parse_sps( info, info->buffer.rbsp, ps_data + 1, ps_length - 1 ) < 0 )
-                return -1;
+            if( (err = h264_parse_sps( info, info->buffer.rbsp, ps_data + 1, ps_length - 1 )) < 0 )
+                return err;
             break;
         case H264_PARAMETER_SET_TYPE_PPS :
-            if( h264_parse_pps( info, info->buffer.rbsp, ps_data + 1, ps_length - 1 ) < 0 )
-                return -1;
+            if( (err = h264_parse_pps( info, info->buffer.rbsp, ps_data + 1, ps_length - 1 )) < 0 )
+                return err;
             break;
         default :
             break;
@@ -2045,9 +2109,10 @@ static inline int h264_move_dcr_nalu_entry
         isom_dcr_ps_entry_t *src_ps = (isom_dcr_ps_entry_t *)src_entry->data;
         if( !src_ps )
             continue;
+        int err;
         uint8_t src_ps_id;
-        if( h264_get_ps_id( src_ps->nalUnit + 1, src_ps->nalUnitLength - 1, &src_ps_id, ps_type ) < 0 )
-            return -1;
+        if( (err = h264_get_ps_id( src_ps->nalUnit + 1, src_ps->nalUnitLength - 1, &src_ps_id, ps_type )) < 0 )
+            return err;
         lsmash_entry_t *dst_entry;
         for( dst_entry = dst_ps_list->head; dst_entry; dst_entry = dst_entry->next )
         {
@@ -2055,8 +2120,8 @@ static inline int h264_move_dcr_nalu_entry
             if( !dst_ps )
                 continue;
             uint8_t dst_ps_id;
-            if( h264_get_ps_id( dst_ps->nalUnit + 1, dst_ps->nalUnitLength - 1, &dst_ps_id, ps_type ) < 0 )
-                return -1;
+            if( (err = h264_get_ps_id( dst_ps->nalUnit + 1, dst_ps->nalUnitLength - 1, &dst_ps_id, ps_type )) < 0 )
+                return err;
             if( dst_ps_id == src_ps_id )
             {
                 /* Replace the old parameter set with the new one. */
@@ -2070,8 +2135,8 @@ static inline int h264_move_dcr_nalu_entry
         if( !dst_entry )
         {
             /* Move the parameter set. */
-            if( lsmash_add_entry( dst_ps_list, src_ps ) )
-                return -1;
+            if( lsmash_add_entry( dst_ps_list, src_ps ) < 0 )
+                return LSMASH_ERR_MEMORY_ALLOC;
             src_entry->data = NULL;
         }
     }
@@ -2100,9 +2165,10 @@ int h264_move_pending_avcC_param
         }
     }
     /* Move the new parameter sets. */
-    if( h264_move_dcr_nalu_entry( &info->avcC_param, &info->avcC_param_next, H264_PARAMETER_SET_TYPE_SPS ) < 0
-     || h264_move_dcr_nalu_entry( &info->avcC_param, &info->avcC_param_next, H264_PARAMETER_SET_TYPE_PPS ) < 0 )
-        return -1;
+    int err;
+    if( (err = h264_move_dcr_nalu_entry( &info->avcC_param, &info->avcC_param_next, H264_PARAMETER_SET_TYPE_SPS )) < 0
+     || (err = h264_move_dcr_nalu_entry( &info->avcC_param, &info->avcC_param_next, H264_PARAMETER_SET_TYPE_PPS )) < 0 )
+        return err;
     /* Move to the pending. */
     lsmash_h264_parameter_sets_t *parameter_sets = info->avcC_param.parameter_sets; /* Back up parameter sets. */
     info->avcC_param                = info->avcC_param_next;
@@ -2129,18 +2195,19 @@ static int h264_parse_succeeded
         ret = 0;
     }
     else
-        ret = -1;
+        ret = LSMASH_ERR_INVALID_DATA;
     h264_cleanup_parser( info );
     return ret;
 }
 
 static inline int h264_parse_failed
 (
-    h264_info_t *info
+    h264_info_t *info,
+    int          ret
 )
 {
     h264_cleanup_parser( info );
-    return -1;
+    return ret;
 }
 
 int lsmash_setup_h264_specific_parameters_from_access_unit
@@ -2151,150 +2218,101 @@ int lsmash_setup_h264_specific_parameters_from_access_unit
 )
 {
     if( !param || !data || data_length == 0 )
-        return -1;
-    h264_info_t  handler = { { 0 } };
-    h264_info_t *info    = &handler;
-    lsmash_stream_buffers_t _sb = { LSMASH_STREAM_BUFFERS_TYPE_NONE };
-    lsmash_stream_buffers_t *sb = &_sb;
-    lsmash_data_string_handler_t stream = { 0 };
-    stream.data             = data;
-    stream.data_length      = data_length;
-    stream.remainder_length = data_length;
-    if( h264_setup_parser( info, sb, 1, LSMASH_STREAM_BUFFERS_TYPE_DATA_STRING, &stream ) )
-        return h264_parse_failed( info );
-    h264_stream_buffer_t *hb    = &info->buffer;
+        return LSMASH_ERR_FUNCTION_PARAM;
+    h264_info_t *info = &(h264_info_t){ { 0 } };
+    lsmash_bs_t *bs   = &(lsmash_bs_t){ 0 };
+    int err = lsmash_bs_set_empty_stream( bs, data, data_length );
+    if( err < 0 )
+        return err;
+    uint64_t sc_head_pos = nalu_find_first_start_code( bs );
+    if( sc_head_pos == NALU_NO_START_CODE_FOUND )
+        return LSMASH_ERR_INVALID_DATA;
+    if( (err = h264_setup_parser( info, 1 )) < 0 )
+        return h264_parse_failed( info, err );
+    h264_stream_buffer_t *sb    = &info->buffer;
     h264_slice_info_t    *slice = &info->slice;
-    h264_nalu_header_t nalu_header = { 0 };
-    uint64_t consecutive_zero_byte_count = 0;
-    uint64_t ebsp_length = 0;
-    int      no_more_buf = 0;
-    int      complete_au = 0;
     while( 1 )
     {
-        lsmash_stream_buffers_update( sb, 2 );
-        no_more_buf = (lsmash_stream_buffers_get_remainder( sb ) == 0);
-        int no_more = lsmash_stream_buffers_is_eos( sb ) && no_more_buf;
-        if( !nalu_check_next_short_start_code( sb->pos, sb->end ) && !no_more )
-        {
-            if( lsmash_stream_buffers_get_byte( sb ) )
-                consecutive_zero_byte_count = 0;
-            else
-                ++consecutive_zero_byte_count;
-            ++ebsp_length;
-            continue;
-        }
-        if( no_more && ebsp_length == 0 )
+        h264_nalu_header_t nuh;
+        uint64_t start_code_length;
+        uint64_t trailing_zero_bytes;
+        uint64_t nalu_length = h264_find_next_start_code( bs, &nuh, &start_code_length, &trailing_zero_bytes );
+        if( start_code_length <= NALU_SHORT_START_CODE_LENGTH && lsmash_bs_is_end( bs, nalu_length ) )
             /* For the last NALU. This NALU already has been parsed. */
             return h264_parse_succeeded( info, param );
-        uint64_t next_nalu_head_pos = info->ebsp_head_pos + ebsp_length + !no_more * H264_SHORT_START_CODE_LENGTH;
-        /* Memorize position of short start code of the next NALU in buffer.
-         * This is used when backward reading of stream doesn't occur. */
-        uint8_t *next_short_start_code_pos = lsmash_stream_buffers_get_pos( sb );
-        uint8_t nalu_type = nalu_header.nal_unit_type;
-        int read_back = 0;
+        uint8_t  nalu_type        = nuh.nal_unit_type;
+        uint64_t next_sc_head_pos = sc_head_pos
+                                  + start_code_length
+                                  + nalu_length
+                                  + trailing_zero_bytes;
         if( nalu_type == H264_NALU_TYPE_FD )
         {
             /* We don't support streams with both filler and HRD yet.
              * Otherwise, just skip filler because elemental streams defined in 14496-15 are forbidden to use filler. */
             if( info->sps.vui.hrd.present )
-                return h264_parse_failed( info );
+                return h264_parse_failed( info, LSMASH_ERR_PATCH_WELCOME );
         }
         else if( (nalu_type >= H264_NALU_TYPE_SLICE_N_IDR && nalu_type <= H264_NALU_TYPE_SPS_EXT)
               || nalu_type == H264_NALU_TYPE_SLICE_AUX )
         {
+            /* Increase the buffer if needed. */
+            uint64_t possible_au_length = NALU_DEFAULT_NALU_LENGTH_SIZE + nalu_length;
+            if( sb->bank->buffer_size < possible_au_length
+             && (err = h264_supplement_buffer( sb, NULL, 2 * possible_au_length )) < 0 )
+                return h264_parse_failed( info, err );
             /* Get the EBSP of the current NALU here.
              * AVC elemental stream defined in 14496-15 can recognize from 0 to 13, and 19 of nal_unit_type.
              * We don't support SVC and MVC elemental stream defined in 14496-15 yet. */
-            ebsp_length -= consecutive_zero_byte_count;     /* Any EBSP doesn't have zero bytes at the end. */
-            uint64_t nalu_length = nalu_header.length + ebsp_length;
-            if( lsmash_stream_buffers_get_buffer_size( sb ) < (H264_DEFAULT_NALU_LENGTH_SIZE + nalu_length) )
-            {
-                if( h264_supplement_buffer( hb, NULL, 2 * (H264_DEFAULT_NALU_LENGTH_SIZE + nalu_length) ) )
-                    return h264_parse_failed( info );
-                next_short_start_code_pos = lsmash_stream_buffers_get_pos( sb );
-            }
-            /* Move to the first byte of the current NALU. */
-            read_back = (lsmash_stream_buffers_get_offset( sb ) < (nalu_length + consecutive_zero_byte_count));
-            if( read_back )
-            {
-                lsmash_stream_buffers_seek( sb, 0, SEEK_SET );
-                lsmash_data_string_copy( sb, &stream, nalu_length, info->ebsp_head_pos - nalu_header.length );
-            }
-            else
-                lsmash_stream_buffers_seek( sb, -(nalu_length + consecutive_zero_byte_count), SEEK_CUR );
+            uint8_t *nalu = lsmash_bs_get_buffer_data( bs ) + start_code_length;
             if( nalu_type >= H264_NALU_TYPE_SLICE_N_IDR && nalu_type <= H264_NALU_TYPE_SLICE_IDR )
             {
                 /* VCL NALU (slice) */
                 h264_slice_info_t prev_slice = *slice;
-                if( h264_parse_slice( info, &nalu_header, hb->rbsp,
-                                      lsmash_stream_buffers_get_pos( sb ) + nalu_header.length, ebsp_length ) )
-                    return h264_parse_failed( info );
+                if( (err = h264_parse_slice( info, &nuh, sb->rbsp, nalu + nuh.length, nalu_length - nuh.length )) < 0 )
+                    return h264_parse_failed( info, err );
                 if( prev_slice.present )
                 {
                     /* Check whether the AU that contains the previous VCL NALU completed or not. */
                     if( h264_find_au_delimit_by_slice_info( slice, &prev_slice ) )
                         /* The current NALU is the first VCL NALU of the primary coded picture of an new AU.
                          * Therefore, the previous slice belongs to that new AU. */
-                        complete_au = 1;
+                        return h264_parse_succeeded( info, param );
                 }
                 slice->present = 1;
             }
             else
             {
                 if( h264_find_au_delimit_by_nalu_type( nalu_type, info->prev_nalu_type ) )
-                {
                     /* The last slice belongs to the AU you want at this time. */
-                    slice->present = 0;
-                    complete_au = 1;
-                }
-                else if( no_more )
-                    complete_au = 1;
+                    return h264_parse_succeeded( info, param );
                 switch( nalu_type )
                 {
                     case H264_NALU_TYPE_SPS :
-                        if( h264_try_to_append_parameter_set( info, H264_PARAMETER_SET_TYPE_SPS,
-                                                              lsmash_stream_buffers_get_pos( sb ), nalu_length ) )
-                            return h264_parse_failed( info );
+                        if( (err = h264_try_to_append_parameter_set( info, H264_PARAMETER_SET_TYPE_SPS, nalu, nalu_length )) < 0 )
+                            return h264_parse_failed( info, err );
                         break;
                     case H264_NALU_TYPE_PPS :
-                        if( h264_try_to_append_parameter_set( info, H264_PARAMETER_SET_TYPE_PPS,
-                                                              lsmash_stream_buffers_get_pos( sb ), nalu_length ) )
-                            return h264_parse_failed( info );
+                        if( (err = h264_try_to_append_parameter_set( info, H264_PARAMETER_SET_TYPE_PPS, nalu, nalu_length )) < 0 )
+                            return h264_parse_failed( info, err );
                         break;
                     case H264_NALU_TYPE_SPS_EXT :
-                        if( h264_try_to_append_parameter_set( info, H264_PARAMETER_SET_TYPE_SPSEXT,
-                                                              lsmash_stream_buffers_get_pos( sb ), nalu_length ) )
-                            return h264_parse_failed( info );
+                        if( (err = h264_try_to_append_parameter_set( info, H264_PARAMETER_SET_TYPE_SPSEXT, nalu, nalu_length )) < 0 )
+                            return h264_parse_failed( info, err );
                         break;
                     default :
                         break;
                 }
             }
         }
-        /* Move to the first byte of the next NALU. */
-        if( read_back )
-        {
-            uint64_t consumed_data_length = LSMASH_MIN( stream.remainder_length, lsmash_stream_buffers_get_buffer_size( sb ) );
-            lsmash_stream_buffers_seek( sb, 0, SEEK_SET );
-            lsmash_data_string_copy( sb, &stream, consumed_data_length, next_nalu_head_pos );
-        }
-        else
-            lsmash_stream_buffers_set_pos( sb, next_short_start_code_pos + H264_SHORT_START_CODE_LENGTH );
+        /* Move to the first byte of the next start code. */
         info->prev_nalu_type = nalu_type;
-        lsmash_stream_buffers_update( sb, 0 );
-        no_more_buf = (lsmash_stream_buffers_get_remainder( sb ) == 0);
-        ebsp_length = 0;
-        no_more = lsmash_stream_buffers_is_eos( sb ) && no_more_buf;
-        if( !no_more && !complete_au )
-        {
-            /* Check the next NALU header. */
-            if( h264_check_nalu_header( &nalu_header, sb, !!consecutive_zero_byte_count ) )
-                return h264_parse_failed( info );
-            info->ebsp_head_pos = next_nalu_head_pos + nalu_header.length;
-        }
+        if( lsmash_bs_read_seek( bs, next_sc_head_pos, SEEK_SET ) != next_sc_head_pos )
+            return h264_parse_failed( info, LSMASH_ERR_NAMELESS );
+        /* Check if no more data to read from the stream. */
+        if( !lsmash_bs_is_end( bs, NALU_SHORT_START_CODE_LENGTH ) )
+            sc_head_pos = next_sc_head_pos;
         else
             return h264_parse_succeeded( info, param );
-        consecutive_zero_byte_count = 0;
     }
 }
 
@@ -2306,7 +2324,7 @@ int h264_construct_specific_parameters
 {
     assert( dst && dst->data.structured && src && src->data.unstructured );
     if( src->size < ISOM_BASEBOX_COMMON_SIZE + 7 )
-        return -1;
+        return LSMASH_ERR_INVALID_DATA;
     lsmash_h264_specific_parameters_t *param = (lsmash_h264_specific_parameters_t *)dst->data.structured;
     uint8_t *data = src->data.unstructured;
     uint64_t size = LSMASH_GET_BE32( data );
@@ -2317,31 +2335,36 @@ int h264_construct_specific_parameters
         data += 8;
     }
     if( size != src->size )
-        return -1;
+        return LSMASH_ERR_INVALID_DATA;
     if( !param->parameter_sets )
     {
         param->parameter_sets = lsmash_malloc_zero( sizeof(lsmash_h264_parameter_sets_t) );
         if( !param->parameter_sets )
-            return -1;
+            return LSMASH_ERR_MEMORY_ALLOC;
     }
     lsmash_bs_t *bs = lsmash_bs_create();
     if( !bs )
-        return -1;
-    if( lsmash_bs_import_data( bs, data, src->size - (data - src->data.unstructured) ) )
+        return LSMASH_ERR_MEMORY_ALLOC;
+    int err = lsmash_bs_import_data( bs, data, src->size - (data - src->data.unstructured) );
+    if( err < 0 )
         goto fail;
     if( lsmash_bs_get_byte( bs ) != 1 )
-        goto fail;  /* We don't support configurationVersion other than 1. */
+    {
+        /* We don't support configurationVersion other than 1. */
+        err = LSMASH_ERR_INVALID_DATA;
+        goto fail;
+    }
     param->AVCProfileIndication  = lsmash_bs_get_byte( bs );
     param->profile_compatibility = lsmash_bs_get_byte( bs );
     param->AVCLevelIndication    = lsmash_bs_get_byte( bs );
     param->lengthSizeMinusOne    = lsmash_bs_get_byte( bs ) & 0x03;
     uint8_t numOfSequenceParameterSets = lsmash_bs_get_byte( bs ) & 0x1F;
     if( numOfSequenceParameterSets
-     && nalu_get_dcr_ps( bs, param->parameter_sets->sps_list, numOfSequenceParameterSets ) )
+     && (err = nalu_get_dcr_ps( bs, param->parameter_sets->sps_list, numOfSequenceParameterSets )) < 0 )
         goto fail;
     uint8_t numOfPictureParameterSets = lsmash_bs_get_byte( bs );
     if( numOfPictureParameterSets
-     && nalu_get_dcr_ps( bs, param->parameter_sets->pps_list, numOfPictureParameterSets ) )
+     && (err = nalu_get_dcr_ps( bs, param->parameter_sets->pps_list, numOfPictureParameterSets )) < 0 )
         goto fail;
     if( H264_REQUIRES_AVCC_EXTENSION( param->AVCProfileIndication ) )
     {
@@ -2350,14 +2373,14 @@ int h264_construct_specific_parameters
         param->bit_depth_chroma_minus8 = lsmash_bs_get_byte( bs ) & 0x07;
         uint8_t numOfSequenceParameterSetExt = lsmash_bs_get_byte( bs );
         if( numOfSequenceParameterSetExt
-         && nalu_get_dcr_ps( bs, param->parameter_sets->spsext_list, numOfSequenceParameterSetExt ) )
+         && (err = nalu_get_dcr_ps( bs, param->parameter_sets->spsext_list, numOfSequenceParameterSetExt )) < 0 )
             goto fail;
     }
     lsmash_bs_cleanup( bs );
     return 0;
 fail:
     lsmash_bs_cleanup( bs );
-    return -1;
+    return err;
 }
 
 int h264_print_codec_specific
@@ -2377,11 +2400,12 @@ int h264_print_codec_specific
     uint32_t     offset = isom_skip_box_common( &data );
     lsmash_bs_t *bs     = lsmash_bs_create();
     if( !bs )
-        return -1;
-    if( lsmash_bs_import_data( bs, data, box->size - offset ) )
+        return LSMASH_ERR_MEMORY_ALLOC;
+    int err = lsmash_bs_import_data( bs, data, box->size - offset );
+    if( err < 0 )
     {
         lsmash_bs_cleanup( bs );
-        return -1;
+        return err;
     }
     lsmash_ifprintf( fp, indent, "configurationVersion = %"PRIu8"\n", lsmash_bs_get_byte( bs ) );
     uint8_t AVCProfileIndication = lsmash_bs_get_byte( bs );
@@ -2442,7 +2466,7 @@ int h264_copy_codec_specific
         return 0;
     dst_data->parameter_sets = lsmash_malloc_zero( sizeof(lsmash_h264_parameter_sets_t) );
     if( !dst_data->parameter_sets )
-        return -1;
+        return LSMASH_ERR_MEMORY_ALLOC;
     for( int i = 0; i < 3; i++ )
     {
         lsmash_entry_list_t *src_ps_list = h264_get_parameter_set_list( src_data, i );
@@ -2457,13 +2481,13 @@ int h264_copy_codec_specific
             if( !dst_ps )
             {
                 lsmash_destroy_h264_parameter_sets( dst_data );
-                return -1;
+                return LSMASH_ERR_MEMORY_ALLOC;
             }
-            if( lsmash_add_entry( dst_ps_list, dst_ps ) )
+            if( lsmash_add_entry( dst_ps_list, dst_ps ) < 0 )
             {
                 lsmash_destroy_h264_parameter_sets( dst_data );
                 isom_remove_dcr_ps( dst_ps );
-                return -1;
+                return LSMASH_ERR_MEMORY_ALLOC;
             }
         }
     }

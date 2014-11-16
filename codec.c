@@ -673,7 +673,7 @@ static void x264vfw_log_internal(CODEC *codec, const char *name, int i_level, co
         !MultiByteToWideChar(CP_ACP, 0, msg, -1, utf16_msg, sizeof(utf16_msg)))
     {
 #if X264VFW_DEBUG_OUTPUT
-        OutputDebugString("x264vfw [error]: log msg to unicode conversion failed");
+        OutputDebugString("x264vfw [error]: log msg to unicode conversion failed\n");
         OutputDebugString(msg);
 #endif
         return;

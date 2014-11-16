@@ -28,9 +28,39 @@
 #define LSMASH_MAX( a, b ) ((a) > (b) ? (a) : (b))
 #define LSMASH_MIN( a, b ) ((a) < (b) ? (a) : (b))
 
+/* default arguments
+ * Use only CALL_FUNC_DEFAULT_ARGS().
+ * The defined macros can't be passed a macro argument requiring the empty parameter list.
+ *
+ * The following is an example.
+ *   #define TEMPLATE_A( ... ) CALL_FUNC_DEFAULT_ARGS( TEMPLATE_A, __VA_ARGS__ )
+ *   #define TEMPLATE_A_1( _1 )     _1( 1 )
+ *   #define TEMPLATE_B( ... ) CALL_FUNC_DEFAULT_ARGS( TEMPLATE_B, __VA_ARGS__ )
+ *   #define TEMPLATE_B_2( _1, _2 ) ((_1) + (_2))
+ *   #define TEMPLATE_B_1( _1 )     TEMPLATE_B_2( _1, 0 )
+ *   #define TEMPLATE_B_0()
+ *   int main( void )
+ *   {
+ *      TEMPLATE_A( TEMPLATE_B_1 ); // OK
+ *      TEMPLATE_A( TEMPLATE_B );   // NG
+ *      TEMPLATE_B( 1, 2 );         // OK
+ *      TEMPLATE_B();               // NG
+ *      return 0;
+ *   }
+ * */
+#define NUM_ARGS( _0, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, ... ) _10
+#define COUNT_NUM_ARGS( ... ) NUM_ARGS( __VA_ARGS__, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0, 0 )
+#define GET_FUNC_BY_NUM_ARGS_EXN( func_name, N )   func_name ## _ ## N
+#define GET_FUNC_BY_NUM_ARGS_EX0( func_name, N )   GET_FUNC_BY_NUM_ARGS_EXN( func_name, N )
+#define GET_FUNC_BY_NUM_ARGS_EX1( func_name, ... ) GET_FUNC_BY_NUM_ARGS_EX0( func_name, COUNT_NUM_ARGS( __VA_ARGS__ ) )
+#define CALL_FUNC_DEFAULT_ARGS( func_name, ... )   GET_FUNC_BY_NUM_ARGS_EX1( func_name, __VA_ARGS__ ) ( __VA_ARGS__ )
+
+/*---- class ----*/
 typedef struct
 {
-    char *name;
+    char  *name;
+    size_t log_level_offset;    /* offset in the struct where 'log_level' is placed
+                                 * If set to 0, 'log_level' is unavailable and implicitly set to LSMASH_LOG_INFO. */
 } lsmash_class_t;
 
 /*---- type ----*/
@@ -41,6 +71,7 @@ double lsmash_int2float64( uint64_t value );
 /*---- others ----*/
 typedef enum
 {
+    LSMASH_LOG_QUIET = 0,
     LSMASH_LOG_ERROR,
     LSMASH_LOG_WARNING,
     LSMASH_LOG_INFO,
@@ -60,10 +91,15 @@ typedef struct
 
 void lsmash_log
 (
-    void            *hp,
+    const void      *class,
     lsmash_log_level level,
     const char      *message,
     ...
+);
+
+void lsmash_log_refresh_line
+(
+    const void *class
 );
 
 uint32_t lsmash_count_bits

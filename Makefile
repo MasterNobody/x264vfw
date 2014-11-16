@@ -147,12 +147,14 @@ ifneq ($(wildcard config.h)x,x)
 CONFIG := $(shell cat config.h)
 endif
 
-SRCS_LSMASH = common/alloc.c common/utils.c common/bstream.c common/list.c \
-              common/osdep.c codecs/mp4sys.c codecs/mp4a.c codecs/dts.c codecs/a52.c \
-              codecs/h264.c codecs/hevc.c codecs/vc1.c codecs/alac.c \
-              codecs/description.c core/isom.c core/fragment.c core/summary.c \
-              core/print.c core/read.c core/timeline.c core/chapter.c core/meta.c \
-              core/write.c core/box.c
+SRCS_LSMASH = common/alloc.c common/bits.c common/bytes.c common/list.c \
+              common/multibuf.c common/osdep.c common/utils.c \
+              codecs/a52.c codecs/alac.c codecs/description.c codecs/dts.c \
+              codecs/h264.c codecs/hevc.c codecs/mp4sys.c codecs/mp4a.c \
+              codecs/vc1.c codecs/wma.c \
+              core/box.c core/chapter.c core/file.c core/fragment.c \
+              core/isom.c core/meta.c core/print.c core/read.c \
+              core/summary.c core/timeline.c core/write.c
 
 CFLAGS += -Ioutput/L-SMASH -DLSMASH_DEMUXER_ENABLED
 

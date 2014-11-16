@@ -1,8 +1,9 @@
 ;x264vfw - H.264/MPEG-4 AVC codec
 ;Written by BugMaster
 
-!define FullName  "x264vfw - H.264/MPEG-4 AVC codec"
-!define ShortName "x264vfw"
+!define FullName    "x264vfw - H.264/MPEG-4 AVC codec"
+!define ShortName   "x264vfw"
+!define ShortName64 "x264vfw64"
 
 ;--------------------------------
 ;Includes
@@ -20,7 +21,7 @@
 
   ;Name and file
   Name "${FullName}"
-  OutFile "${ShortName}.exe"
+  OutFile "${ShortName}_full.exe"
 
   ;Default installation folder
   InstallDir ""
@@ -30,6 +31,7 @@
 
   ;Previous version installation folder
   Var PREV_INSTDIR
+  Var PREV_INSTDIR64
 
 ;--------------------------------
 ;Interface Configuration
@@ -46,6 +48,7 @@
   !define MUI_WELCOMEPAGE_TITLE_3LINES
   !insertmacro MUI_PAGE_WELCOME
   !insertmacro MUI_PAGE_LICENSE "..\COPYING"
+  !insertmacro MUI_PAGE_COMPONENTS
   !insertmacro MUI_PAGE_DIRECTORY
   !insertmacro MUI_PAGE_INSTFILES
   !define MUI_FINISHPAGE_TITLE_3LINES
@@ -63,6 +66,23 @@
 
 ;--------------------------------
 ;Macros
+
+!macro DisableSection SECTION
+
+  Push $R0
+  Push $R1
+  Push $R2
+    StrCpy $R2 "${SECTION}"
+    SectionGetFlags $R2 $R0
+    IntOp $R1 "${SF_SELECTED}" ~
+    IntOp $R0 $R0 & $R1
+    IntOp $R0 $R0 | "${SF_RO}"
+    SectionSetFlags $R2 $R0
+  Pop $R2
+  Pop $R1
+  Pop $R0
+
+!macroend
 
 !macro RegCodec CODEC_ID CODEC_NAME CODEC_DESC
 
@@ -108,20 +128,52 @@
 ;--------------------------------
 ;Installer Sections
 
-Section "-Remove previous version"
+Section "Remove previous version" SEC_REMOVE_PREV
 
   ${If} $PREV_INSTDIR != ""
-    Delete "$SYSDIR_32bit\x264vfw.dll"
+    ReadRegDWORD $R0 HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${ShortName}" "Installed_x264vfw_x86"
+    StrCmp $R0 "" +1 +2
+    StrCpy $R0 1
 
-    SetShellVarContext all
-    Delete "$SMPROGRAMS\${ShortName}\Configure ${ShortName}.lnk"
-    SetShellVarContext current
-    Delete "$SMPROGRAMS\${ShortName}\Configure ${ShortName}.lnk"
+    ${If} $R0 <> 0
+      Delete "$SYSDIR_32bit\x264vfw.dll"
 
-    Delete "$PREV_INSTDIR\x264vfw.dll"
-    Delete "$PREV_INSTDIR\x264vfw.ico"
+      SetShellVarContext all
+      Delete "$SMPROGRAMS\${ShortName}\Configure ${ShortName}.lnk"
+      SetShellVarContext current
+      Delete "$SMPROGRAMS\${ShortName}\Configure ${ShortName}.lnk"
 
-    !insertmacro UnRegCodec "vidc.x264"
+      Delete "$PREV_INSTDIR\x264vfw.dll"
+      Delete "$PREV_INSTDIR\x264vfw.ico"
+
+      !insertmacro UnRegCodec "vidc.x264"
+    ${EndIf}
+
+    ReadRegDWORD $R0 HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${ShortName}" "Installed_x264vfw_x64"
+    StrCmp $R0 "" +1 +2
+    StrCpy $R0 0
+
+    ${If} $R0 <> 0
+      ${If} ${RunningX64}
+        ${DisableX64FSRedirection}
+
+        Delete "$SYSDIR\x264vfw64.dll"
+
+        SetShellVarContext all
+        Delete "$SMPROGRAMS\${ShortName}\Configure ${ShortName64}.lnk"
+        SetShellVarContext current
+        Delete "$SMPROGRAMS\${ShortName}\Configure ${ShortName64}.lnk"
+
+        ${EnableX64FSRedirection}
+
+        Delete "$PREV_INSTDIR\x264vfw64.dll"
+        Delete "$PREV_INSTDIR\x264vfw64.ico"
+
+        SetRegView 64
+        !insertmacro UnRegCodec "vidc.x264"
+        SetRegView lastused
+      ${EndIf}
+    ${EndIf}
 
     SetShellVarContext all
     Delete "$SMPROGRAMS\${ShortName}\Uninstall ${ShortName}.lnk"
@@ -133,6 +185,39 @@ Section "-Remove previous version"
     Delete "$PREV_INSTDIR\${ShortName}-uninstall.exe"
     RMDir  $PREV_INSTDIR
     DeleteRegKey HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${ShortName}"
+  ${EndIf}
+
+  ${If} $PREV_INSTDIR64 != ""
+    ${If} ${RunningX64}
+      ${DisableX64FSRedirection}
+
+      Delete "$SYSDIR\x264vfw64.dll"
+
+      SetShellVarContext all
+      Delete "$SMPROGRAMS\${ShortName64}\Configure ${ShortName64}.lnk"
+      SetShellVarContext current
+      Delete "$SMPROGRAMS\${ShortName64}\Configure ${ShortName64}.lnk"
+
+      Delete "$PREV_INSTDIR64\x264vfw64.dll"
+      Delete "$PREV_INSTDIR64\x264vfw64.ico"
+
+      SetRegView 64
+      !insertmacro UnRegCodec "vidc.x264"
+      SetRegView lastused
+
+      SetShellVarContext all
+      Delete "$SMPROGRAMS\${ShortName64}\Uninstall ${ShortName64}.lnk"
+      RMDir  "$SMPROGRAMS\${ShortName64}"
+      SetShellVarContext current
+      Delete "$SMPROGRAMS\${ShortName64}\Uninstall ${ShortName64}.lnk"
+      RMDir  "$SMPROGRAMS\${ShortName64}"
+
+      Delete "$PREV_INSTDIR64\${ShortName64}-uninstall.exe"
+      RMDir  $PREV_INSTDIR64
+      DeleteRegKey HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${ShortName64}"
+
+      ${EnableX64FSRedirection}
+    ${EndIf}
   ${EndIf}
 
 SectionEnd
@@ -151,10 +236,20 @@ Section "-Install"
   WriteRegDWORD HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${ShortName}" "NoModify" 1
   WriteRegDWORD HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${ShortName}" "NoRepair" 1
 
+  WriteRegDWORD HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${ShortName}" "Installed_x264vfw_x86" 0
+  WriteRegDWORD HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${ShortName}" "Installed_x264vfw_x64" 0
+
   SetShellVarContext all
   CreateDirectory "$SMPROGRAMS\${ShortName}"
   CreateShortcut  "$SMPROGRAMS\${ShortName}\Uninstall ${ShortName}.lnk" "$INSTDIR\${ShortName}-uninstall.exe"
 
+SectionEnd
+
+Section "${ShortName} (x86)" SEC_INSTALL_X86
+
+  WriteRegDWORD HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${ShortName}" "Installed_x264vfw_x86" 1
+
+  SetOutPath $INSTDIR
   File ".\x264vfw.ico"
 
   SetOutPath $SYSDIR_32bit
@@ -171,6 +266,33 @@ Section "-Install"
 
 SectionEnd
 
+Section "${ShortName} (x64)" SEC_INSTALL_X64
+
+  WriteRegDWORD HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${ShortName}" "Installed_x264vfw_x64" 1
+
+  SetOutPath $INSTDIR
+  File /oname=x264vfw64.ico ".\x264vfw.ico"
+
+  ${DisableX64FSRedirection}
+
+  SetOutPath $SYSDIR
+  File ".\x264vfw64.dll"
+
+  SetShellVarContext all
+  ${If} ${FileExists} "$SYSDIR\rundll32.exe"
+    CreateShortcut "$SMPROGRAMS\${ShortName}\Configure ${ShortName64}.lnk" "$SYSDIR\rundll32.exe" "x264vfw64.dll,Configure" "$INSTDIR\x264vfw64.ico"
+  ${Else}
+    CreateShortcut "$SMPROGRAMS\${ShortName}\Configure ${ShortName64}.lnk" "rundll32.exe" "x264vfw64.dll,Configure" "$INSTDIR\x264vfw64.ico"
+  ${EndIf}
+
+  ${EnableX64FSRedirection}
+
+  SetRegView 64
+  !insertmacro RegCodec "vidc.x264" "x264vfw64.dll" "${FullName}"
+  SetRegView lastused
+
+SectionEnd
+
 ;--------------------------------
 ;Installer Functions
 
@@ -180,6 +302,7 @@ Function .onInit
     StrCpy $SYSDIR_32bit "$WINDIR\SysWOW64"
   ${Else}
     StrCpy $SYSDIR_32bit $SYSDIR
+    !insertmacro DisableSection "${SEC_INSTALL_X64}"
   ${EndIf}
 
   ; Check Administrator's rights
@@ -201,10 +324,22 @@ admin:
   StrCmp $R1 "" +2
   StrCpy $PREV_INSTDIR $R1
 
+  StrCpy $PREV_INSTDIR64 ""
+  ReadRegStr $R0 HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${ShortName64}" "UninstallString"
+  ${GetParent} $R0 $R1
+  StrCmp $R1 "" +2
+  StrCpy $PREV_INSTDIR64 $R1
+
   StrCmp $INSTDIR "" +1 +4
   StrCpy $INSTDIR $PREV_INSTDIR
   StrCmp $INSTDIR "" +1 +2
   StrCpy $INSTDIR "$PROGRAMFILES32\${ShortName}"
+
+  ${If} $PREV_INSTDIR == ""
+    ${If} $PREV_INSTDIR64 == ""
+      !insertmacro DisableSection "${SEC_REMOVE_PREV}"
+    ${EndIf}
+  ${EndIf}
 
 FunctionEnd
 
@@ -213,21 +348,65 @@ FunctionEnd
 
 Section "Uninstall"
 
-  MessageBox MB_YESNO|MB_ICONQUESTION "Keep ${ShortName}'s settings in registry?" /SD IDYES IDYES keep_settings
-  DeleteRegKey HKCU "Software\GNU\x264"
+  ReadRegDWORD $R8 HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${ShortName}" "Installed_x264vfw_x86"
+  StrCmp $R8 "" +1 +2
+  StrCpy $R8 1
+
+  ReadRegDWORD $R9 HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${ShortName}" "Installed_x264vfw_x64"
+  StrCmp $R9 "" +1 +2
+  StrCpy $R9 0
+
+  IntOp $R0 $R8 | $R9
+  ${If} $R0 <> 0
+    MessageBox MB_YESNO|MB_ICONQUESTION "Keep ${ShortName}'s settings in registry?" /SD IDYES IDYES keep_settings
+    ${If} $R8 <> 0
+      DeleteRegKey HKCU "Software\GNU\x264"
+    ${EndIf}
+    ${If} $R9 <> 0
+      ${If} ${RunningX64}
+        SetRegView 64
+        DeleteRegKey HKCU "Software\GNU\x264vfw64"
+        SetRegView lastused
+      ${EndIf}
+    ${EndIf}
 keep_settings:
+  ${EndIf}
 
-  Delete /REBOOTOK "$SYSDIR_32bit\x264vfw.dll"
+  ${If} $R8 <> 0
+    Delete /REBOOTOK "$SYSDIR_32bit\x264vfw.dll"
 
-  SetShellVarContext all
-  Delete /REBOOTOK "$SMPROGRAMS\${ShortName}\Configure ${ShortName}.lnk"
-  SetShellVarContext current
-  Delete /REBOOTOK "$SMPROGRAMS\${ShortName}\Configure ${ShortName}.lnk"
+    SetShellVarContext all
+    Delete /REBOOTOK "$SMPROGRAMS\${ShortName}\Configure ${ShortName}.lnk"
+    SetShellVarContext current
+    Delete /REBOOTOK "$SMPROGRAMS\${ShortName}\Configure ${ShortName}.lnk"
 
-  Delete /REBOOTOK "$INSTDIR\x264vfw.dll"
-  Delete /REBOOTOK "$INSTDIR\x264vfw.ico"
+    Delete /REBOOTOK "$INSTDIR\x264vfw.dll"
+    Delete /REBOOTOK "$INSTDIR\x264vfw.ico"
 
-  !insertmacro UnRegCodec "vidc.x264"
+    !insertmacro UnRegCodec "vidc.x264"
+  ${EndIf}
+
+  ${If} $R9 <> 0
+    ${If} ${RunningX64}
+      ${DisableX64FSRedirection}
+
+      Delete /REBOOTOK "$SYSDIR\x264vfw64.dll"
+
+      SetShellVarContext all
+      Delete /REBOOTOK "$SMPROGRAMS\${ShortName}\Configure ${ShortName64}.lnk"
+      SetShellVarContext current
+      Delete /REBOOTOK "$SMPROGRAMS\${ShortName}\Configure ${ShortName64}.lnk"
+
+      ${EnableX64FSRedirection}
+
+      Delete /REBOOTOK "$INSTDIR\x264vfw64.dll"
+      Delete /REBOOTOK "$INSTDIR\x264vfw64.ico"
+
+      SetRegView 64
+      !insertmacro UnRegCodec "vidc.x264"
+      SetRegView lastused
+    ${EndIf}
+  ${EndIf}
 
   SetShellVarContext all
   Delete /REBOOTOK "$SMPROGRAMS\${ShortName}\Uninstall ${ShortName}.lnk"

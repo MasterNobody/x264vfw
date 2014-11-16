@@ -26,11 +26,9 @@
 #include <stdlib.h>
 #include <string.h>
 #include <inttypes.h>
-#ifdef _WIN32
-#include <windows.h>
-#endif
 
 #include "box.h"
+#include "file.h"
 #include "write.h"
 #include "fragment.h"
 #include "read.h"
@@ -40,18 +38,20 @@
 #include "codecs/description.h"
 
 /*---- ----*/
-char *isom_4cc2str( uint32_t fourcc )
+int isom_check_initializer_present( lsmash_root_t *root )
 {
-    static char str[5];
-    LSMASH_SET_BE32( str, fourcc );
-    str[4] = 0;
-    return str;
+    if( !root
+     || !root->file
+     || !root->file->initializer )
+        return LSMASH_ERR_NAMELESS;
+    return 0;
 }
 
 isom_trak_t *isom_get_trak( lsmash_file_t *file, uint32_t track_ID )
 {
     if( track_ID == 0
      || !file
+     ||  file != file->initializer
      || !file->moov )
         return NULL;
     for( lsmash_entry_t *entry = file->moov->trak_list.head; entry; entry = entry->next )
@@ -117,14 +117,14 @@ static int isom_add_elst_entry( isom_elst_t *elst, uint64_t segment_duration, in
     assert( elst->file );
     isom_elst_entry_t *data = lsmash_malloc( sizeof(isom_elst_entry_t) );
     if( !data )
-        return -1;
+        return LSMASH_ERR_MEMORY_ALLOC;
     data->segment_duration = segment_duration;
     data->media_time       = media_time;
     data->media_rate       = media_rate;
-    if( lsmash_add_entry( elst->list, data ) )
+    if( lsmash_add_entry( elst->list, data ) < 0 )
     {
         lsmash_free( data );
-        return -1;
+        return LSMASH_ERR_MEMORY_ALLOC;
     }
     if( !elst->file->undefined_64_ver
      && (data->segment_duration > UINT32_MAX
@@ -154,15 +154,16 @@ void isom_remove_dcr_ps( isom_dcr_ps_entry_t *ps )
 {
     if( !ps )
         return;
-    if( ps->nalUnit )
-        lsmash_free( ps->nalUnit );
+    lsmash_free( ps->nalUnit );
     lsmash_free( ps );
 }
 
 /* This function returns 0 if failed, sample_entry_number if succeeded. */
 int lsmash_add_sample_entry( lsmash_root_t *root, uint32_t track_ID, void *summary )
 {
-    if( !root || !summary )
+    if( !root || !summary
+     || ((lsmash_summary_t *)summary)->data_ref_index == 0
+     || ((lsmash_summary_t *)summary)->data_ref_index > UINT16_MAX )
         return 0;
     isom_trak_t *trak = isom_get_trak( root->file, track_ID );
     if( !trak
@@ -174,7 +175,7 @@ int lsmash_add_sample_entry( lsmash_root_t *root, uint32_t track_ID, void *summa
         return 0;
     isom_stsd_t *stsd = trak->mdia->minf->stbl->stsd;
     lsmash_entry_list_t *list = &stsd->list;
-    int ret = -1;
+    int ret = LSMASH_ERR_NAMELESS;
     lsmash_codec_type_t sample_type = ((lsmash_summary_t *)summary)->sample_type;
     if( lsmash_check_codec_type_identical( sample_type, LSMASH_CODEC_TYPE_RAW ) )
     {
@@ -184,16 +185,17 @@ int lsmash_add_sample_entry( lsmash_root_t *root, uint32_t track_ID, void *summa
             ret = isom_setup_audio_description( stsd, sample_type, (lsmash_audio_summary_t *)summary );
         return ret < 0 ? 0 : list->entry_count;
     }
+typedef void (*opaque_func_t)( void );
     static struct description_setup_table_tag
     {
         lsmash_codec_type_t type;
-        void *func;
+        opaque_func_t       func;
     } description_setup_table[160] = { { LSMASH_CODEC_TYPE_INITIALIZER, NULL } };
     if( !description_setup_table[0].func )
     {
         int i = 0;
 #define ADD_DESCRIPTION_SETUP_TABLE_ELEMENT( type, func ) \
-    description_setup_table[i++] = (struct description_setup_table_tag){ type, func }
+    description_setup_table[i++] = (struct description_setup_table_tag){ type, (opaque_func_t)func }
         ADD_DESCRIPTION_SETUP_TABLE_ELEMENT( ISOM_CODEC_TYPE_AVC1_VIDEO, isom_setup_visual_description );
         ADD_DESCRIPTION_SETUP_TABLE_ELEMENT( ISOM_CODEC_TYPE_AVC2_VIDEO, isom_setup_visual_description );
         ADD_DESCRIPTION_SETUP_TABLE_ELEMENT( ISOM_CODEC_TYPE_AVC3_VIDEO, isom_setup_visual_description );
@@ -294,27 +296,18 @@ int lsmash_add_sample_entry( lsmash_root_t *root, uint32_t track_ID, void *summa
     for( int i = 0; description_setup_table[i].func; i++ )
         if( lsmash_check_codec_type_identical( sample_type, description_setup_table[i].type ) )
         {
-            if( isom_setup_visual_description == description_setup_table[i].func )
+                 if( (opaque_func_t)isom_setup_visual_description == description_setup_table[i].func )
                 ret = isom_setup_visual_description( stsd, sample_type, (lsmash_video_summary_t *)summary );
-            else if( isom_setup_audio_description == description_setup_table[i].func )
+            else if( (opaque_func_t)isom_setup_audio_description == description_setup_table[i].func )
                 ret = isom_setup_audio_description( stsd, sample_type, (lsmash_audio_summary_t *)summary );
-            else if( isom_add_tx3g_description == description_setup_table[i].func )
-            {
-                isom_tx3g_entry_t *tx3g = isom_add_tx3g_description( stsd );
-                if( tx3g )
-                {
-                    tx3g->data_reference_index = 1;
-                    ret = isom_add_ftab( tx3g );
-                    if( ret < 0 )
-                        isom_remove_box_by_itself( tx3g );
-                }
-            }
-            else if( isom_add_qt_text_description == description_setup_table[i].func )
+            else if( (opaque_func_t)isom_add_tx3g_description == description_setup_table[i].func )
+                ret = isom_setup_tx3g_description( stsd, (lsmash_summary_t *)summary );
+            else if( (opaque_func_t)isom_add_qt_text_description == description_setup_table[i].func )
             {
                 isom_qt_text_entry_t *text = isom_add_qt_text_description( stsd );
                 if( text )
                 {
-                    text->data_reference_index = 1;
+                    text->data_reference_index = ((lsmash_summary_t *)summary)->data_ref_index;
                     ret = 0;
                 }
             }
@@ -328,16 +321,16 @@ static int isom_add_stts_entry( isom_stbl_t *stbl, uint32_t sample_delta )
     if( !stbl
      || !stbl->stts
      || !stbl->stts->list )
-        return -1;
+        return LSMASH_ERR_NAMELESS;
     isom_stts_entry_t *data = lsmash_malloc( sizeof(isom_stts_entry_t) );
     if( !data )
-        return -1;
+        return LSMASH_ERR_MEMORY_ALLOC;
     data->sample_count = 1;
     data->sample_delta = sample_delta;
-    if( lsmash_add_entry( stbl->stts->list, data ) )
+    if( lsmash_add_entry( stbl->stts->list, data ) < 0 )
     {
         lsmash_free( data );
-        return -1;
+        return LSMASH_ERR_MEMORY_ALLOC;
     }
     return 0;
 }
@@ -347,16 +340,16 @@ static int isom_add_ctts_entry( isom_stbl_t *stbl, uint32_t sample_offset )
     if( !stbl
      || !stbl->ctts
      || !stbl->ctts->list )
-        return -1;
+        return LSMASH_ERR_NAMELESS;
     isom_ctts_entry_t *data = lsmash_malloc( sizeof(isom_ctts_entry_t) );
     if( !data )
-        return -1;
+        return LSMASH_ERR_MEMORY_ALLOC;
     data->sample_count  = 1;
     data->sample_offset = sample_offset;
-    if( lsmash_add_entry( stbl->ctts->list, data ) )
+    if( lsmash_add_entry( stbl->ctts->list, data ) < 0 )
     {
         lsmash_free( data );
-        return -1;
+        return LSMASH_ERR_MEMORY_ALLOC;
     }
     return 0;
 }
@@ -366,17 +359,17 @@ static int isom_add_stsc_entry( isom_stbl_t *stbl, uint32_t first_chunk, uint32_
     if( !stbl
      || !stbl->stsc
      || !stbl->stsc->list )
-        return -1;
+        return LSMASH_ERR_NAMELESS;
     isom_stsc_entry_t *data = lsmash_malloc( sizeof(isom_stsc_entry_t) );
     if( !data )
-        return -1;
+        return LSMASH_ERR_MEMORY_ALLOC;
     data->first_chunk              = first_chunk;
     data->samples_per_chunk        = samples_per_chunk;
     data->sample_description_index = sample_description_index;
-    if( lsmash_add_entry( stbl->stsc->list, data ) )
+    if( lsmash_add_entry( stbl->stsc->list, data ) < 0 )
     {
         lsmash_free( data );
-        return -1;
+        return LSMASH_ERR_MEMORY_ALLOC;
     }
     return 0;
 }
@@ -385,7 +378,7 @@ static int isom_add_stsz_entry( isom_stbl_t *stbl, uint32_t entry_size )
 {
     if( !stbl
      || !stbl->stsz )
-        return -1;
+        return LSMASH_ERR_NAMELESS;
     isom_stsz_t *stsz = stbl->stsz;
     /* retrieve initial sample_size */
     if( stsz->sample_count == 0 )
@@ -401,29 +394,29 @@ static int isom_add_stsz_entry( isom_stbl_t *stbl, uint32_t entry_size )
     {
         stsz->list = lsmash_create_entry_list();
         if( !stsz->list )
-            return -1;
+            return LSMASH_ERR_MEMORY_ALLOC;
         for( uint32_t i = 0; i < stsz->sample_count; i++ )
         {
             isom_stsz_entry_t *data = lsmash_malloc( sizeof(isom_stsz_entry_t) );
             if( !data )
-                return -1;
+                return LSMASH_ERR_MEMORY_ALLOC;
             data->entry_size = stsz->sample_size;
-            if( lsmash_add_entry( stsz->list, data ) )
+            if( lsmash_add_entry( stsz->list, data ) < 0 )
             {
                 lsmash_free( data );
-                return -1;
+                return LSMASH_ERR_MEMORY_ALLOC;
             }
         }
         stsz->sample_size = 0;
     }
     isom_stsz_entry_t *data = lsmash_malloc( sizeof(isom_stsz_entry_t) );
     if( !data )
-        return -1;
+        return LSMASH_ERR_MEMORY_ALLOC;
     data->entry_size = entry_size;
-    if( lsmash_add_entry( stsz->list, data ) )
+    if( lsmash_add_entry( stsz->list, data ) < 0 )
     {
         lsmash_free( data );
-        return -1;
+        return LSMASH_ERR_MEMORY_ALLOC;
     }
     ++ stsz->sample_count;
     return 0;
@@ -434,15 +427,15 @@ static int isom_add_stss_entry( isom_stbl_t *stbl, uint32_t sample_number )
     if( !stbl
      || !stbl->stss
      || !stbl->stss->list )
-        return -1;
+        return LSMASH_ERR_NAMELESS;
     isom_stss_entry_t *data = lsmash_malloc( sizeof(isom_stss_entry_t) );
     if( !data )
-        return -1;
+        return LSMASH_ERR_MEMORY_ALLOC;
     data->sample_number = sample_number;
-    if( lsmash_add_entry( stbl->stss->list, data ) )
+    if( lsmash_add_entry( stbl->stss->list, data ) < 0 )
     {
         lsmash_free( data );
-        return -1;
+        return LSMASH_ERR_MEMORY_ALLOC;
     }
     return 0;
 }
@@ -452,23 +445,30 @@ static int isom_add_stps_entry( isom_stbl_t *stbl, uint32_t sample_number )
     if( !stbl
      || !stbl->stps
      || !stbl->stps->list )
-        return -1;
+        return LSMASH_ERR_NAMELESS;
     isom_stps_entry_t *data = lsmash_malloc( sizeof(isom_stps_entry_t) );
     if( !data )
-        return -1;
+        return LSMASH_ERR_MEMORY_ALLOC;
     data->sample_number = sample_number;
-    if( lsmash_add_entry( stbl->stps->list, data ) )
+    if( lsmash_add_entry( stbl->stps->list, data ) < 0 )
     {
         lsmash_free( data );
-        return -1;
+        return LSMASH_ERR_MEMORY_ALLOC;
     }
     return 0;
 }
 
-static int isom_add_sdtp_entry( isom_box_t *parent, lsmash_sample_property_t *prop, uint8_t avc_extensions )
+/* Between ISOBMFF and QTFF, the most significant 2-bit has different meaning.
+ * For the maximum compatibility, we set 0 to the most significant 2-bit when compatible with
+ * both ISOBMFF with AVCFF extensions and QTFF.
+ *   compatibility == 0 -> neither AVCFF extensions nor QTFF compatible
+ *   compatibility == 1 -> AVCFF extensions compatible
+ *   compatibility == 2 -> QTFF compatible
+ *   compatibility == 3 -> both AVCFF extensions and QTFF compatible */
+static int isom_add_sdtp_entry( isom_box_t *parent, lsmash_sample_property_t *prop, int compatibility )
 {
     if( !prop || !parent )
-        return -1;
+        return LSMASH_ERR_NAMELESS;
     isom_sdtp_t *sdtp = NULL;
     if( lsmash_check_box_type_identical( parent->type, ISOM_BOX_TYPE_STBL ) )
         sdtp = ((isom_stbl_t *)parent)->sdtp;
@@ -478,19 +478,26 @@ static int isom_add_sdtp_entry( isom_box_t *parent, lsmash_sample_property_t *pr
         assert( 0 );
     if( !sdtp
      || !sdtp->list )
-        return -1;
+        return LSMASH_ERR_NAMELESS;
     isom_sdtp_entry_t *data = lsmash_malloc( sizeof(isom_sdtp_entry_t) );
     if( !data )
-        return -1;
-    /* isom_sdtp_entry_t is smaller than lsmash_sample_property_t. */
-    data->is_leading            = (avc_extensions ? prop->leading : prop->allow_earlier) & 0x03;
+        return LSMASH_ERR_MEMORY_ALLOC;
+    if( compatibility == 1 )
+        data->is_leading = prop->leading & 0x03;
+    else if( compatibility == 2 )
+        data->is_leading = prop->allow_earlier & 0x03;
+    else
+    {
+        data->is_leading = 0;
+        assert( compatibility == 3 );
+    }
     data->sample_depends_on     = prop->independent & 0x03;
     data->sample_is_depended_on = prop->disposable  & 0x03;
     data->sample_has_redundancy = prop->redundant   & 0x03;
-    if( lsmash_add_entry( sdtp->list, data ) )
+    if( lsmash_add_entry( sdtp->list, data ) < 0 )
     {
         lsmash_free( data );
-        return -1;
+        return LSMASH_ERR_MEMORY_ALLOC;
     }
     return 0;
 }
@@ -500,43 +507,40 @@ static int isom_add_co64_entry( isom_stbl_t *stbl, uint64_t chunk_offset )
     if( !stbl
      || !stbl->stco
      || !stbl->stco->list )
-        return -1;
+        return LSMASH_ERR_NAMELESS;
     isom_co64_entry_t *data = lsmash_malloc( sizeof(isom_co64_entry_t) );
     if( !data )
-        return -1;
+        return LSMASH_ERR_MEMORY_ALLOC;
     data->chunk_offset = chunk_offset;
-    if( lsmash_add_entry( stbl->stco->list, data ) )
+    if( lsmash_add_entry( stbl->stco->list, data ) < 0 )
     {
         lsmash_free( data );
-        return -1;
+        return LSMASH_ERR_MEMORY_ALLOC;
     }
     return 0;
 }
 
-int isom_convert_stco_to_co64( isom_stbl_t *stbl )
+static int isom_convert_stco_to_co64( isom_stbl_t *stbl )
 {
     /* backup stco */
-    int ret = 0;
+    int err = 0;
     isom_stco_t *stco = stbl->stco;
     stbl->stco = NULL;
-    if( isom_add_co64( stbl ) )
+    if( !isom_add_co64( stbl ) )
     {
-        ret = -1;
+        err = LSMASH_ERR_NAMELESS;
         goto fail;
     }
     /* move chunk_offset to co64 from stco */
     for( lsmash_entry_t *entry = stco->list->head; entry; entry = entry->next )
     {
         isom_stco_entry_t *data = (isom_stco_entry_t*)entry->data;
-        if( isom_add_co64_entry( stbl, data->chunk_offset ) )
-        {
-            ret = -1;
+        if( (err = isom_add_co64_entry( stbl, data->chunk_offset )) < 0 )
             goto fail;
-        }
     }
 fail:
     isom_remove_box_by_itself( stco );
-    return ret;
+    return err;
 }
 
 static int isom_add_stco_entry( isom_stbl_t *stbl, uint64_t chunk_offset )
@@ -544,23 +548,24 @@ static int isom_add_stco_entry( isom_stbl_t *stbl, uint64_t chunk_offset )
     if( !stbl
      || !stbl->stco
      || !stbl->stco->list )
-        return -1;
+        return LSMASH_ERR_NAMELESS;
     if( stbl->stco->large_presentation )
         return isom_add_co64_entry( stbl, chunk_offset );
     if( chunk_offset > UINT32_MAX )
     {
-        if( isom_convert_stco_to_co64( stbl ) < 0 )
-            return -1;
+        int err = isom_convert_stco_to_co64( stbl );
+        if( err < 0 )
+            return err;
         return isom_add_co64_entry( stbl, chunk_offset );
     }
     isom_stco_entry_t *data = lsmash_malloc( sizeof(isom_stco_entry_t) );
     if( !data )
-        return -1;
+        return LSMASH_ERR_MEMORY_ALLOC;
     data->chunk_offset = (uint32_t)chunk_offset;
-    if( lsmash_add_entry( stbl->stco->list, data ) )
+    if( lsmash_add_entry( stbl->stco->list, data ) < 0 )
     {
         lsmash_free( data );
-        return -1;
+        return LSMASH_ERR_MEMORY_ALLOC;
     }
     return 0;
 }
@@ -603,6 +608,24 @@ isom_sbgp_t *isom_get_sample_to_group( isom_stbl_t *stbl, uint32_t grouping_type
     return isom_get_sample_to_group_common( &stbl->sbgp_list, grouping_type );
 }
 
+isom_sgpd_t *isom_get_roll_recovery_sample_group_description( lsmash_entry_list_t *list )
+{
+    isom_sgpd_t *sgpd;
+    if( (sgpd = isom_get_sample_group_description_common( list, ISOM_GROUP_TYPE_ROLL ))
+     || (sgpd = isom_get_sample_group_description_common( list, ISOM_GROUP_TYPE_PROL )) )
+        return sgpd;
+    return NULL;
+}
+
+isom_sbgp_t *isom_get_roll_recovery_sample_to_group( lsmash_entry_list_t *list )
+{
+    isom_sbgp_t *sbgp;
+    if( (sbgp = isom_get_sample_to_group_common( list, ISOM_GROUP_TYPE_ROLL ))
+     || (sbgp = isom_get_sample_to_group_common( list, ISOM_GROUP_TYPE_PROL )) )
+        return sbgp;
+    return NULL;
+}
+
 isom_sgpd_t *isom_get_fragment_sample_group_description( isom_traf_t *traf, uint32_t grouping_type )
 {
     return isom_get_sample_group_description_common( &traf->sgpd_list, grouping_type );
@@ -623,7 +646,7 @@ static isom_rap_entry_t *isom_add_rap_group_entry( isom_sgpd_t *sgpd )
     data->description_length        = 0;
     data->num_leading_samples_known = 0;
     data->num_leading_samples       = 0;
-    if( lsmash_add_entry( sgpd->list, data ) )
+    if( lsmash_add_entry( sgpd->list, data ) < 0 )
     {
         lsmash_free( data );
         return NULL;
@@ -640,7 +663,7 @@ static isom_roll_entry_t *isom_add_roll_group_entry( isom_sgpd_t *sgpd, int16_t 
         return NULL;
     data->description_length = 0;
     data->roll_distance      = roll_distance;
-    if( lsmash_add_entry( sgpd->list, data ) )
+    if( lsmash_add_entry( sgpd->list, data ) < 0 )
     {
         lsmash_free( data );
         return NULL;
@@ -657,170 +680,12 @@ static isom_group_assignment_entry_t *isom_add_group_assignment_entry( isom_sbgp
         return NULL;
     data->sample_count            = sample_count;
     data->group_description_index = group_description_index;
-    if( lsmash_add_entry( sbgp->list, data ) )
+    if( lsmash_add_entry( sbgp->list, data ) < 0 )
     {
         lsmash_free( data );
         return NULL;
     }
     return data;
-}
-
-int isom_check_compatibility( lsmash_file_t *file )
-{
-    if( !file )
-        return -1;
-    /* Clear flags for compatibility. */
-    ptrdiff_t compat_offset = offsetof( lsmash_file_t, qt_compatible );
-    memset( (int8_t *)file + compat_offset, 0, sizeof(lsmash_file_t) - compat_offset );
-    file->min_isom_version = UINT8_MAX; /* undefined value */
-    /* Check brand to decide mandatory boxes. */
-    if( (!file->ftyp || file->ftyp->brand_count == 0)
-     && (!file->styp_list.head || !file->styp_list.head->data) )
-    {
-        /* No brand declaration means this file is a MP4 version 1 or QuickTime file format. */
-        if( file->moov
-         && file->moov->iods )
-        {
-            file->mp4_version1    = 1;
-            file->isom_compatible = 1;
-        }
-        else
-        {
-            file->qt_compatible    = 1;
-            file->undefined_64_ver = 1;
-        }
-        return 0;
-    }
-    for( uint32_t i = 0; i <= file->ftyp->brand_count; i++ )
-    {
-        uint32_t brand = (i == file->ftyp->brand_count ? file->ftyp->major_brand : file->ftyp->compatible_brands[i]);
-        switch( brand )
-        {
-            case ISOM_BRAND_TYPE_QT :
-                file->qt_compatible = 1;
-                break;
-            case ISOM_BRAND_TYPE_MP41 :
-                file->mp4_version1 = 1;
-                break;
-            case ISOM_BRAND_TYPE_MP42 :
-                file->mp4_version2 = 1;
-                break;
-            case ISOM_BRAND_TYPE_AVC1 :
-            case ISOM_BRAND_TYPE_ISOM :
-                file->max_isom_version = LSMASH_MAX( file->max_isom_version, 1 );
-                file->min_isom_version = LSMASH_MIN( file->min_isom_version, 1 );
-                break;
-            case ISOM_BRAND_TYPE_ISO2 :
-                file->max_isom_version = LSMASH_MAX( file->max_isom_version, 2 );
-                file->min_isom_version = LSMASH_MIN( file->min_isom_version, 2 );
-                break;
-            case ISOM_BRAND_TYPE_ISO3 :
-                file->max_isom_version = LSMASH_MAX( file->max_isom_version, 3 );
-                file->min_isom_version = LSMASH_MIN( file->min_isom_version, 3 );
-                break;
-            case ISOM_BRAND_TYPE_ISO4 :
-                file->max_isom_version = LSMASH_MAX( file->max_isom_version, 4 );
-                file->min_isom_version = LSMASH_MIN( file->min_isom_version, 4 );
-                break;
-            case ISOM_BRAND_TYPE_ISO5 :
-                file->max_isom_version = LSMASH_MAX( file->max_isom_version, 5 );
-                file->min_isom_version = LSMASH_MIN( file->min_isom_version, 5 );
-                break;
-            case ISOM_BRAND_TYPE_ISO6 :
-                file->max_isom_version = LSMASH_MAX( file->max_isom_version, 6 );
-                file->min_isom_version = LSMASH_MIN( file->min_isom_version, 6 );
-                break;
-            case ISOM_BRAND_TYPE_ISO7 :
-                file->max_isom_version = LSMASH_MAX( file->max_isom_version, 7 );
-                file->min_isom_version = LSMASH_MIN( file->min_isom_version, 7 );
-                break;
-            case ISOM_BRAND_TYPE_M4A :
-            case ISOM_BRAND_TYPE_M4B :
-            case ISOM_BRAND_TYPE_M4P :
-            case ISOM_BRAND_TYPE_M4V :
-                file->itunes_movie = 1;
-                break;
-            case ISOM_BRAND_TYPE_3GP4 :
-                file->max_3gpp_version = LSMASH_MAX( file->max_3gpp_version, 4 );
-                break;
-            case ISOM_BRAND_TYPE_3GP5 :
-                file->max_3gpp_version = LSMASH_MAX( file->max_3gpp_version, 5 );
-                break;
-            case ISOM_BRAND_TYPE_3GE6 :
-            case ISOM_BRAND_TYPE_3GG6 :
-            case ISOM_BRAND_TYPE_3GP6 :
-            case ISOM_BRAND_TYPE_3GR6 :
-            case ISOM_BRAND_TYPE_3GS6 :
-                file->max_3gpp_version = LSMASH_MAX( file->max_3gpp_version, 6 );
-                break;
-            case ISOM_BRAND_TYPE_3GP7 :
-                file->max_3gpp_version = LSMASH_MAX( file->max_3gpp_version, 7 );
-                break;
-            case ISOM_BRAND_TYPE_3GP8 :
-                file->max_3gpp_version = LSMASH_MAX( file->max_3gpp_version, 8 );
-                break;
-            case ISOM_BRAND_TYPE_3GE9 :
-            case ISOM_BRAND_TYPE_3GF9 :
-            case ISOM_BRAND_TYPE_3GG9 :
-            case ISOM_BRAND_TYPE_3GH9 :
-            case ISOM_BRAND_TYPE_3GM9 :
-            case ISOM_BRAND_TYPE_3GP9 :
-            case ISOM_BRAND_TYPE_3GR9 :
-            case ISOM_BRAND_TYPE_3GS9 :
-            case ISOM_BRAND_TYPE_3GT9 :
-                file->max_3gpp_version = LSMASH_MAX( file->max_3gpp_version, 9 );
-                break;
-            default :
-                break;
-        }
-        switch( brand )
-        {
-            case ISOM_BRAND_TYPE_AVC1 :
-            case ISOM_BRAND_TYPE_ISO2 :
-            case ISOM_BRAND_TYPE_ISO3 :
-            case ISOM_BRAND_TYPE_ISO4 :
-            case ISOM_BRAND_TYPE_ISO5 :
-            case ISOM_BRAND_TYPE_ISO6 :
-                file->avc_extensions = 1;
-                break;
-            case ISOM_BRAND_TYPE_3GP4 :
-            case ISOM_BRAND_TYPE_3GP5 :
-            case ISOM_BRAND_TYPE_3GP6 :
-            case ISOM_BRAND_TYPE_3GP7 :
-            case ISOM_BRAND_TYPE_3GP8 :
-            case ISOM_BRAND_TYPE_3GP9 :
-                file->forbid_tref = 1;
-                break;
-            case ISOM_BRAND_TYPE_3GH9 :
-            case ISOM_BRAND_TYPE_3GM9 :
-            case ISOM_BRAND_TYPE_DASH :
-            case ISOM_BRAND_TYPE_DSMS :
-            case ISOM_BRAND_TYPE_LMSG :
-            case ISOM_BRAND_TYPE_MSDH :
-            case ISOM_BRAND_TYPE_MSIX :
-            case ISOM_BRAND_TYPE_SIMS :
-                file->media_segment = 1;
-                break;
-            default :
-                break;
-        }
-    }
-    file->isom_compatible = !file->qt_compatible
-                          || file->mp4_version1
-                          || file->mp4_version2
-                          || file->itunes_movie
-                          || file->max_3gpp_version;
-    file->undefined_64_ver = file->qt_compatible || file->itunes_movie;
-    if( file->flags & LSMASH_FILE_MODE_WRITE )
-    {
-        /* Media Segment is incompatible with ISO Base Media File Format version 4 or former must be compatible with
-         * version 6 or later since it requires default-base-is-moof and Track Fragment Base Media Decode Time Box. */
-        if( file->media_segment && (file->min_isom_version < 5 || (file->max_isom_version && file->max_isom_version < 6)) )
-            return -1;
-        file->allow_moof_base = (file->max_isom_version >= 5 && file->min_isom_version >= 5)
-                             || (file->max_isom_version == 0 && file->min_isom_version == UINT8_MAX && file->media_segment);
-    }
-    return 0;
 }
 
 uint32_t isom_get_sample_count( isom_trak_t *trak )
@@ -894,15 +759,16 @@ static int isom_replace_last_sample_delta( isom_stbl_t *stbl, uint32_t sample_de
      || !stbl->stts->list
      || !stbl->stts->list->tail
      || !stbl->stts->list->tail->data )
-        return -1;
+        return LSMASH_ERR_NAMELESS;
     isom_stts_entry_t *last_stts_data = (isom_stts_entry_t *)stbl->stts->list->tail->data;
     if( sample_delta != last_stts_data->sample_delta )
     {
         if( last_stts_data->sample_count > 1 )
         {
             last_stts_data->sample_count -= 1;
-            if( isom_add_stts_entry( stbl, sample_delta ) )
-                return -1;
+            int err = isom_add_stts_entry( stbl, sample_delta );
+            if( err < 0 )
+                return err;
         }
         else
             last_stts_data->sample_delta = sample_delta;
@@ -921,7 +787,7 @@ static int isom_update_mdhd_duration( isom_trak_t *trak, uint32_t last_sample_de
      || !trak->mdia->minf->stbl
      || !trak->mdia->minf->stbl->stts
      || !trak->mdia->minf->stbl->stts->list )
-        return -1;
+        return LSMASH_ERR_INVALID_DATA;
     lsmash_file_t *file = trak->file;
     isom_mdhd_t *mdhd = trak->mdia->mdhd;
     isom_stbl_t *stbl = trak->mdia->minf->stbl;
@@ -934,7 +800,7 @@ static int isom_update_mdhd_duration( isom_trak_t *trak, uint32_t last_sample_de
     {
         /* Return error if non-fragmented movie has no samples. */
         if( !file->fragment && !stts->list->entry_count )
-            return -1;
+            return LSMASH_ERR_INVALID_DATA;
         return 0;
     }
     /* Now we have at least 1 sample, so do stts_entry. */
@@ -948,19 +814,20 @@ static int isom_update_mdhd_duration( isom_trak_t *trak, uint32_t last_sample_de
     {
         /* use dts instead of cts */
         mdhd->duration = isom_get_dts( stts, sample_count );
+        int err;
         if( last_sample_delta )
         {
             mdhd->duration += last_sample_delta;
-            if( isom_replace_last_sample_delta( stbl, last_sample_delta ) )
-                return -1;
+            if( (err = isom_replace_last_sample_delta( stbl, last_sample_delta )) < 0 )
+                return err;
         }
         else if( last_stts_data->sample_count > 1 )
             mdhd->duration += last_stts_data->sample_delta; /* no need to update last_stts_data->sample_delta */
         else
         {
             /* Remove the last entry. */
-            if( lsmash_remove_entry_tail( stts->list, NULL ) )
-                return -1;
+            if( (err = lsmash_remove_entry_tail( stts->list, NULL )) < 0 )
+                return err;
             /* copy the previous sample_delta. */
             ++ ((isom_stts_entry_t *)stts->list->tail->data)->sample_count;
             mdhd->duration += ((isom_stts_entry_t *)stts->list->tail->data)->sample_delta;
@@ -970,7 +837,7 @@ static int isom_update_mdhd_duration( isom_trak_t *trak, uint32_t last_sample_de
     {
         if( !ctts->list
          ||  ctts->list->entry_count == 0 )
-            return -1;
+            return LSMASH_ERR_INVALID_DATA;
         uint64_t dts        = 0;
         uint64_t max_cts    = 0;
         uint64_t max2_cts   = 0;
@@ -985,11 +852,11 @@ static int isom_update_mdhd_duration( isom_trak_t *trak, uint32_t last_sample_de
         for( uint32_t i = 0; i < sample_count; i++ )
         {
             if( !ctts_entry || !stts_entry )
-                return -1;
+                return LSMASH_ERR_INVALID_DATA;
             isom_stts_entry_t *stts_data = (isom_stts_entry_t *)stts_entry->data;
             isom_ctts_entry_t *ctts_data = (isom_ctts_entry_t *)ctts_entry->data;
             if( !stts_data || !ctts_data )
-                return -1;
+                return LSMASH_ERR_INVALID_DATA;
             uint64_t cts;
             if( ctd_shift )
             {
@@ -1048,8 +915,9 @@ static int isom_update_mdhd_duration( isom_trak_t *trak, uint32_t last_sample_de
             else
                 mdhd->duration = dts + last_sample_delta;   /* media duration must not less than last dts. */
         }
-        if( isom_replace_last_sample_delta( stbl, last_sample_delta ) )
-            return -1;
+        int err = isom_replace_last_sample_delta( stbl, last_sample_delta );
+        if( err < 0 )
+            return err;
         /* Explicit composition information and timeline shifting  */
         if( cslg || file->qt_compatible || file->max_isom_version >= 4 )
         {
@@ -1067,8 +935,8 @@ static int isom_update_mdhd_duration( isom_trak_t *trak, uint32_t last_sample_de
             {
                 if( !cslg )
                 {
-                    if( isom_add_cslg( trak->mdia->minf->stbl ) )
-                        return -1;
+                    if( !isom_add_cslg( trak->mdia->minf->stbl ) )
+                        return LSMASH_ERR_NAMELESS;
                     cslg = stbl->cslg;
                 }
                 cslg->compositionToDTSShift        = ctd_shift;
@@ -1078,11 +946,7 @@ static int isom_update_mdhd_duration( isom_trak_t *trak, uint32_t last_sample_de
                 cslg->compositionEndTime           = composition_end_time;
             }
             else
-            {
-                if( cslg )
-                    lsmash_free( cslg );
-                stbl->cslg = NULL;
-            }
+                isom_remove_box_by_itself( cslg );
         }
     }
     if( mdhd->duration > UINT32_MAX && !file->undefined_64_ver )
@@ -1095,7 +959,7 @@ static int isom_update_mvhd_duration( isom_moov_t *moov )
     if( !moov
      || !moov->mvhd
      || !moov->mvhd->file )
-        return -1;
+        return LSMASH_ERR_INVALID_DATA;
     isom_mvhd_t *mvhd = moov->mvhd;
     mvhd->duration = 0;
     for( lsmash_entry_t *entry = moov->trak_list.head; entry; entry = entry->next )
@@ -1104,7 +968,7 @@ static int isom_update_mvhd_duration( isom_moov_t *moov )
         isom_trak_t *data = (isom_trak_t *)entry->data;
         if( !data
          || !data->tkhd )
-            return -1;
+            return LSMASH_ERR_INVALID_DATA;
         mvhd->duration = entry != moov->trak_list.head
                        ? LSMASH_MAX( mvhd->duration, data->tkhd->duration )
                        : data->tkhd->duration;
@@ -1120,7 +984,7 @@ int isom_update_tkhd_duration( isom_trak_t *trak )
      || !trak->tkhd
      || !trak->file
      || !trak->file->moov )
-        return -1;
+        return LSMASH_ERR_INVALID_DATA;
     lsmash_file_t *file = trak->file;
     isom_tkhd_t   *tkhd = trak->tkhd;
     tkhd->duration = 0;
@@ -1133,9 +997,13 @@ int isom_update_tkhd_duration( isom_trak_t *trak )
          || !trak->mdia->mdhd
          || !file->moov->mvhd
          ||  trak->mdia->mdhd->timescale == 0 )
-            return -1;
-        if( trak->mdia->mdhd->duration == 0 && isom_update_mdhd_duration( trak, 0 ) )
-            return -1;
+            return LSMASH_ERR_INVALID_DATA;
+        if( trak->mdia->mdhd->duration == 0 )
+        {
+            int err = isom_update_mdhd_duration( trak, 0 );
+            if( err < 0 )
+                return err;
+        }
         tkhd->duration = trak->mdia->mdhd->duration * ((double)file->moov->mvhd->timescale / trak->mdia->mdhd->timescale);
     }
     else
@@ -1145,7 +1013,7 @@ int isom_update_tkhd_duration( isom_trak_t *trak )
         {
             isom_elst_entry_t *data = (isom_elst_entry_t *)entry->data;
             if( !data )
-                return -1;
+                return LSMASH_ERR_INVALID_DATA;
             tkhd->duration += data->segment_duration;
         }
     }
@@ -1158,18 +1026,21 @@ int isom_update_tkhd_duration( isom_trak_t *trak )
 
 int lsmash_update_track_duration( lsmash_root_t *root, uint32_t track_ID, uint32_t last_sample_delta )
 {
-    if( !root )
-        return -1;
+    if( isom_check_initializer_present( root ) < 0 )
+        return LSMASH_ERR_FUNCTION_PARAM;
     lsmash_file_t *file = root->file;
-    isom_trak_t *trak = isom_get_trak( file, track_ID );
+    isom_trak_t   *trak = isom_get_trak( file, track_ID );
     if( !trak )
-        return -1;
-    if( isom_update_mdhd_duration( trak, last_sample_delta ) )
-        return -1;
+        return LSMASH_ERR_NAMELESS;
+    int err = isom_update_mdhd_duration( trak, last_sample_delta );
+    if( err < 0 )
+        return err;
     /* If the presentation won't be extended and this track has any edit, we don't change or update duration in tkhd. */
-    return (!file->fragment && trak->edts && trak->edts->elst)
-         ? isom_update_mvhd_duration( file->moov )  /* Only update movie duration. */
-         : isom_update_tkhd_duration( trak );       /* Also update movie duration internally. */
+    if( !file->fragment && trak->edts && trak->edts->elst )
+        err = isom_update_mvhd_duration( file->moov );  /* Only update movie duration. */
+    else
+        err = isom_update_tkhd_duration( trak );        /* Also update movie duration internally. */
+    return err;
 }
 
 static inline int isom_increment_sample_number_in_entry( uint32_t *sample_number_in_entry, uint32_t sample_count_in_entry, lsmash_entry_t **entry )
@@ -1185,7 +1056,7 @@ static inline int isom_increment_sample_number_in_entry( uint32_t *sample_number
     {
         *entry = (*entry)->next;
         if( *entry && !(*entry)->data )
-            return -1;
+            return LSMASH_ERR_INVALID_DATA;
     }
     return 0;
 }
@@ -1200,7 +1071,7 @@ static int isom_calculate_bitrate_description( isom_mdia_t *mdia, uint32_t *buff
     isom_stts_entry_t *stts_data    = NULL;
     isom_stsc_entry_t *stsc_data    = NULL;
     if( next_stsc_entry && !next_stsc_entry->data )
-        return -1;
+        return LSMASH_ERR_INVALID_DATA;
     uint32_t rate                   = 0;
     uint64_t dts                    = 0;
     uint32_t time_wnd               = 0;
@@ -1213,6 +1084,7 @@ static int isom_calculate_bitrate_description( isom_mdia_t *mdia, uint32_t *buff
     *avgBitrate   = 0;
     while( stts_entry )
     {
+        int err;
         if( !stsc_data || sample_number_in_chunk == stsc_data->samples_per_chunk )
         {
             /* Move the next chunk. */
@@ -1224,7 +1096,7 @@ static int isom_calculate_bitrate_description( isom_mdia_t *mdia, uint32_t *buff
                 /* Just skip broken next entry. */
                 next_stsc_entry = next_stsc_entry->next;
                 if( next_stsc_entry && !next_stsc_entry->data )
-                    return -1;
+                    return LSMASH_ERR_INVALID_DATA;
             }
             /* Check if the next chunk belongs to the next sequence of chunks. */
             if( next_stsc_entry && ((isom_stsc_entry_t *)next_stsc_entry->data)->first_chunk == chunk_number )
@@ -1232,7 +1104,7 @@ static int isom_calculate_bitrate_description( isom_mdia_t *mdia, uint32_t *buff
                 stsc_entry = next_stsc_entry;
                 next_stsc_entry = next_stsc_entry->next;
                 if( next_stsc_entry && !next_stsc_entry->data )
-                    return -1;
+                    return LSMASH_ERR_INVALID_DATA;
                 stsc_data = (isom_stsc_entry_t *)stsc_entry->data;
                 /* Check if the next contiguous chunks belong to given sample description. */
                 if( stsc_data->sample_description_index != sample_description_index )
@@ -1257,7 +1129,7 @@ static int isom_calculate_bitrate_description( isom_mdia_t *mdia, uint32_t *buff
                         /* Just skip the next entry. */
                         next_stsc_entry = next_stsc_entry->next;
                         if( next_stsc_entry && !next_stsc_entry->data )
-                            return -1;
+                            return LSMASH_ERR_INVALID_DATA;
                     }
                     if( !next_stsc_entry )
                         break;      /* There is no more chunks which don't belong to given sample description. */
@@ -1272,8 +1144,10 @@ static int isom_calculate_bitrate_description( isom_mdia_t *mdia, uint32_t *buff
                         }
                         if( !stts_entry )
                             break;
-                        if( isom_increment_sample_number_in_entry( &sample_number_in_stts, ((isom_stts_entry_t *)stts_entry->data)->sample_count, &stts_entry ) )
-                            return -1;
+                        if( (err = isom_increment_sample_number_in_entry( &sample_number_in_stts,
+                                                                          ((isom_stts_entry_t *)stts_entry->data)->sample_count,
+                                                                          &stts_entry )) < 0 )
+                            return err;
                     }
                     if( (stsz->list && !stsz_entry) || !stts_entry )
                         break;
@@ -1291,7 +1165,7 @@ static int isom_calculate_bitrate_description( isom_mdia_t *mdia, uint32_t *buff
                 break;
             isom_stsz_entry_t *stsz_data = (isom_stsz_entry_t *)stsz_entry->data;
             if( !stsz_data )
-                return -1;
+                return LSMASH_ERR_INVALID_DATA;
             size = stsz_data->entry_size;
             stsz_entry = stsz_entry->next;
         }
@@ -1302,8 +1176,9 @@ static int isom_calculate_bitrate_description( isom_mdia_t *mdia, uint32_t *buff
             dts += stts_data->sample_delta;
         stts_data = (isom_stts_entry_t *)stts_entry->data;
         if( !stts_data )
-            return -1;
-        isom_increment_sample_number_in_entry( &sample_number_in_stts, stts_data->sample_count, &stts_entry );
+            return LSMASH_ERR_INVALID_DATA;
+        if( (err = isom_increment_sample_number_in_entry( &sample_number_in_stts, stts_data->sample_count, &stts_entry )) < 0 )
+            return err;
         /* Calculate bitrate description. */
         if( *bufferSizeDB < size )
             *bufferSizeDB = size;
@@ -1333,25 +1208,26 @@ int isom_update_bitrate_description( isom_mdia_t *mdia )
      || !mdia->mdhd
      || !mdia->minf
      || !mdia->minf->stbl )
-        return -1;
+        return LSMASH_ERR_INVALID_DATA;
     isom_stbl_t *stbl = mdia->minf->stbl;
     if( !stbl->stsd
      || !stbl->stsz
      || !stbl->stsc || !stbl->stsc->list
      || !stbl->stts || !stbl->stts->list )
-        return -1;
+        return LSMASH_ERR_INVALID_DATA;
     uint32_t sample_description_index = 0;
     for( lsmash_entry_t *entry = stbl->stsd->list.head; entry; entry = entry->next )
     {
         isom_sample_entry_t *sample_entry = (isom_sample_entry_t *)entry->data;
         if( !sample_entry )
-            return -1;
+            return LSMASH_ERR_INVALID_DATA;
         ++sample_description_index;
+        int      err;
         uint32_t bufferSizeDB;
         uint32_t maxBitrate;
         uint32_t avgBitrate;
         /* set bitrate info */
-        lsmash_codec_type_t sample_type = (lsmash_codec_type_t)sample_entry->type;
+        lsmash_codec_type_t sample_type = sample_entry->type;
         if( lsmash_check_codec_type_identical( sample_type, ISOM_CODEC_TYPE_AVC1_VIDEO )
          || lsmash_check_codec_type_identical( sample_type, ISOM_CODEC_TYPE_AVC2_VIDEO )
          || lsmash_check_codec_type_identical( sample_type, ISOM_CODEC_TYPE_AVC3_VIDEO )
@@ -1361,12 +1237,12 @@ int isom_update_bitrate_description( isom_mdia_t *mdia )
         {
             isom_visual_entry_t *stsd_data = (isom_visual_entry_t *)sample_entry;
             if( !stsd_data )
-                return -1;
+                return LSMASH_ERR_INVALID_DATA;
             isom_btrt_t *btrt = (isom_btrt_t *)isom_get_extension_box_format( &stsd_data->extensions, ISOM_BOX_TYPE_BTRT );
             if( btrt )
             {
-                if( isom_calculate_bitrate_description( mdia, &bufferSizeDB, &maxBitrate, &avgBitrate, sample_description_index ) )
-                    return -1;
+                if( (err = isom_calculate_bitrate_description( mdia, &bufferSizeDB, &maxBitrate, &avgBitrate, sample_description_index )) < 0 )
+                    return err;
                 btrt->bufferSizeDB = bufferSizeDB;
                 btrt->maxBitrate   = maxBitrate;
                 btrt->avgBitrate   = avgBitrate;
@@ -1376,46 +1252,46 @@ int isom_update_bitrate_description( isom_mdia_t *mdia )
         {
             isom_visual_entry_t *stsd_data = (isom_visual_entry_t *)sample_entry;
             if( !stsd_data )
-                return -1;
+                return LSMASH_ERR_INVALID_DATA;
             isom_esds_t *esds = (isom_esds_t *)isom_get_extension_box_format( &stsd_data->extensions, ISOM_BOX_TYPE_ESDS );
             if( !esds || !esds->ES )
-                return -1;
-            if( isom_calculate_bitrate_description( mdia, &bufferSizeDB, &maxBitrate, &avgBitrate, sample_description_index ) )
-                return -1;
+                return LSMASH_ERR_INVALID_DATA;
+            if( (err = isom_calculate_bitrate_description( mdia, &bufferSizeDB, &maxBitrate, &avgBitrate, sample_description_index )) < 0 )
+                return err;
             /* FIXME: avgBitrate is 0 only if VBR in proper. */
-            if( mp4sys_update_DecoderConfigDescriptor( esds->ES, bufferSizeDB, maxBitrate, 0 ) )
-                return -1;
+            if( (err = mp4sys_update_DecoderConfigDescriptor( esds->ES, bufferSizeDB, maxBitrate, 0 )) < 0 )
+                return err;
         }
         else if( lsmash_check_codec_type_identical( sample_type, ISOM_CODEC_TYPE_MP4A_AUDIO ) )
         {
             isom_audio_entry_t *stsd_data = (isom_audio_entry_t *)sample_entry;
             if( !stsd_data )
-                return -1;
+                return LSMASH_ERR_INVALID_DATA;
             isom_esds_t *esds = NULL;
             if( ((isom_audio_entry_t *)sample_entry)->version )
             {
                 /* MPEG-4 Audio in QTFF */
                 isom_wave_t *wave = (isom_wave_t *)isom_get_extension_box_format( &stsd_data->extensions, QT_BOX_TYPE_WAVE );
                 if( !wave )
-                    return -1;
+                    return LSMASH_ERR_INVALID_DATA;
                 esds = (isom_esds_t *)isom_get_extension_box_format( &wave->extensions, ISOM_BOX_TYPE_ESDS );
             }
             else
                 esds = (isom_esds_t *)isom_get_extension_box_format( &stsd_data->extensions, ISOM_BOX_TYPE_ESDS );
             if( !esds || !esds->ES )
-                return -1;
-            if( isom_calculate_bitrate_description( mdia, &bufferSizeDB, &maxBitrate, &avgBitrate, sample_description_index ) )
-                return -1;
+                return LSMASH_ERR_INVALID_DATA;
+            if( (err = isom_calculate_bitrate_description( mdia, &bufferSizeDB, &maxBitrate, &avgBitrate, sample_description_index )) < 0 )
+                return err;
             /* FIXME: avgBitrate is 0 only if VBR in proper. */
-            if( mp4sys_update_DecoderConfigDescriptor( esds->ES, bufferSizeDB, maxBitrate, 0 ) )
-                return -1;
+            if( (err = mp4sys_update_DecoderConfigDescriptor( esds->ES, bufferSizeDB, maxBitrate, 0 )) < 0 )
+                return err;
         }
         else if( lsmash_check_codec_type_identical( sample_type, ISOM_CODEC_TYPE_ALAC_AUDIO )
               || lsmash_check_codec_type_identical( sample_type,   QT_CODEC_TYPE_ALAC_AUDIO ) )
         {
             isom_audio_entry_t *alac = (isom_audio_entry_t *)sample_entry;
             if( !alac )
-                return -1;
+                return LSMASH_ERR_INVALID_DATA;
             uint8_t *exdata      = NULL;
             uint32_t exdata_size = 0;
             isom_box_t *alac_ext = isom_get_extension_box( &alac->extensions, QT_BOX_TYPE_WAVE );
@@ -1431,7 +1307,7 @@ int isom_update_bitrate_description( isom_mdia_t *mdia )
                     isom_wave_t *wave     = (isom_wave_t *)alac_ext;
                     isom_box_t  *wave_ext = isom_get_extension_box( &wave->extensions, QT_BOX_TYPE_ALAC );
                     if( !wave_ext || !(wave_ext->manager & LSMASH_BINARY_CODED_BOX) )
-                        return -1;
+                        return LSMASH_ERR_INVALID_DATA;
                     exdata      = wave_ext->binary;
                     exdata_size = wave_ext->size;
                 }
@@ -1441,14 +1317,14 @@ int isom_update_bitrate_description( isom_mdia_t *mdia )
                 /* Apple Lossless Audio inside ISO Base Media file format */
                 isom_box_t *ext = isom_get_extension_box( &alac->extensions, ISOM_BOX_TYPE_ALAC );
                 if( !ext || !(ext->manager & LSMASH_BINARY_CODED_BOX) )
-                    return -1;
+                    return LSMASH_ERR_INVALID_DATA;
                 exdata      = ext->binary;
                 exdata_size = ext->size;
             }
             if( !exdata || exdata_size < 36 )
-                return -1;
-            if( isom_calculate_bitrate_description( mdia, &bufferSizeDB, &maxBitrate, &avgBitrate, sample_description_index ) )
-                return -1;
+                return LSMASH_ERR_INVALID_DATA;
+            if( (err = isom_calculate_bitrate_description( mdia, &bufferSizeDB, &maxBitrate, &avgBitrate, sample_description_index )) < 0 )
+                return err;
             exdata += 24;
             /* maxFrameBytes */
             LSMASH_SET_BE32( &exdata[0], bufferSizeDB );
@@ -1459,7 +1335,7 @@ int isom_update_bitrate_description( isom_mdia_t *mdia )
         {
             isom_box_t *ext = isom_get_extension_box( &sample_entry->extensions, QT_BOX_TYPE_WAVE );
             if( !ext )
-                return -1;
+                return LSMASH_ERR_INVALID_DATA;
             uint8_t *exdata      = NULL;
             uint32_t exdata_size = 0;
             if( ext->manager & LSMASH_BINARY_CODED_BOX )
@@ -1469,20 +1345,20 @@ int isom_update_bitrate_description( isom_mdia_t *mdia )
                 isom_wave_t *wave     = (isom_wave_t *)ext;
                 isom_box_t  *wave_ext = isom_get_extension_box( &wave->extensions, sample_type );
                 if( !wave_ext || !(wave_ext->manager & LSMASH_BINARY_CODED_BOX) )
-                    return -1;
+                    return LSMASH_ERR_INVALID_DATA;
                 exdata      = wave_ext->binary;
                 exdata_size = wave_ext->size;
             }
             /* Check whether exdata is valid or not. */
             if( !exdata || exdata_size < ISOM_BASEBOX_COMMON_SIZE + 18 )
-                return -1;
+                return LSMASH_ERR_INVALID_DATA;
             exdata += ISOM_BASEBOX_COMMON_SIZE;
             uint16_t cbSize = LSMASH_GET_LE16( &exdata[16] );
             if( exdata_size < ISOM_BASEBOX_COMMON_SIZE + 18 + cbSize )
-                return -1;
+                return LSMASH_ERR_INVALID_DATA;
             /* WAVEFORMATEX.nAvgBytesPerSec */
-            if( isom_calculate_bitrate_description( mdia, &bufferSizeDB, &maxBitrate, &avgBitrate, sample_description_index ) < 0 )
-                return -1;
+            if( (err = isom_calculate_bitrate_description( mdia, &bufferSizeDB, &maxBitrate, &avgBitrate, sample_description_index )) < 0 )
+                return err;
             uint32_t nAvgBytesPerSec = avgBitrate / 8;
             LSMASH_SET_LE32( &exdata[8], nAvgBytesPerSec );
             if( lsmash_check_codec_type_identical( sample_type, QT_CODEC_TYPE_FULLMP3_AUDIO )
@@ -1503,12 +1379,12 @@ int isom_update_bitrate_description( isom_mdia_t *mdia )
         {
             isom_audio_entry_t *dts_audio = (isom_audio_entry_t *)sample_entry;
             if( !dts_audio )
-                return -1;
+                return LSMASH_ERR_INVALID_DATA;
             isom_box_t *ext = isom_get_extension_box( &dts_audio->extensions, ISOM_BOX_TYPE_DDTS );
             if( !(ext && (ext->manager & LSMASH_BINARY_CODED_BOX) && ext->binary && ext->size >= 28) )
-                return -1;
-            if( isom_calculate_bitrate_description( mdia, &bufferSizeDB, &maxBitrate, &avgBitrate, sample_description_index ) )
-                return -1;
+                return LSMASH_ERR_INVALID_DATA;
+            if( (err = isom_calculate_bitrate_description( mdia, &bufferSizeDB, &maxBitrate, &avgBitrate, sample_description_index )) < 0 )
+                return err;
             if( !stbl->stsz->list )
                 maxBitrate = avgBitrate;
             uint8_t *exdata = ext->binary + 12;
@@ -1519,15 +1395,15 @@ int isom_update_bitrate_description( isom_mdia_t *mdia )
         {
             isom_audio_entry_t *eac3 = (isom_audio_entry_t *)sample_entry;
             if( !eac3 )
-                return -1;
+                return LSMASH_ERR_INVALID_DATA;
             isom_box_t *ext = isom_get_extension_box( &eac3->extensions, ISOM_BOX_TYPE_DEC3 );
             if( !(ext && (ext->manager & LSMASH_BINARY_CODED_BOX) && ext->binary && ext->size >= 10) )
-                return -1;
+                return LSMASH_ERR_INVALID_DATA;
             uint16_t bitrate;
             if( stbl->stsz->list )
             {
-                if( isom_calculate_bitrate_description( mdia, &bufferSizeDB, &maxBitrate, &avgBitrate, sample_description_index ) )
-                    return -1;
+                if( (err = isom_calculate_bitrate_description( mdia, &bufferSizeDB, &maxBitrate, &avgBitrate, sample_description_index )) < 0 )
+                    return err;
                 bitrate = maxBitrate / 1000;    /* Use maximum bitrate if VBR. */
             }
             else
@@ -1537,56 +1413,7 @@ int isom_update_bitrate_description( isom_mdia_t *mdia )
             exdata[1] = (bitrate & 0x1f) << 3;
         }
     }
-    return sample_description_index ? 0 : -1;
-}
-
-static int isom_check_mandatory_boxes( lsmash_file_t *file )
-{
-    if( !file
-     || !file->moov
-     || !file->moov->mvhd )
-        return -1;
-    /* A movie requires at least one track. */
-    if( !file->moov->trak_list.head )
-        return -1;
-    for( lsmash_entry_t *entry = file->moov->trak_list.head; entry; entry = entry->next )
-    {
-        isom_trak_t *trak = (isom_trak_t *)entry->data;
-        if( !trak
-         || !trak->tkhd
-         || !trak->mdia
-         || !trak->mdia->mdhd
-         || !trak->mdia->hdlr
-         || !trak->mdia->minf
-         || !trak->mdia->minf->dinf
-         || !trak->mdia->minf->dinf->dref
-         || !trak->mdia->minf->stbl
-         || !trak->mdia->minf->stbl->stsd
-         || !trak->mdia->minf->stbl->stsz
-         || !trak->mdia->minf->stbl->stts
-         || !trak->mdia->minf->stbl->stsc
-         || !trak->mdia->minf->stbl->stco )
-            return -1;
-        if( file->qt_compatible && !trak->mdia->minf->hdlr )
-            return -1;
-        isom_stbl_t *stbl = trak->mdia->minf->stbl;
-        if( !stbl->stsd->list.head )
-            return -1;
-        if( !file->fragment
-         && (!stbl->stsd->list.head
-          || !stbl->stts->list || !stbl->stts->list->head
-          || !stbl->stsc->list || !stbl->stsc->list->head
-          || !stbl->stco->list || !stbl->stco->list->head) )
-            return -1;
-    }
-    if( !file->fragment )
-        return 0;
-    if( !file->moov->mvex )
-        return -1;
-    for( lsmash_entry_t *entry = file->moov->mvex->trex_list.head; entry; entry = entry->next )
-        if( !entry->data )  /* trex */
-            return -1;
-    return 0;
+    return sample_description_index ? 0 : LSMASH_ERR_INVALID_DATA;
 }
 
 static inline uint64_t isom_get_current_mp4time( void )
@@ -1598,7 +1425,7 @@ static int isom_set_media_creation_time( isom_trak_t *trak, uint64_t current_mp4
 {
     if( !trak->mdia
      || !trak->mdia->mdhd )
-        return -1;
+        return LSMASH_ERR_NAMELESS;
     isom_mdhd_t *mdhd = trak->mdia->mdhd;
     if( mdhd->creation_time == 0 )
         mdhd->creation_time = mdhd->modification_time = current_mp4time;
@@ -1609,13 +1436,11 @@ static int isom_set_track_creation_time( isom_trak_t *trak, uint64_t current_mp4
 {
     if( !trak
      || !trak->tkhd )
-        return -1;
+        return LSMASH_ERR_NAMELESS;
     isom_tkhd_t *tkhd = trak->tkhd;
     if( tkhd->creation_time == 0 )
         tkhd->creation_time = tkhd->modification_time = current_mp4time;
-    if( isom_set_media_creation_time( trak, current_mp4time ) )
-        return -1;
-    return 0;
+    return isom_set_media_creation_time( trak, current_mp4time );
 }
 
 static int isom_set_movie_creation_time( lsmash_file_t *file )
@@ -1623,11 +1448,14 @@ static int isom_set_movie_creation_time( lsmash_file_t *file )
     if( !file
      || !file->moov
      || !file->moov->mvhd )
-        return -1;
+        return LSMASH_ERR_NAMELESS;
     uint64_t current_mp4time = isom_get_current_mp4time();
-    for( uint32_t i = 1; i <= file->moov->trak_list.entry_count; i++ )
-        if( isom_set_track_creation_time( isom_get_trak( file, i ), current_mp4time ) )
-            return -1;
+    for( lsmash_entry_t *entry = file->moov->trak_list.head; entry; entry = entry->next )
+    {
+        int err = isom_set_track_creation_time( (isom_trak_t *)entry->data, current_mp4time );
+        if( err < 0 )
+            return err;
+    }
     isom_mvhd_t *mvhd = file->moov->mvhd;
     if( mvhd->creation_time == 0 )
         mvhd->creation_time = mvhd->modification_time = current_mp4time;
@@ -1639,7 +1467,7 @@ int isom_setup_handler_reference( isom_hdlr_t *hdlr, uint32_t media_type )
     isom_box_t    *parent = hdlr->parent;
     lsmash_file_t *file   = hdlr->file;
     if( !parent || !file )
-        return -1;
+        return LSMASH_ERR_NAMELESS;
     isom_mdia_t *mdia = lsmash_check_box_type_identical( parent->type, ISOM_BOX_TYPE_MDIA ) ? (isom_mdia_t *)parent : NULL;
     isom_meta_t *meta = lsmash_check_box_type_identical( parent->type, ISOM_BOX_TYPE_META ) ? (isom_meta_t *)parent
                       : lsmash_check_box_type_identical( parent->type,   QT_BOX_TYPE_META ) ? (isom_meta_t *)parent : NULL;
@@ -1686,7 +1514,7 @@ int isom_setup_handler_reference( isom_hdlr_t *hdlr, uint32_t media_type )
     uint32_t name_length = 15 + subtype_name_length + type_name_length + file->isom_compatible + file->qt_compatible;
     uint8_t *name = lsmash_malloc( name_length );
     if( !name )
-        return -1;
+        return LSMASH_ERR_MEMORY_ALLOC;
     if( file->qt_compatible )
         name[0] = name_length & 0xff;
     memcpy( name + file->qt_compatible, "L-SMASH ", 8 );
@@ -1708,11 +1536,10 @@ int isom_setup_handler_reference( isom_hdlr_t *hdlr, uint32_t media_type )
 
 void lsmash_delete_track( lsmash_root_t *root, uint32_t track_ID )
 {
-    if( !root
-     || !root->file
-     || !root->file->moov )
+    if( isom_check_initializer_present( root ) < 0
+     || !root->file->initializer->moov )
         return;
-    for( lsmash_entry_t *entry = root->file->moov->trak_list.head; entry; entry = entry->next )
+    for( lsmash_entry_t *entry = root->file->initializer->moov->trak_list.head; entry; entry = entry->next )
     {
         isom_trak_t *trak = (isom_trak_t *)entry->data;
         if( !trak
@@ -1728,7 +1555,7 @@ void lsmash_delete_track( lsmash_root_t *root, uint32_t track_ID )
 
 uint32_t lsmash_create_track( lsmash_root_t *root, lsmash_media_type media_type )
 {
-    if( !root || !root->file )
+    if( isom_check_initializer_present( root ) < 0 )
         return 0;
     lsmash_file_t *file = root->file;
     /* Don't allow to create a new track if the initial movie is already written. */
@@ -1741,49 +1568,50 @@ uint32_t lsmash_create_track( lsmash_root_t *root, lsmash_media_type media_type 
      || !trak->file->moov
      || !trak->file->moov->mvhd )
         goto fail;
-    if( isom_add_tkhd( trak )
-     || isom_add_mdia( trak )
-     || isom_add_mdhd( trak->mdia )
-     || isom_add_minf( trak->mdia )
-     || isom_add_dinf( trak->mdia->minf )
-     || isom_add_dref( trak->mdia->minf->dinf )
-     || isom_add_stbl( trak->mdia->minf )
-     || isom_add_stsd( trak->mdia->minf->stbl )
-     || isom_add_stts( trak->mdia->minf->stbl )
-     || isom_add_stsc( trak->mdia->minf->stbl )
-     || isom_add_stco( trak->mdia->minf->stbl )
-     || isom_add_stsz( trak->mdia->minf->stbl ) )
+    if( !isom_add_tkhd( trak )
+     || !isom_add_mdia( trak )
+     || !isom_add_mdhd( trak->mdia )
+     || !isom_add_minf( trak->mdia )
+     || !isom_add_dinf( trak->mdia->minf )
+     || !isom_add_dref( trak->mdia->minf->dinf )
+     || !isom_add_stbl( trak->mdia->minf )
+     || !isom_add_stsd( trak->mdia->minf->stbl )
+     || !isom_add_stts( trak->mdia->minf->stbl )
+     || !isom_add_stsc( trak->mdia->minf->stbl )
+     || !isom_add_stco( trak->mdia->minf->stbl )
+     || !isom_add_stsz( trak->mdia->minf->stbl ) )
         goto fail;
-    if( isom_add_hdlr( trak->mdia )
-     || isom_setup_handler_reference( trak->mdia->hdlr, media_type ) )
+    if( !isom_add_hdlr( trak->mdia )
+     || isom_setup_handler_reference( trak->mdia->hdlr, media_type ) < 0 )
         goto fail;
     if( file->qt_compatible )
     {
-        if( isom_add_hdlr( trak->mdia->minf )
-         || isom_setup_handler_reference( trak->mdia->minf->hdlr, QT_REFERENCE_HANDLER_TYPE_URL ) )
+        if( !isom_add_hdlr( trak->mdia->minf )
+         || isom_setup_handler_reference( trak->mdia->minf->hdlr, QT_REFERENCE_HANDLER_TYPE_URL ) < 0 )
             goto fail;
     }
     switch( media_type )
     {
         case ISOM_MEDIA_HANDLER_TYPE_VIDEO_TRACK :
-            if( isom_add_vmhd( trak->mdia->minf ) )
+            if( !isom_add_vmhd( trak->mdia->minf ) )
                 goto fail;
             trak->mdia->minf->vmhd->flags = 0x000001;
             break;
         case ISOM_MEDIA_HANDLER_TYPE_AUDIO_TRACK :
-            if( isom_add_smhd( trak->mdia->minf ) )
+            if( !isom_add_smhd( trak->mdia->minf ) )
                 goto fail;
+            trak->cache->is_audio = 1;
             break;
         case ISOM_MEDIA_HANDLER_TYPE_HINT_TRACK :
-            if( isom_add_hmhd( trak->mdia->minf ) )
+            if( !isom_add_hmhd( trak->mdia->minf ) )
                 goto fail;
             break;
         case ISOM_MEDIA_HANDLER_TYPE_TEXT_TRACK :
             if( file->qt_compatible || file->itunes_movie )
             {
-                if( isom_add_gmhd( trak->mdia->minf )
-                 || isom_add_gmin( trak->mdia->minf->gmhd )
-                 || isom_add_text( trak->mdia->minf->gmhd ) )
+                if( !isom_add_gmhd( trak->mdia->minf )
+                 || !isom_add_gmin( trak->mdia->minf->gmhd )
+                 || !isom_add_text( trak->mdia->minf->gmhd ) )
                     return 0;
                 /* Default Text Media Information Box. */
                 {
@@ -1797,7 +1625,7 @@ uint32_t lsmash_create_track( lsmash_root_t *root, lsmash_media_type media_type 
                 goto fail;  /* We support only reference text media track for chapter yet. */
             break;
         default :
-            if( isom_add_nmhd( trak->mdia->minf ) )
+            if( !isom_add_nmhd( trak->mdia->minf ) )
                 goto fail;
             break;
     }
@@ -1821,11 +1649,10 @@ fail:
 
 uint32_t lsmash_get_track_ID( lsmash_root_t *root, uint32_t track_number )
 {
-    if( !root
-     || !root->file
-     || !root->file->moov )
+    if( isom_check_initializer_present( root ) < 0
+     || !root->file->initializer->moov )
         return 0;
-    isom_trak_t *trak = (isom_trak_t *)lsmash_get_entry_data( &root->file->moov->trak_list, track_number );
+    isom_trak_t *trak = (isom_trak_t *)lsmash_get_entry_data( &root->file->initializer->moov->trak_list, track_number );
     if( !trak
      || !trak->tkhd )
         return 0;
@@ -1843,25 +1670,25 @@ void lsmash_initialize_track_parameters( lsmash_track_parameters_t *param )
 
 int lsmash_set_track_parameters( lsmash_root_t *root, uint32_t track_ID, lsmash_track_parameters_t *param )
 {
-    if( !root )
-        return -1;
+    if( isom_check_initializer_present( root ) < 0 )
+        return LSMASH_ERR_FUNCTION_PARAM;
     lsmash_file_t *file = root->file;
-    isom_trak_t *trak = isom_get_trak( file, track_ID );
+    isom_trak_t   *trak = isom_get_trak( file, track_ID );
     if( !trak
      || !trak->mdia
      || !trak->mdia->hdlr
      || !file->moov->mvhd )
-        return -1;
+        return LSMASH_ERR_NAMELESS;
     /* Prepare Track Aperture Modes if required. */
     if( file->qt_compatible && param->aperture_modes )
     {
-        if( !trak->tapt && isom_add_tapt( trak ) )
-            return -1;
+        if( !trak->tapt && !isom_add_tapt( trak ) )
+            return LSMASH_ERR_NAMELESS;
         isom_tapt_t *tapt = trak->tapt;
-        if( (!tapt->clef && isom_add_clef( tapt ))
-         || (!tapt->prof && isom_add_prof( tapt ))
-         || (!tapt->enof && isom_add_enof( tapt )) )
-            return -1;
+        if( (!tapt->clef && !isom_add_clef( tapt ))
+         || (!tapt->prof && !isom_add_prof( tapt ))
+         || (!tapt->enof && !isom_add_enof( tapt )) )
+            return LSMASH_ERR_NAMELESS;
     }
     else
         isom_remove_box_by_itself( trak->tapt );
@@ -1926,11 +1753,11 @@ int lsmash_set_track_parameters( lsmash_root_t *root, uint32_t track_ID, lsmash_
 
 int lsmash_get_track_parameters( lsmash_root_t *root, uint32_t track_ID, lsmash_track_parameters_t *param )
 {
-    if( !root )
-        return -1;
-    isom_trak_t *trak = isom_get_trak( root->file, track_ID );
+    if( isom_check_initializer_present( root ) < 0 )
+        return LSMASH_ERR_FUNCTION_PARAM;
+    isom_trak_t *trak = isom_get_trak( root->file->initializer, track_ID );
     if( !trak )
-        return -1;
+        return LSMASH_ERR_NAMELESS;
     isom_tkhd_t *tkhd = trak->tkhd;
     param->mode            = tkhd->flags;
     param->track_ID        = tkhd->track_ID;
@@ -1946,13 +1773,154 @@ int lsmash_get_track_parameters( lsmash_root_t *root, uint32_t track_ID, lsmash_
     return 0;
 }
 
+static inline int check_dref_presence( isom_trak_t *trak )
+{
+    if( !trak
+     || !trak->mdia
+     || !trak->mdia->minf
+     || !trak->mdia->minf->dinf
+     || !trak->mdia->minf->dinf->dref )
+        return LSMASH_ERR_NAMELESS;
+    return 0;
+}
+
+uint32_t lsmash_count_data_reference
+(
+    lsmash_root_t *root,
+    uint32_t       track_ID
+)
+{
+    if( isom_check_initializer_present( root ) < 0 )
+        return 0;
+    isom_trak_t *trak = isom_get_trak( root->file->initializer, track_ID );
+    if( check_dref_presence( trak ) < 0 )
+        return 0;
+    return trak->mdia->minf->dinf->dref->list.entry_count;
+}
+
+int lsmash_get_data_reference
+(
+    lsmash_root_t           *root,
+    uint32_t                 track_ID,
+    lsmash_data_reference_t *data_ref
+)
+{
+    if( isom_check_initializer_present( root ) < 0 || !data_ref )
+        return LSMASH_ERR_FUNCTION_PARAM;
+    isom_trak_t *trak = isom_get_trak( root->file->initializer, track_ID );
+    if( check_dref_presence( trak ) < 0 )
+        return LSMASH_ERR_NAMELESS;
+    isom_dref_entry_t *url = lsmash_get_entry_data( &trak->mdia->minf->dinf->dref->list, data_ref->index );
+    if( !url )
+        return LSMASH_ERR_NAMELESS;
+    if( !(url->flags & 0x000001) && url->location )
+    {
+        int length = strlen( url->location );
+        char *location = lsmash_malloc( length + 1 );
+        if( !location )
+            return LSMASH_ERR_MEMORY_ALLOC;
+        memcpy( location, url->location, length );
+        location[length] = '\0';
+        data_ref->location = location;
+    }
+    else
+        data_ref->location = NULL;
+    return 0;
+}
+
+void lsmash_cleanup_data_reference
+(
+    lsmash_data_reference_t *data_ref
+)
+{
+    if( !data_ref )
+        return;
+    lsmash_freep( &data_ref->location );
+}
+
+int lsmash_create_data_reference
+(
+    lsmash_root_t           *root,
+    uint32_t                 track_ID,
+    lsmash_data_reference_t *data_ref,
+    lsmash_file_t           *file
+)
+{
+    /* At present, we don't support external data references for movie fragments.
+     * Note that, for external media data, default-base-is-moof is meaningless since relative
+     * offsets from Movie Fragment Boxes make no sense.
+     * In the future, the condition of !(file->flags & LSMASH_FILE_MODE_WRITE) may be removed
+     * for the implementation which does not write actually and does reference read-only file. */
+    if( !root || !file || file->root != root
+     || (!(file->flags & LSMASH_FILE_MODE_MEDIA) && !(file->flags & LSMASH_FILE_MODE_INITIALIZATION))
+     || !(file->flags & LSMASH_FILE_MODE_WRITE)
+     || (root->file != file && ((file->flags & LSMASH_FILE_MODE_FRAGMENTED) || file->fragment))
+     || !data_ref )
+        return LSMASH_ERR_FUNCTION_PARAM;
+    isom_trak_t *trak = isom_get_trak( root->file, track_ID );
+    if( check_dref_presence( trak ) < 0 )
+        return LSMASH_ERR_NAMELESS;
+    isom_dref_entry_t *url = isom_add_dref_entry( trak->mdia->minf->dinf->dref, ISOM_BOX_TYPE_URL );
+    if( !url )
+        return LSMASH_ERR_NAMELESS;
+    if( !data_ref->location || root->file == file )
+    {
+        /* Media data is in the same file. */
+        url->flags    = 0x000001;
+        url->ref_file = root->file;
+    }
+    else
+    {
+        /* Set the location of the file. */
+        int length = strlen( data_ref->location );
+        url->location = lsmash_malloc( length + 1 );
+        if( !url->location )
+        {
+            isom_remove_box_by_itself( url );
+            return LSMASH_ERR_MEMORY_ALLOC;
+        }
+        memcpy( url->location, data_ref->location, length );
+        url->location[length] = '\0';
+        url->location_length  = length + 1;
+        url->ref_file         = file;
+    }
+    data_ref->index = trak->mdia->minf->dinf->dref->list.entry_count;
+    return 0;
+}
+
+int lsmash_assign_data_reference
+(
+    lsmash_root_t *root,
+    uint32_t       track_ID,
+    uint32_t       data_ref_index,
+    lsmash_file_t *file
+)
+{
+    if( isom_check_initializer_present( root ) < 0
+     || !file || file->root != root
+     || !(file->flags & LSMASH_FILE_MODE_MEDIA)
+     || !(file->flags & LSMASH_FILE_MODE_READ)
+     || data_ref_index == 0 )
+        return LSMASH_ERR_FUNCTION_PARAM;
+    isom_trak_t *trak = isom_get_trak( root->file->initializer, track_ID );
+    if( check_dref_presence( trak ) < 0 )
+        return LSMASH_ERR_NAMELESS;
+    isom_dref_entry_t *url = (isom_dref_entry_t *)lsmash_get_entry_data( &trak->mdia->minf->dinf->dref->list, data_ref_index );
+    if( !url )
+        return LSMASH_ERR_NAMELESS;
+    if( !(url->flags & 0x000001) )
+        /* Reference an external media data. */
+        url->ref_file = file;
+    return 0;
+}
+
 static int isom_set_media_handler_name( lsmash_file_t *file, uint32_t track_ID, char *handler_name )
 {
     isom_trak_t *trak = isom_get_trak( file, track_ID );
     if( !trak
      || !trak->mdia
      || !trak->mdia->hdlr )
-        return -1;
+        return LSMASH_ERR_NAMELESS;
     isom_hdlr_t *hdlr = trak->mdia->hdlr;
     uint8_t *name        = NULL;
     uint32_t name_length = strlen( handler_name ) + file->isom_compatible + file->qt_compatible;
@@ -1965,7 +1933,7 @@ static int isom_set_media_handler_name( lsmash_file_t *file, uint32_t track_ID, 
     else
         name = hdlr->componentName;
     if( !name )
-        return -1;
+        return LSMASH_ERR_MEMORY_ALLOC;
     if( file->qt_compatible )
         name[0] = name_length & 0xff;
     memcpy( name + file->qt_compatible, handler_name, strlen( handler_name ) );
@@ -1983,7 +1951,7 @@ static int isom_set_data_handler_name( lsmash_file_t *file, uint32_t track_ID, c
      || !trak->mdia
      || !trak->mdia->minf
      || !trak->mdia->minf->hdlr )
-        return -1;
+        return LSMASH_ERR_NAMELESS;
     isom_hdlr_t *hdlr = trak->mdia->minf->hdlr;
     uint8_t *name        = NULL;
     uint32_t name_length = strlen( handler_name ) + file->isom_compatible + file->qt_compatible;
@@ -1996,7 +1964,7 @@ static int isom_set_data_handler_name( lsmash_file_t *file, uint32_t track_ID, c
     else
         name = hdlr->componentName;
     if( !name )
-        return -1;
+        return LSMASH_ERR_MEMORY_ALLOC;
     if( file->qt_compatible )
         name[0] = name_length & 0xff;
     memcpy( name + file->qt_compatible, handler_name, strlen( handler_name ) );
@@ -2009,9 +1977,9 @@ static int isom_set_data_handler_name( lsmash_file_t *file, uint32_t track_ID, c
 
 uint32_t lsmash_get_media_timescale( lsmash_root_t *root, uint32_t track_ID )
 {
-    if( !root )
+    if( isom_check_initializer_present( root ) < 0 )
         return 0;
-    isom_trak_t *trak = isom_get_trak( root->file, track_ID );
+    isom_trak_t *trak = isom_get_trak( root->file->initializer, track_ID );
     if( !trak
      || !trak->mdia
      || !trak->mdia->mdhd )
@@ -2021,9 +1989,9 @@ uint32_t lsmash_get_media_timescale( lsmash_root_t *root, uint32_t track_ID )
 
 uint64_t lsmash_get_media_duration( lsmash_root_t *root, uint32_t track_ID )
 {
-    if( !root )
+    if( isom_check_initializer_present( root ) < 0 )
         return 0;
-    isom_trak_t *trak = isom_get_trak( root->file, track_ID );
+    isom_trak_t *trak = isom_get_trak( root->file->initializer, track_ID );
     if( !trak
      || !trak->mdia
      || !trak->mdia->mdhd )
@@ -2033,9 +2001,9 @@ uint64_t lsmash_get_media_duration( lsmash_root_t *root, uint32_t track_ID )
 
 uint64_t lsmash_get_track_duration( lsmash_root_t *root, uint32_t track_ID )
 {
-    if( !root )
+    if( isom_check_initializer_present( root ) < 0 )
         return 0;
-    isom_trak_t *trak = isom_get_trak( root->file, track_ID );
+    isom_trak_t *trak = isom_get_trak( root->file->initializer, track_ID );
     if( !trak
      || !trak->tkhd )
         return 0;
@@ -2044,7 +2012,7 @@ uint64_t lsmash_get_track_duration( lsmash_root_t *root, uint32_t track_ID )
 
 uint32_t lsmash_get_last_sample_delta( lsmash_root_t *root, uint32_t track_ID )
 {
-    if( !root )
+    if( isom_check_initializer_present( root ) < 0 )
         return 0;
     isom_trak_t *trak = isom_get_trak( root->file, track_ID );
     if( !trak
@@ -2061,7 +2029,7 @@ uint32_t lsmash_get_last_sample_delta( lsmash_root_t *root, uint32_t track_ID )
 
 uint32_t lsmash_get_start_time_offset( lsmash_root_t *root, uint32_t track_ID )
 {
-    if( !root )
+    if( isom_check_initializer_present( root ) < 0 )
         return 0;
     isom_trak_t *trak = isom_get_trak( root->file, track_ID );
     if( !trak
@@ -2078,10 +2046,10 @@ uint32_t lsmash_get_start_time_offset( lsmash_root_t *root, uint32_t track_ID )
 
 uint32_t lsmash_get_composition_to_decode_shift( lsmash_root_t *root, uint32_t track_ID )
 {
-    if( !root )
+    if( isom_check_initializer_present( root ) < 0 )
         return 0;
-    lsmash_file_t *file = root->file;
-    isom_trak_t *trak = isom_get_trak( file, track_ID );
+    lsmash_file_t *file = root->file->initializer;
+    isom_trak_t   *trak = isom_get_trak( file, track_ID );
     if( !trak
      || !trak->mdia
      || !trak->mdia->minf
@@ -2105,7 +2073,7 @@ uint32_t lsmash_get_composition_to_decode_shift( lsmash_root_t *root, uint32_t t
     uint32_t ctd_shift = 0;
     uint32_t i         = 0;
     uint32_t j         = 0;
-    for( uint32_t k = 0; k < sample_count; i++ )
+    for( uint32_t k = 0; k < sample_count; k++ )
     {
         isom_stts_entry_t *stts_data = (isom_stts_entry_t *)stts_entry->data;
         isom_ctts_entry_t *ctts_data = (isom_ctts_entry_t *)ctts_entry->data;
@@ -2142,22 +2110,20 @@ uint16_t lsmash_pack_iso_language( char *iso_language )
 
 static int isom_iso2mac_language( uint16_t ISO_language, uint16_t *MAC_language )
 {
-    if( !MAC_language )
-        return -1;
+    assert( MAC_language );
     int i = 0;
     for( ; isom_languages[i].iso_name; i++ )
         if( ISO_language == isom_languages[i].iso_name )
             break;
     if( !isom_languages[i].iso_name )
-        return -1;
+        return LSMASH_ERR_NAMELESS;
     *MAC_language = isom_languages[i].mac_value;
     return 0;
 }
 
 static int isom_mac2iso_language( uint16_t MAC_language, uint16_t *ISO_language )
 {
-    if( !ISO_language )
-        return -1;
+    assert( ISO_language );
     int i = 0;
     for( ; isom_languages[i].iso_name; i++ )
         if( MAC_language == isom_languages[i].mac_value )
@@ -2172,7 +2138,7 @@ static int isom_set_media_language( lsmash_file_t *file, uint32_t track_ID, uint
     if( !trak
      || !trak->mdia
      || !trak->mdia->mdhd )
-        return -1;
+        return LSMASH_ERR_NAMELESS;
     uint16_t language = 0;
     if( file->isom_compatible )
     {
@@ -2180,8 +2146,9 @@ static int isom_set_media_language( lsmash_file_t *file, uint32_t track_ID, uint
             language = ISO_language;
         else if( MAC_language )
         {
-            if( isom_mac2iso_language( MAC_language, &language ) )
-                return -1;
+            int err = isom_mac2iso_language( MAC_language, &language );
+            if( err )
+                return err;
         }
         else
             language = ISOM_LANGUAGE_CODE_UNDEFINED;
@@ -2190,14 +2157,15 @@ static int isom_set_media_language( lsmash_file_t *file, uint32_t track_ID, uint
     {
         if( ISO_language )
         {
-            if( isom_iso2mac_language( ISO_language, &language ) )
-                return -1;
+            int err = isom_iso2mac_language( ISO_language, &language );
+            if( err )
+                return err;
         }
         else
             language = MAC_language;
     }
     else
-        return -1;
+        return LSMASH_ERR_INVALID_DATA;
     trak->mdia->mdhd->language = language;
     return 0;
 }
@@ -2208,7 +2176,7 @@ int isom_add_sample_grouping( isom_box_t *parent, isom_grouping_type grouping_ty
     isom_sbgp_t *sbgp;
     if( NULL == (sgpd = isom_add_sgpd( parent ))
      || NULL == (sbgp = isom_add_sbgp( parent )) )
-        return -1;
+        return LSMASH_ERR_NAMELESS;
     sbgp->grouping_type = grouping_type;
     sgpd->grouping_type = grouping_type;
     sgpd->version       = 1;    /* We use version 1 for Sample Group Description Box because it is recommended in the spec. */
@@ -2218,6 +2186,7 @@ int isom_add_sample_grouping( isom_box_t *parent, isom_grouping_type grouping_ty
             sgpd->default_length = 1;
             break;
         case ISOM_GROUP_TYPE_ROLL :
+        case ISOM_GROUP_TYPE_PROL :
             sgpd->default_length = 2;
             break;
         default :
@@ -2236,14 +2205,16 @@ static int isom_create_sample_grouping( isom_trak_t *trak, isom_grouping_type gr
             assert( file->max_isom_version >= 6 );
             break;
         case ISOM_GROUP_TYPE_ROLL :
+        case ISOM_GROUP_TYPE_PROL :
             assert( file->avc_extensions || file->qt_compatible );
             break;
         default :
             assert( 0 );
             break;
     }
-    if( isom_add_sample_grouping( (isom_box_t *)trak->mdia->minf->stbl, grouping_type ) < 0 )
-        return -1;
+    int err = isom_add_sample_grouping( (isom_box_t *)trak->mdia->minf->stbl, grouping_type );
+    if( err < 0 )
+        return err;
     if( trak->cache->fragment && file->max_isom_version >= 6 )
         switch( grouping_type )
         {
@@ -2251,6 +2222,7 @@ static int isom_create_sample_grouping( isom_trak_t *trak, isom_grouping_type gr
                 trak->cache->fragment->rap_grouping = 1;
                 break;
             case ISOM_GROUP_TYPE_ROLL :
+            case ISOM_GROUP_TYPE_PROL :
                 trak->cache->fragment->roll_grouping = 1;
                 break;
             default :
@@ -2268,47 +2240,48 @@ void lsmash_initialize_media_parameters( lsmash_media_parameters_t *param )
 
 int lsmash_set_media_parameters( lsmash_root_t *root, uint32_t track_ID, lsmash_media_parameters_t *param )
 {
-    if( !root )
-        return -1;
+    if( isom_check_initializer_present( root ) < 0 )
+        return LSMASH_ERR_FUNCTION_PARAM;
     lsmash_file_t *file = root->file;
-    isom_trak_t *trak = isom_get_trak( file, track_ID );
+    isom_trak_t   *trak = isom_get_trak( file, track_ID );
     if( !trak
      || !trak->mdia
      || !trak->mdia->mdhd
      || !trak->mdia->minf
      || !trak->mdia->minf->stbl )
-        return -1;
+        return LSMASH_ERR_NAMELESS;
     trak->mdia->mdhd->timescale = param->timescale;
-    if( isom_set_media_language( file, track_ID, param->ISO_language, param->MAC_language ) )
-        return -1;
+    int err = isom_set_media_language( file, track_ID, param->ISO_language, param->MAC_language );
+    if( err < 0 )
+        return err;
     if( param->media_handler_name
-     && isom_set_media_handler_name( file, track_ID, param->media_handler_name ) )
-        return -1;
+     && (err = isom_set_media_handler_name( file, track_ID, param->media_handler_name )) < 0 )
+        return err;
     if( file->qt_compatible && param->data_handler_name
-     && isom_set_data_handler_name( file, track_ID, param->data_handler_name ) )
-        return -1;
+     && (err = isom_set_data_handler_name( file, track_ID, param->data_handler_name )) < 0 )
+        return err;
     if( (file->avc_extensions || file->qt_compatible) && param->roll_grouping
-     && isom_create_sample_grouping( trak, ISOM_GROUP_TYPE_ROLL ) )
-        return -1;
+     && (err = isom_create_sample_grouping( trak, ISOM_GROUP_TYPE_ROLL )) < 0 )
+        return err;
     if( (file->max_isom_version >= 6) && param->rap_grouping
-     && isom_create_sample_grouping( trak, ISOM_GROUP_TYPE_RAP ) )
-        return -1;
+     && (err = isom_create_sample_grouping( trak, ISOM_GROUP_TYPE_RAP )) < 0 )
+        return err;
     return 0;
 }
 
 int lsmash_get_media_parameters( lsmash_root_t *root, uint32_t track_ID, lsmash_media_parameters_t *param )
 {
-    if( !root )
-        return -1;
-    lsmash_file_t *file = root->file;
-    isom_trak_t *trak = isom_get_trak( file, track_ID );
+    if( isom_check_initializer_present( root ) < 0 )
+        return LSMASH_ERR_FUNCTION_PARAM;
+    lsmash_file_t *file = root->file->initializer;
+    isom_trak_t   *trak = isom_get_trak( file, track_ID );
     if( !trak
      || !trak->mdia
      || !trak->mdia->mdhd
      || !trak->mdia->hdlr
      || !trak->mdia->minf
      || !trak->mdia->minf->stbl )
-        return -1;
+        return LSMASH_ERR_NAMELESS;
     isom_mdhd_t *mdhd = trak->mdia->mdhd;
     isom_stbl_t *stbl = trak->mdia->minf->stbl;
     param->timescale    = mdhd->timescale;
@@ -2318,12 +2291,12 @@ int lsmash_get_media_parameters( lsmash_root_t *root, uint32_t track_ID, lsmash_
     {
         isom_sbgp_t *sbgp;
         isom_sgpd_t *sgpd;
-        sbgp = isom_get_sample_to_group         ( stbl, ISOM_GROUP_TYPE_ROLL );
-        sgpd = isom_get_sample_group_description( stbl, ISOM_GROUP_TYPE_ROLL );
-        param->roll_grouping = sbgp && sgpd;
         sbgp = isom_get_sample_to_group         ( stbl, ISOM_GROUP_TYPE_RAP );
         sgpd = isom_get_sample_group_description( stbl, ISOM_GROUP_TYPE_RAP );
         param->rap_grouping = sbgp && sgpd;
+        sbgp = isom_get_roll_recovery_sample_to_group         ( &stbl->sbgp_list );
+        sgpd = isom_get_roll_recovery_sample_group_description( &stbl->sgpd_list );
+        param->roll_grouping = sbgp && sgpd;
     }
     /* Get media language. */
     if( mdhd->language >= 0x800 )
@@ -2376,355 +2349,6 @@ int lsmash_get_media_parameters( lsmash_root_t *root, uint32_t track_ID, lsmash_
 
 /*---- movie manipulators ----*/
 
-void lsmash_discard_boxes( lsmash_root_t *root )
-{
-    if( !root || !root->file )
-        return;
-    isom_remove_all_extension_boxes( &root->file->extensions );
-}
-
-static int fread_wrapper( void *opaque, uint8_t *buf, int size )
-{
-    int read_size = fread( buf, 1, size, (FILE *)opaque );
-    return ferror( (FILE *)opaque ) ? -1 : read_size;
-}
-
-static int fwrite_wrapper( void *opaque, uint8_t *buf, int size )
-{
-    return fwrite( buf, 1, size, (FILE *)opaque );
-}
-
-static int64_t fseek_wrapper( void *opaque, int64_t offset, int whence )
-{
-    if( lsmash_fseek( (FILE *)opaque, offset, whence ) != 0 )
-        return -1;
-    return lsmash_ftell( (FILE *)opaque );
-}
-
-int lsmash_open_file
-(
-    const char               *filename,
-    int                       open_mode,
-    lsmash_file_parameters_t *param
-)
-{
-    if( !filename || !param )
-        return -1;
-    char mode[4] = { 0 };
-    lsmash_file_mode file_mode;
-    if( open_mode == 0 )
-    {
-        memcpy( mode, "w+b", 4 );
-        file_mode = LSMASH_FILE_MODE_WRITE
-                  | LSMASH_FILE_MODE_BOX
-                  | LSMASH_FILE_MODE_INITIALIZATION
-                  | LSMASH_FILE_MODE_MEDIA;
-    }
-#ifdef LSMASH_DEMUXER_ENABLED
-    else if( open_mode == 1 )
-    {
-        memcpy( mode, "rb", 3 );
-        file_mode = LSMASH_FILE_MODE_READ;
-    }
-#endif
-    if( !mode[0] )
-        return -1;
-    FILE *stream   = NULL;
-    int   seekable = 1;
-    if( !strcmp( filename, "-" ) )
-    {
-        if( file_mode & LSMASH_FILE_MODE_READ )
-        {
-            stream   = stdin;
-            seekable = 0;
-        }
-        else if( file_mode & LSMASH_FILE_MODE_WRITE )
-        {
-            stream     = stdout;
-            seekable   = 0;
-            file_mode |= LSMASH_FILE_MODE_FRAGMENTED;
-        }
-    }
-    else
-        stream = lsmash_fopen( filename, mode );
-    if( !stream )
-        return -1;
-    memset( param, 0, sizeof(lsmash_file_parameters_t) );
-    param->mode                = file_mode;
-    param->opaque              = (void *)stream;
-    param->read                = fread_wrapper;
-    param->write               = fwrite_wrapper;
-    param->seek                = seekable ? fseek_wrapper : NULL;
-    param->major_brand         = 0;
-    param->brands              = NULL;
-    param->brand_count         = 0;
-    param->minor_version       = 0;
-    param->max_chunk_duration  = 0.5;
-    param->max_async_tolerance = 2.0;
-    param->max_chunk_size      = 4 * 1024 * 1024;
-    param->max_read_size       = 4 * 1024 * 1024;
-    return 0;
-}
-
-int lsmash_close_file
-(
-    lsmash_file_parameters_t *param
-)
-{
-    if( !param )
-        return -1;
-    if( !param->opaque )
-        return 0;
-    int ret = fclose( (FILE *)param->opaque );
-    param->opaque = NULL;
-    return ret;
-}
-
-static int isom_set_brands
-(
-    lsmash_file_t     *file,
-    lsmash_brand_type  major_brand,
-    uint32_t           minor_version,
-    lsmash_brand_type *brands,
-    uint32_t           brand_count
-)
-{
-    if( brand_count > 50 )
-        return -1;      /* We support setting brands up to 50. */
-    if( major_brand == 0 || brand_count == 0 )
-    {
-        /* Absence of File Type Box means this file is a QuickTime or MP4 version 1 format file. */
-        isom_remove_box_by_itself( file->ftyp );
-        /* Anyway we use QTFF as a default file format. */
-        file->qt_compatible = 1;
-        return 0;
-    }
-    isom_ftyp_t *ftyp;
-    if( file->flags & LSMASH_FILE_MODE_INITIALIZATION )
-    {
-        /* Add File Type Box if absent yet. */
-        if( !file->ftyp && isom_add_ftyp( file ) < 0 )
-            return -1;
-        ftyp = file->ftyp;
-    }
-    else
-    {
-        /* Add Segment Type Box if absent yet. */
-        ftyp = file->styp_list.head && file->styp_list.head->data
-             ? (isom_styp_t *)file->styp_list.head->data
-             : isom_add_styp( file );
-        if( !ftyp )
-            return -1;
-    }
-    /* Allocate an array of compatible brands.
-     * ISO/IEC 14496-12 doesn't forbid the absence of brands in the compatible brand list.
-     * For a reason of safety, however, we set at least one brand in the list. */
-    size_t alloc_size = (brand_count ? brand_count : 1) * sizeof(uint32_t);
-    lsmash_brand_type *compatible_brands;
-    if( !file->compatible_brands )
-        compatible_brands = lsmash_malloc( alloc_size );
-    else
-        compatible_brands = lsmash_realloc( file->compatible_brands, alloc_size );
-    if( !compatible_brands )
-        return -1;
-    /* Set compatible brands. */
-    if( brand_count )
-        for( uint32_t i = 0; i < brand_count; i++ )
-            compatible_brands[i] = brands[i];
-    else
-    {
-        /* At least one compatible brand. */
-        compatible_brands[0] = major_brand;
-        brand_count = 1;
-    }
-    file->compatible_brands = compatible_brands;
-    /* Duplicate an array of compatible brands. */
-    lsmash_free( ftyp->compatible_brands );
-    ftyp->compatible_brands = lsmash_memdup( compatible_brands, alloc_size );
-    if( !ftyp->compatible_brands )
-    {
-        lsmash_freep( &file->compatible_brands );
-        return -1;
-    }
-    ftyp->size          = ISOM_BASEBOX_COMMON_SIZE + 8 + brand_count * 4;
-    ftyp->major_brand   = major_brand;
-    ftyp->minor_version = minor_version;
-    ftyp->brand_count   = brand_count;
-    file->brand_count   = brand_count;
-    return isom_check_compatibility( file );
-}
-
-lsmash_file_t *lsmash_set_file
-(
-    lsmash_root_t            *root,
-    lsmash_file_parameters_t *param
-)
-{
-    if( !root || !param )
-        return NULL;
-    if( root->file )
-        /* Handling of multiple files is not supported yet. */
-        return NULL;
-    lsmash_file_t *file = isom_add_file( root );
-    if( !file )
-        return NULL;
-    lsmash_bs_t *bs = lsmash_bs_create();
-    if( !bs )
-        goto fail;
-    file->bs                  = bs;
-    file->flags               = param->mode;
-    file->bs->stream          = param->opaque;
-    file->bs->read            = param->read;
-    file->bs->write           = param->write;
-    file->bs->seek            = param->seek;
-    file->bs->unseekable      = (param->seek == NULL);
-    file->bs->buffer.max_size = param->max_read_size;
-    file->max_chunk_duration  = param->max_chunk_duration;
-    file->max_async_tolerance = LSMASH_MAX( param->max_async_tolerance, 2 * param->max_chunk_duration );
-    file->max_chunk_size      = param->max_chunk_size;
-    if( (file->flags & LSMASH_FILE_MODE_WRITE)
-     && (file->flags & LSMASH_FILE_MODE_BOX) )
-    {
-        /* Establish the fragment handler if required. */
-        if( file->flags & LSMASH_FILE_MODE_FRAGMENTED )
-        {
-            file->fragment = lsmash_malloc_zero( sizeof(isom_fragment_manager_t) );
-            if( !file->fragment )
-                goto fail;
-            file->fragment->pool = lsmash_create_entry_list();
-            if( !file->fragment->pool )
-                goto fail;
-        }
-        else if( file->bs->unseekable )
-            /* For unseekable output operations, LSMASH_FILE_MODE_FRAGMENTED shall be set. */
-            goto fail;
-        /* Establish file types. */
-        if( isom_set_brands( file, param->major_brand,
-                                   param->minor_version,
-                                   param->brands, param->brand_count ) < 0 )
-            goto fail;
-        /* Create the movie header if the initialization of the streams is required. */
-        if( file->flags & LSMASH_FILE_MODE_INITIALIZATION )
-        {
-            if( isom_add_moov( file )       < 0
-             || isom_add_mvhd( file->moov ) < 0 )
-                goto fail;
-            /* Default Movie Header Box. */
-            isom_mvhd_t *mvhd = file->moov->mvhd;
-            mvhd->rate          = 0x00010000;
-            mvhd->volume        = 0x0100;
-            mvhd->matrix[0]     = 0x00010000;
-            mvhd->matrix[4]     = 0x00010000;
-            mvhd->matrix[8]     = 0x40000000;
-            mvhd->next_track_ID = 1;
-        }
-    }
-    root->file = file;
-    return file;
-fail:
-    isom_remove_box_by_itself( file );
-    return NULL;
-}
-
-int64_t lsmash_read_file
-(
-    lsmash_file_t            *file,
-    lsmash_file_parameters_t *param
-)
-{
-#ifdef LSMASH_DEMUXER_ENABLED
-    if( !file || !file->bs )
-        return -1LL;
-    int64_t ret = -1;
-    if( file->flags & (LSMASH_FILE_MODE_READ | LSMASH_FILE_MODE_DUMP) )
-    {
-        /* Get the file size if seekable when reading. */
-        if( !file->bs->unseekable )
-        {
-            ret = lsmash_bs_read_seek( file->bs, 0, SEEK_END );
-            if( ret < 0 )
-                return ret;
-            file->bs->written = ret;
-            lsmash_bs_read_seek( file->bs, 0, SEEK_SET );
-        }
-        else
-            ret = 0;
-        /* Read whole boxes. */
-        if( isom_read_file( file ) < 0 )
-            return -1;
-        if( param )
-        {
-            if( file->ftyp )
-            {
-                /* file types */
-                isom_ftyp_t *ftyp = file->ftyp;
-                param->major_brand   = ftyp->major_brand ? ftyp->major_brand : ISOM_BRAND_TYPE_QT;
-                param->minor_version = ftyp->minor_version;
-                param->brands        = file->compatible_brands;
-                param->brand_count   = file->brand_count;
-            }
-            else if( file->styp_list.head && file->styp_list.head->data )
-            {
-                /* segment types */
-                isom_styp_t *styp = (isom_styp_t *)file->styp_list.head->data;
-                param->major_brand   = styp->major_brand ? styp->major_brand : ISOM_BRAND_TYPE_QT;
-                param->minor_version = styp->minor_version;
-                param->brands        = file->compatible_brands;
-                param->brand_count   = file->brand_count;
-            }
-            else
-            {
-                param->major_brand   = file->mp4_version1 ? ISOM_BRAND_TYPE_MP41 : ISOM_BRAND_TYPE_QT;
-                param->minor_version = 0;
-                param->brands        = NULL;
-                param->brand_count   = 0;
-            }
-        }
-    }
-    return ret;
-#else
-    return -1LL;
-#endif
-}
-
-lsmash_root_t *lsmash_open_movie( const char *filename, lsmash_file_mode mode )
-{
-    if( !filename || ((mode & LSMASH_FILE_MODE_WRITE) && (mode & LSMASH_FILE_MODE_READ)) )
-        return NULL;
-    int open_mode = -1;
-    if( mode & LSMASH_FILE_MODE_WRITE )
-        open_mode = 0;
-#ifdef LSMASH_DEMUXER_ENABLED
-    else if( mode & LSMASH_FILE_MODE_READ )
-        open_mode = 1;
-#endif
-    if( open_mode < 0 )
-        return NULL;
-    lsmash_root_t *root = lsmash_create_root();
-    if( !root )
-        return NULL;
-    lsmash_file_parameters_t param;
-    if( lsmash_open_file( filename, open_mode, &param ) < 0 )
-    {
-        lsmash_destroy_root( root );
-        return NULL;
-    }
-    param.mode |= mode;
-    lsmash_file_t *file = lsmash_set_file( root, &param );
-    if( !file || (open_mode == 1 && lsmash_read_file( file, &param ) < 0) )
-    {
-        lsmash_close_file( &param );
-        lsmash_destroy_root( root );
-        return NULL;
-    }
-    /* Don't fclose() here. */
-    param.opaque = NULL;
-    lsmash_close_file( &param );
-    /* Call fclose() when calling lsmash_destroy_root(). */
-    file->bc_fclose = 1;
-    return root;
-}
-
 void lsmash_initialize_movie_parameters( lsmash_movie_parameters_t *param )
 {
     memset( param, 0, sizeof(lsmash_movie_parameters_t) );
@@ -2736,24 +2360,14 @@ void lsmash_initialize_movie_parameters( lsmash_movie_parameters_t *param )
 int lsmash_set_movie_parameters( lsmash_root_t *root, lsmash_movie_parameters_t *param )
 {
     if( !root )
-        return -1;
+        return LSMASH_ERR_FUNCTION_PARAM;
     lsmash_file_t *file = root->file;
     if( !file
      || !file->moov
-     || !file->moov->mvhd
-     || ((param->major_brand || (param->brands && param->number_of_brands))
-      && isom_set_brands( file, param->major_brand, param->minor_version, param->brands, param->number_of_brands ) < 0) )
-        return -1;
+     || !file->moov->mvhd )
+        return LSMASH_ERR_NAMELESS;
     isom_mvhd_t *mvhd = file->moov->mvhd;
-    if( param->max_chunk_duration > 0 )
-        file->max_chunk_duration  = param->max_chunk_duration;
-    if( param->max_async_tolerance > 0 )
-        file->max_async_tolerance = LSMASH_MAX( param->max_async_tolerance, 2 * param->max_chunk_duration );
-    if( param->max_chunk_size )
-        file->max_chunk_size = param->max_chunk_size;
-    if( file->bs && param->max_read_size )
-        file->bs->buffer.max_size = param->max_read_size;
-    mvhd->timescale           = param->timescale;
+    mvhd->timescale = param->timescale;
     if( file->qt_compatible || file->itunes_movie )
     {
         mvhd->rate            = param->playback_rate;
@@ -2775,29 +2389,13 @@ int lsmash_set_movie_parameters( lsmash_root_t *root, lsmash_movie_parameters_t 
 
 int lsmash_get_movie_parameters( lsmash_root_t *root, lsmash_movie_parameters_t *param )
 {
-    if( !root )
-        return -1;
-    lsmash_file_t *file = root->file;
-    if( !file
-     || !file->moov
+    if( isom_check_initializer_present( root ) < 0 )
+        return LSMASH_ERR_FUNCTION_PARAM;
+    lsmash_file_t *file = root->file->initializer;
+    if( !file->moov
      || !file->moov->mvhd )
-        return -1;
+        return LSMASH_ERR_NAMELESS;
     isom_mvhd_t *mvhd = file->moov->mvhd;
-    if( file->ftyp )
-    {
-        isom_ftyp_t *ftyp = file->ftyp;
-        uint32_t brand_count = LSMASH_MIN( ftyp->brand_count, 50 );     /* brands up to 50 */
-        for( uint32_t i = 0; i < brand_count; i++ )
-            param->brands_shadow[i] = ftyp->compatible_brands[i];
-        param->major_brand      = ftyp->major_brand;
-        param->brands           = param->brands_shadow;
-        param->number_of_brands = brand_count;
-        param->minor_version    = ftyp->minor_version;
-    }
-    param->max_chunk_duration  = file->max_chunk_duration;
-    param->max_async_tolerance = file->max_async_tolerance;
-    param->max_chunk_size      = file->max_chunk_size;
-    param->max_read_size       = file->bs ? file->bs->buffer.max_size : 0;
     param->timescale           = mvhd->timescale;
     param->duration            = mvhd->duration;
     param->playback_rate       = mvhd->rate;
@@ -2811,31 +2409,35 @@ int lsmash_get_movie_parameters( lsmash_root_t *root, lsmash_movie_parameters_t 
 
 uint32_t lsmash_get_movie_timescale( lsmash_root_t *root )
 {
-    if( !root
-     || !root->file
-     || !root->file->moov
-     || !root->file->moov->mvhd )
+    if( isom_check_initializer_present( root ) < 0
+     || !root->file->initializer->moov
+     || !root->file->initializer->moov->mvhd )
         return 0;
-    return root->file->moov->mvhd->timescale;
+    return root->file->initializer->moov->mvhd->timescale;
 }
 
-static int isom_scan_trak_profileLevelIndication( isom_trak_t *trak, mp4a_audioProfileLevelIndication *audio_pli, mp4sys_visualProfileLevelIndication *visual_pli )
+static int isom_scan_trak_profileLevelIndication
+(
+    isom_trak_t                         *trak,
+    mp4a_audioProfileLevelIndication    *audio_pli,
+    mp4sys_visualProfileLevelIndication *visual_pli
+)
 {
     if( !trak
      || !trak->mdia
      || !trak->mdia->minf
      || !trak->mdia->minf->stbl )
-        return -1;
+        return LSMASH_ERR_INVALID_DATA;
     isom_stsd_t *stsd = trak->mdia->minf->stbl->stsd;
     if( !stsd
      || !stsd->list.head )
-        return -1;
+        return LSMASH_ERR_INVALID_DATA;
     for( lsmash_entry_t *entry = stsd->list.head; entry; entry = entry->next )
     {
         isom_sample_entry_t *sample_entry = (isom_sample_entry_t *)entry->data;
         if( !sample_entry )
-            return -1;
-        lsmash_codec_type_t sample_type = (lsmash_codec_type_t)sample_entry->type;
+            return LSMASH_ERR_INVALID_DATA;
+        lsmash_codec_type_t sample_type = sample_entry->type;
         if( trak->mdia->minf->vmhd )
         {
             if( lsmash_check_codec_type_identical( sample_type, ISOM_CODEC_TYPE_AVC1_VIDEO )
@@ -2849,9 +2451,7 @@ static int isom_scan_trak_profileLevelIndication( isom_trak_t *trak, mp4a_audioP
             {
                 /* FIXME: Do we have to arbitrate like audio? */
                 if( *visual_pli == MP4SYS_VISUAL_PLI_NONE_REQUIRED )
-                    *visual_pli = lsmash_check_codec_type_identical( sample_type, ISOM_CODEC_TYPE_AVCP_VIDEO )
-                                ? MP4SYS_OBJECT_TYPE_Parameter_Sets_H_264_ISO_14496_10
-                                : MP4SYS_VISUAL_PLI_H264_AVC;
+                    *visual_pli = MP4SYS_VISUAL_PLI_H264_AVC;
             }
             else
                 *visual_pli = MP4SYS_VISUAL_PLI_NOT_SPECIFIED;
@@ -2861,15 +2461,17 @@ static int isom_scan_trak_profileLevelIndication( isom_trak_t *trak, mp4a_audioP
             if( lsmash_check_codec_type_identical( sample_type, ISOM_CODEC_TYPE_MP4A_AUDIO ) )
             {
                 isom_audio_entry_t *audio = (isom_audio_entry_t *)sample_entry;
-#ifdef LSMASH_DEMUXER_ENABLED
                 isom_esds_t *esds = (isom_esds_t *)isom_get_extension_box_format( &audio->extensions, ISOM_BOX_TYPE_ESDS );
                 if( !esds || !esds->ES )
-                    return -1;
-                if( !lsmash_check_codec_type_identical( audio->summary.sample_type, ISOM_CODEC_TYPE_MP4A_AUDIO ) )
-                    /* This is needed when copying descriptions. */
-                    mp4sys_setup_summary_from_DecoderSpecificInfo( &audio->summary, esds->ES );
-#endif
-                *audio_pli = mp4a_max_audioProfileLevelIndication( *audio_pli, mp4a_get_audioProfileLevelIndication( &audio->summary ) );
+                    return LSMASH_ERR_INVALID_DATA;
+                lsmash_audio_summary_t *summary = (lsmash_audio_summary_t *)lsmash_create_summary( LSMASH_SUMMARY_TYPE_AUDIO );
+                if( !summary )
+                    continue;
+                if( mp4sys_setup_summary_from_DecoderSpecificInfo( summary, esds->ES ) < 0 )
+                    *audio_pli = MP4A_AUDIO_PLI_NOT_SPECIFIED;
+                else
+                    *audio_pli = mp4a_max_audioProfileLevelIndication( *audio_pli, mp4a_get_audioProfileLevelIndication( summary ) );
+                lsmash_cleanup_summary( (lsmash_summary_t *)summary );
             }
             else
                 /* NOTE: Audio CODECs other than 'mp4a' does not have appropriate pli. */
@@ -2883,9 +2485,10 @@ static int isom_scan_trak_profileLevelIndication( isom_trak_t *trak, mp4a_audioP
 
 int isom_setup_iods( isom_moov_t *moov )
 {
-    if( !moov->iods && isom_add_iods( moov ) )
-        return -1;
+    if( !moov->iods && !isom_add_iods( moov ) )
+        return LSMASH_ERR_NAMELESS;
     isom_iods_t *iods = moov->iods;
+    int err = LSMASH_ERR_NAMELESS;
     iods->OD = mp4sys_create_ObjectDescriptor( 1 ); /* NOTE: Use 1 for ObjectDescriptorID of IOD. */
     if( !iods->OD )
         goto fail;
@@ -2897,31 +2500,32 @@ int isom_setup_iods( isom_moov_t *moov )
         if( !trak
          || !trak->tkhd )
             goto fail;
-        if( isom_scan_trak_profileLevelIndication( trak, &audio_pli, &visual_pli ) )
+        if( (err = isom_scan_trak_profileLevelIndication( trak, &audio_pli, &visual_pli )) < 0 )
             goto fail;
-        if( mp4sys_add_ES_ID_Inc( iods->OD, trak->tkhd->track_ID ) )
+        if( (err = mp4sys_create_ES_ID_Inc( iods->OD, trak->tkhd->track_ID )) < 0 )
             goto fail;
     }
-    if( mp4sys_to_InitialObjectDescriptor( iods->OD,
-                                           0, /* FIXME: I'm not quite sure what the spec says. */
-                                           MP4SYS_OD_PLI_NONE_REQUIRED, MP4SYS_SCENE_PLI_NONE_REQUIRED,
-                                           audio_pli, visual_pli,
-                                           MP4SYS_GRAPHICS_PLI_NONE_REQUIRED ) )
+    if( (err = mp4sys_to_InitialObjectDescriptor( iods->OD,
+                                                  0, /* FIXME: I'm not quite sure what the spec says. */
+                                                  MP4SYS_OD_PLI_NONE_REQUIRED, MP4SYS_SCENE_PLI_NONE_REQUIRED,
+                                                  audio_pli, visual_pli,
+                                                  MP4SYS_GRAPHICS_PLI_NONE_REQUIRED )) < 0 )
         goto fail;
     return 0;
 fail:
     isom_remove_box_by_itself( iods );
-    return -1;
+    return err;
 }
 
 int lsmash_create_object_descriptor( lsmash_root_t *root )
 {
-    if( !root || !root->file )
-        return -1;
+    if( isom_check_initializer_present( root ) < 0 )
+        return LSMASH_ERR_FUNCTION_PARAM;
     lsmash_file_t *file = root->file;
     /* Return error if this file is not compatible with MP4 file format. */
-    if( !file->mp4_version1 && !file->mp4_version2 )
-        return -1;
+    if( !file->mp4_version1
+     && !file->mp4_version2 )
+        return LSMASH_ERR_FUNCTION_PARAM;
     return isom_setup_iods( file->moov );
 }
 
@@ -2931,61 +2535,118 @@ int isom_complement_data_reference( isom_minf_t *minf )
 {
     if( !minf->dinf
      || !minf->dinf->dref )
-        return -1;
+        return LSMASH_ERR_INVALID_DATA;
     /* Complement data referece if absent. */
     if( !minf->dinf->dref->list.head )
     {
-        isom_dref_entry_t *url = isom_add_dref_entry( minf->dinf->dref );
+        isom_dref_entry_t *url = isom_add_dref_entry( minf->dinf->dref, ISOM_BOX_TYPE_URL );
         if( !url )
-            return -1;
+            return LSMASH_ERR_NAMELESS;
         url->flags = 0x000001;  /* Media data is in the same file. */
     }
     return 0;
 }
 
-int isom_rearrange_boxes
+static lsmash_file_t *isom_get_written_media_file
 (
-    lsmash_file_t        *file,
-    lsmash_adhoc_remux_t *remux,
-    uint8_t              *buf[2],
-    size_t                read_num,
-    size_t                size,
-    uint64_t              read_pos,
-    uint64_t              write_pos,
-    uint64_t              file_size
+    isom_trak_t *trak,
+    uint32_t     sample_description_index
 )
 {
-    /* Copy-pastan */
-    int buf_switch = 1;
-    lsmash_bs_t *bs = file->bs;
-    while( read_num == size )
+    isom_minf_t         *minf        = trak->mdia->minf;
+    isom_sample_entry_t *description = (isom_sample_entry_t *)lsmash_get_entry_data( &minf->stbl->stsd->list, sample_description_index );
+    isom_dref_entry_t   *dref_entry  = (isom_dref_entry_t *)lsmash_get_entry_data( &minf->dinf->dref->list, description->data_reference_index );
+    lsmash_file_t       *file        = (!dref_entry || !dref_entry->ref_file) ? trak->file : dref_entry->ref_file;
+    if( !(file->flags & LSMASH_FILE_MODE_MEDIA)
+     || !(file->flags & LSMASH_FILE_MODE_WRITE) )
+        return trak->file;
+    return file;
+}
+
+int isom_check_large_offset_requirement
+(
+    isom_moov_t *moov,
+    uint64_t     meta_size
+)
+{
+    for( lsmash_entry_t *entry = moov->trak_list.head; entry; )
     {
-        if( lsmash_bs_write_seek( bs, read_pos, SEEK_SET ) < 0 )
-            return -1;
-        lsmash_bs_read_data( bs, buf[buf_switch], &read_num );
-        read_pos    = bs->offset;
-        buf_switch ^= 0x1;
-        if( lsmash_bs_write_seek( bs, write_pos, SEEK_SET ) < 0 )
-            return -1;
-        if( lsmash_bs_write_data( bs, buf[buf_switch], size ) < 0 )
-            return -1;
-        write_pos = bs->offset;
-        if( remux && remux->func )
-            remux->func( remux->param, write_pos, file_size ); // FIXME:
+        isom_trak_t *trak = (isom_trak_t *)entry->data;
+        isom_stco_t *stco = trak->mdia->minf->stbl->stco;
+        if( !stco->list->tail   /* no samples */
+         || stco->large_presentation
+         || (((isom_stco_entry_t *)stco->list->tail->data)->chunk_offset + moov->size + meta_size) <= UINT32_MAX )
+        {
+            entry = entry->next;
+            continue;   /* no need to convert stco into co64 */
+        }
+        /* stco->co64 conversion */
+        int err = isom_convert_stco_to_co64( trak->mdia->minf->stbl );
+        if( err < 0 )
+            return err;
+        if( isom_update_box_size( moov ) == 0 )
+            return LSMASH_ERR_INVALID_DATA;
+        entry = moov->trak_list.head;   /* whenever any conversion, re-check all traks */
     }
-    if( lsmash_bs_write_data( bs, buf[buf_switch ^ 0x1], read_num ) < 0 )
-        return -1;
-    if( remux && remux->func )
-        remux->func( remux->param, file_size, file_size ); // FIXME:
     return 0;
+}
+
+void isom_add_preceding_box_size
+(
+    isom_moov_t *moov,
+    uint64_t     preceding_size
+)
+{
+    for( lsmash_entry_t *entry = moov->trak_list.head; entry; entry = entry->next )
+    {
+        /* Apply to the chunks in the same file. */
+        isom_trak_t *trak = (isom_trak_t *)entry->data;
+        isom_stsc_t *stsc = trak->mdia->minf->stbl->stsc;
+        isom_stco_t *stco = trak->mdia->minf->stbl->stco;
+        lsmash_entry_t    *stsc_entry = stsc->list->head;
+        isom_stsc_entry_t *stsc_data  = stsc_entry ? (isom_stsc_entry_t *)stsc_entry->data : NULL;
+        uint32_t chunk_number = 1;
+        for( lsmash_entry_t *stco_entry = stco->list->head; stco_entry; )
+        {
+            if( stsc_data
+             && stsc_data->first_chunk == chunk_number )
+            {
+                lsmash_file_t *ref_file = isom_get_written_media_file( trak, stsc_data->sample_description_index );
+                stsc_entry = stsc_entry->next;
+                stsc_data  = stsc_entry ? (isom_stsc_entry_t *)stsc_entry->data : NULL;
+                if( ref_file != trak->file )
+                {
+                    /* The chunks are not contained in the same file. Skip applying the offset.
+                     * If no more stsc entries, the rest of the chunks is not contained in the same file. */
+                    if( !stsc_entry || !stsc_data )
+                        break;
+                    while( stco_entry && chunk_number < stsc_data->first_chunk )
+                    {
+                        stco_entry = stco_entry->next;
+                        ++chunk_number;
+                    }
+                    continue;
+                }
+            }
+            if( stco->large_presentation )
+                ((isom_co64_entry_t *)stco_entry->data)->chunk_offset += preceding_size;
+            else
+                ((isom_stco_entry_t *)stco_entry->data)->chunk_offset += preceding_size;
+            stco_entry = stco_entry->next;
+            ++chunk_number;
+        }
+    }
 }
 
 int isom_establish_movie( lsmash_file_t *file )
 {
-    if( isom_check_mandatory_boxes( file )
-     || isom_set_movie_creation_time( file )
-     || isom_update_box_size( file->moov ) == 0 )
-        return -1;
+    assert( file == file->initializer );
+    int err;
+    if( (err = isom_check_mandatory_boxes( file ))   < 0
+     || (err = isom_set_movie_creation_time( file )) < 0 )
+        return err;
+    if( isom_update_box_size( file->moov ) == 0 )
+        return LSMASH_ERR_INVALID_DATA;
     return 0;
 }
 
@@ -2995,15 +2656,18 @@ int lsmash_finish_movie
     lsmash_adhoc_remux_t *remux
 )
 {
-    if( !root )
-        return -1;
+    if( isom_check_initializer_present( root ) < 0 )
+        return LSMASH_ERR_FUNCTION_PARAM;
     lsmash_file_t *file = root->file;
     if( !file
      || !file->bs
-     || !file->moov )
-        return -1;
+     || !file->initializer->moov )
+        return LSMASH_ERR_INVALID_DATA;
     if( file->fragment )
         return isom_finish_final_fragment_movie( file, remux );
+    if( file != file->initializer )
+        return LSMASH_ERR_INVALID_DATA;
+    int err;
     isom_moov_t *moov = file->moov;
     for( lsmash_entry_t *entry = moov->trak_list.head; entry; entry = entry->next )
     {
@@ -3014,8 +2678,12 @@ int lsmash_finish_movie
          || !trak->mdia
          || !trak->mdia->minf
          || !trak->mdia->minf->stbl
-         || isom_complement_data_reference( trak->mdia->minf ) < 0 )
-            return -1;
+         || !trak->mdia->minf->stbl->stco
+         || !trak->mdia->minf->stbl->stco->list
+         || !trak->mdia->minf->stbl->stco->list->tail )
+            return LSMASH_ERR_INVALID_DATA;
+        if( (err = isom_complement_data_reference( trak->mdia->minf )) < 0 )
+            return err;
         uint32_t track_ID         = trak->tkhd->track_ID;
         uint32_t related_track_ID = trak->related_track_ID;
         /* Disable the track if the track is a track reference chapter. */
@@ -3028,56 +2696,39 @@ int lsmash_finish_movie
             edit.duration   = LSMASH_MIN( trak->tkhd->duration, lsmash_get_track_duration( root, related_track_ID ) );
             edit.start_time = 0;
             edit.rate       = ISOM_EDIT_MODE_NORMAL;
-            if( lsmash_create_explicit_timeline_map( root, track_ID, edit ) )
-                return -1;
+            if( (err = lsmash_create_explicit_timeline_map( root, track_ID, edit )) < 0 )
+                return err;
         }
         /* Add stss box if any samples aren't sync sample. */
         isom_stbl_t *stbl = trak->mdia->minf->stbl;
-        if( !trak->cache->all_sync && !stbl->stss && isom_add_stss( stbl ) )
-            return -1;
-        if( isom_update_tkhd_duration( trak ) < 0 )
-            return -1;
-        if( isom_update_bitrate_description( trak->mdia ) < 0 )
-            return -1;
+        if( !trak->cache->all_sync && !stbl->stss && !isom_add_stss( stbl ) )
+            return LSMASH_ERR_NAMELESS;
+        if( (err = isom_update_tkhd_duration( trak ))             < 0
+         || (err = isom_update_bitrate_description( trak->mdia )) < 0 )
+            return err;
     }
-    if( file->mp4_version1 == 1 && isom_setup_iods( moov ) < 0 )
-        return -1;
-    if( isom_establish_movie( file ) < 0 )
-        return -1;
+    if( file->mp4_version1 == 1 && (err = isom_setup_iods( moov )) < 0 )
+        return err;
+    if( (err = isom_establish_movie( file )) < 0 )
+        return err;
     /* Write the size of Media Data Box here. */
     lsmash_bs_t *bs = file->bs;
     file->mdat->manager &= ~LSMASH_INCOMPLETE_BOX;
-    if( isom_write_box( bs, (isom_box_t *)file->mdat ) < 0 )
-        return -1;
+    if( (err = isom_write_box( bs, (isom_box_t *)file->mdat )) < 0 )
+        return err;
     /* Write the Movie Box and a Meta Box if no optimization for progressive download. */
     uint64_t meta_size = file->meta ? file->meta->size : 0;
     if( !remux )
     {
-        if( isom_write_box( bs, (isom_box_t *)file->moov )
-         || isom_write_box( bs, (isom_box_t *)file->meta ) )
-            return -1;
+        if( (err = isom_write_box( bs, (isom_box_t *)file->moov )) < 0
+         || (err = isom_write_box( bs, (isom_box_t *)file->meta )) < 0 )
+            return err;
         file->size += moov->size + meta_size;
         return 0;
     }
     /* stco->co64 conversion, depending on last chunk's offset */
-    for( lsmash_entry_t *entry = moov->trak_list.head; entry; )
-    {
-        isom_trak_t *trak = (isom_trak_t *)entry->data;
-        isom_stco_t *stco = trak->mdia->minf->stbl->stco;
-        if( !stco->list->tail )
-            return -1;
-        if( stco->large_presentation
-         || (((isom_stco_entry_t *)stco->list->tail->data)->chunk_offset + moov->size + meta_size) <= UINT32_MAX )
-        {
-            entry = entry->next;
-            continue;   /* no need to convert stco into co64 */
-        }
-        /* stco->co64 conversion */
-        if( isom_convert_stco_to_co64( trak->mdia->minf->stbl ) < 0
-         || isom_update_box_size( moov ) == 0 )
-            return -1;
-        entry = moov->trak_list.head;   /* whenever any conversion, re-check all traks */
-    }
+    if( (err = isom_check_large_offset_requirement( moov, meta_size )) < 0 )
+        return err;
     /* now the amount of offset is fixed. */
     uint64_t mtf_size = moov->size + meta_size;     /* sum of size of boxes moved to front */
     /* buffer size must be at least mtf_size * 2 */
@@ -3085,33 +2736,24 @@ int lsmash_finish_movie
     /* Split to 2 buffers. */
     uint8_t *buf[2] = { NULL, NULL };
     if( (buf[0] = (uint8_t*)lsmash_malloc( remux->buffer_size )) == NULL )
-        return -1; /* NOTE: i think we still can fallback to "return isom_write_moov();" here. */
+        return LSMASH_ERR_MEMORY_ALLOC; /* NOTE: I think we still can fallback to "return isom_write_moov();" here. */
     size_t size = remux->buffer_size / 2;
     buf[1] = buf[0] + size;
-    /* now the amount of offset is fixed. apply that to stco/co64 */
-    for( lsmash_entry_t *entry = moov->trak_list.head; entry; entry = entry->next )
-    {
-        isom_stco_t *stco = ((isom_trak_t *)entry->data)->mdia->minf->stbl->stco;
-        if( stco->large_presentation )
-            for( lsmash_entry_t *co64_entry = stco->list->head ; co64_entry ; co64_entry = co64_entry->next )
-                ((isom_co64_entry_t *)co64_entry->data)->chunk_offset += mtf_size;
-        else
-            for( lsmash_entry_t *stco_entry = stco->list->head ; stco_entry ; stco_entry = stco_entry->next )
-                ((isom_stco_entry_t *)stco_entry->data)->chunk_offset += mtf_size;
-    }
+    /* Now, the amount of the offset is fixed. apply it to stco/co64 */
+    isom_add_preceding_box_size( moov, mtf_size );
     /* Backup starting area of mdat and write moov + meta there instead. */
     isom_mdat_t *mdat            = file->mdat;
     uint64_t     total           = file->size + mtf_size;
     uint64_t     placeholder_pos = file->free ? file->free->pos : mdat->pos;
-    if( lsmash_bs_write_seek( bs, placeholder_pos, SEEK_SET ) < 0 )
+    if( (err = lsmash_bs_write_seek( bs, placeholder_pos, SEEK_SET )) < 0 )
         goto fail;
     size_t read_num = size;
     lsmash_bs_read_data( bs, buf[0], &read_num );
     uint64_t read_pos = bs->offset;
     /* Write moov + meta there instead. */
-    if( lsmash_bs_write_seek( bs, placeholder_pos, SEEK_SET ) < 0
-     || isom_write_box( bs, (isom_box_t *)file->moov )        < 0
-     || isom_write_box( bs, (isom_box_t *)file->meta )        < 0 )
+    if( (err = lsmash_bs_write_seek( bs, placeholder_pos, SEEK_SET )) < 0
+     || (err = isom_write_box( bs, (isom_box_t *)file->moov ))        < 0
+     || (err = isom_write_box( bs, (isom_box_t *)file->meta ))        < 0 )
         goto fail;
     uint64_t write_pos = bs->offset;
     /* Update the positions */
@@ -3119,20 +2761,20 @@ int lsmash_finish_movie
     if( file->free )
         file->free->pos += mtf_size;
     /* Move Media Data Box. */
-    if( isom_rearrange_boxes( file, remux, buf, read_num, size, read_pos, write_pos, total ) < 0 )
+    if( (err = isom_rearrange_data( file, remux, buf, read_num, size, read_pos, write_pos, total )) < 0 )
         goto fail;
     file->size += mtf_size;
     lsmash_free( buf[0] );
     return 0;
 fail:
     lsmash_free( buf[0] );
-    return -1;
+    return err;
 }
 
 int lsmash_set_last_sample_delta( lsmash_root_t *root, uint32_t track_ID, uint32_t sample_delta )
 {
-    if( !root || track_ID == 0 )
-        return -1;
+    if( isom_check_initializer_present( root ) < 0 || track_ID == 0 )
+        return LSMASH_ERR_FUNCTION_PARAM;
     lsmash_file_t *file = root->file;
     if( file->fragment
      && file->fragment->movie )
@@ -3141,9 +2783,11 @@ int lsmash_set_last_sample_delta( lsmash_root_t *root, uint32_t track_ID, uint32
         if( !traf
          || !traf->cache
          || !traf->tfhd )
-            return -1;
+            return LSMASH_ERR_NAMELESS;
         return isom_set_fragment_last_duration( traf, sample_delta );
     }
+    if( file != file->initializer )
+        return LSMASH_ERR_INVALID_DATA;
     isom_trak_t *trak = isom_get_trak( file, track_ID );
     if( !trak
      || !trak->cache
@@ -3155,50 +2799,51 @@ int lsmash_set_last_sample_delta( lsmash_root_t *root, uint32_t track_ID, uint32
      || !trak->mdia->minf->stbl->stsz
      || !trak->mdia->minf->stbl->stts
      || !trak->mdia->minf->stbl->stts->list )
-        return -1;
+        return LSMASH_ERR_NAMELESS;
     isom_stbl_t *stbl = trak->mdia->minf->stbl;
     isom_stts_t *stts = stbl->stts;
     uint32_t sample_count = isom_get_sample_count( trak );
+    int err;
     if( !stts->list->tail )
     {
         if( !sample_count )
             return 0;       /* no samples */
         if( sample_count > 1 )
-            return -1;      /* irregular sample_count */
+            return LSMASH_ERR_INVALID_DATA; /* irregular sample_count */
         /* Set the duration of the first sample.
          * This duration is also the duration of the last sample. */
-        if( isom_add_stts_entry( stbl, sample_delta ) )
-            return -1;
+        if( (err = isom_add_stts_entry( stbl, sample_delta )) < 0 )
+            return err;
         return lsmash_update_track_duration( root, track_ID, 0 );
     }
     uint32_t i = 0;
     for( lsmash_entry_t *entry = stts->list->head; entry; entry = entry->next )
         i += ((isom_stts_entry_t *)entry->data)->sample_count;
     if( sample_count < i )
-        return -1;
+        return LSMASH_ERR_INVALID_DATA;
     int no_last = (sample_count > i);
     isom_stts_entry_t *last_stts_data = (isom_stts_entry_t *)stts->list->tail->data;
     if( !last_stts_data )
-        return -1;
+        return LSMASH_ERR_INVALID_DATA;
     /* Consider QuikcTime fixed compression audio. */
     isom_audio_entry_t *audio = (isom_audio_entry_t *)lsmash_get_entry_data( &trak->mdia->minf->stbl->stsd->list,
                                                                               trak->cache->chunk.sample_description_index );
     if( !audio )
-        return -1;
+        return LSMASH_ERR_INVALID_DATA;
     if( (audio->manager & LSMASH_AUDIO_DESCRIPTION)
      && (audio->manager & LSMASH_QTFF_BASE)
      && (audio->version == 1)
      && (audio->compression_ID != QT_AUDIO_COMPRESSION_ID_VARIABLE_COMPRESSION) )
     {
         if( audio->samplesPerPacket == 0 )
-            return -1;
+            return LSMASH_ERR_INVALID_DATA;
         int exclude_last_sample = no_last ? 0 : 1;
         uint32_t j = audio->samplesPerPacket;
         for( lsmash_entry_t *entry = stts->list->tail; entry && j > 1; entry = entry->prev )
         {
             isom_stts_entry_t *stts_data = (isom_stts_entry_t *)entry->data;
             if( !stts_data )
-                return -1;
+                return LSMASH_ERR_INVALID_DATA;
             for( uint32_t k = exclude_last_sample; k < stts_data->sample_count && j > 1; k++ )
             {
                 sample_delta -= stts_data->sample_delta;
@@ -3212,16 +2857,16 @@ int lsmash_set_last_sample_delta( lsmash_root_t *root, uint32_t track_ID, uint32
     {
         /* The duration of the last sample is not set yet. */
         if( sample_count - i > 1 )
-            return -1;
+            return LSMASH_ERR_INVALID_DATA;
         /* Add a sample_delta. */
         if( sample_delta == last_stts_data->sample_delta )
             ++ last_stts_data->sample_count;
-        else if( isom_add_stts_entry( stbl, sample_delta ) < 0 )
-            return -1;
+        else if( (err = isom_add_stts_entry( stbl, sample_delta )) < 0 )
+            return err;
     }
     /* The duration of the last sample is already set. Replace it with a new one. */
-    else if( isom_replace_last_sample_delta( stbl, sample_delta ) < 0 )
-        return -1;
+    else if( (err = isom_replace_last_sample_delta( stbl, sample_delta )) < 0 )
+        return err;
     return lsmash_update_track_duration( root, track_ID, sample_delta );
 }
 
@@ -3229,19 +2874,20 @@ int lsmash_set_last_sample_delta( lsmash_root_t *root, uint32_t track_ID, uint32
 
 int lsmash_modify_explicit_timeline_map( lsmash_root_t *root, uint32_t track_ID, uint32_t edit_number, lsmash_edit_t edit )
 {
-    if( !root || edit.duration == 0 || edit.start_time < -1 )
-        return -1;
-    lsmash_file_t *file = root->file;
-    isom_trak_t *trak = isom_get_trak( file, track_ID );
+    if( isom_check_initializer_present( root ) < 0
+     || edit.start_time < -1 )
+        return LSMASH_ERR_FUNCTION_PARAM;
+    lsmash_file_t *file = root->file->initializer;
+    isom_trak_t   *trak = isom_get_trak( file, track_ID );
     if( !trak
      || !trak->edts
      || !trak->edts->elst
      || !trak->edts->elst->list )
-        return -1;
+        return LSMASH_ERR_NAMELESS;
     isom_elst_t       *elst = trak->edts->elst;
     isom_elst_entry_t *data = (isom_elst_entry_t *)lsmash_get_entry_data( elst->list, edit_number );
     if( !data )
-        return -1;
+        return LSMASH_ERR_NAMELESS;
     data->segment_duration = edit.duration;
     data->media_time       = edit.start_time;
     data->media_rate       = edit.rate;
@@ -3271,30 +2917,32 @@ int lsmash_modify_explicit_timeline_map( lsmash_root_t *root, uint32_t track_ID,
 
 int lsmash_create_explicit_timeline_map( lsmash_root_t *root, uint32_t track_ID, lsmash_edit_t edit )
 {
-    if( !root || edit.start_time < -1 )
-        return -1;
+    if( isom_check_initializer_present( root ) < 0 || edit.start_time < -1 )
+        return LSMASH_ERR_FUNCTION_PARAM;
     isom_trak_t *trak = isom_get_trak( root->file, track_ID );
     if( !trak
      || !trak->tkhd )
-        return -1;
+        return LSMASH_ERR_NAMELESS;
     edit.duration = (edit.duration || root->file->fragment) ? edit.duration
                   : trak->tkhd->duration ? trak->tkhd->duration
                   : isom_update_tkhd_duration( trak ) < 0 ? 0
                   : trak->tkhd->duration;
-    if( (!trak->edts       && isom_add_edts( trak ))
-     || (!trak->edts->elst && isom_add_elst( trak->edts ))
-     || isom_add_elst_entry( trak->edts->elst, edit.duration, edit.start_time, edit.rate ) )
-        return -1;
+    if( (!trak->edts       && !isom_add_edts( trak ))
+     || (!trak->edts->elst && !isom_add_elst( trak->edts )) )
+        return LSMASH_ERR_NAMELESS;
+    int err = isom_add_elst_entry( trak->edts->elst, edit.duration, edit.start_time, edit.rate );
+    if( err < 0 )
+        return err;
     return isom_update_tkhd_duration( trak );
 }
 
 int lsmash_get_explicit_timeline_map( lsmash_root_t *root, uint32_t track_ID, uint32_t edit_number, lsmash_edit_t *edit )
 {
-    if( !root || !edit )
-        return -1;
-    isom_trak_t *trak = isom_get_trak( root->file, track_ID );
+    if( isom_check_initializer_present( root ) < 0 || !edit )
+        return LSMASH_ERR_FUNCTION_PARAM;
+    isom_trak_t *trak = isom_get_trak( root->file->initializer, track_ID );
     if( !trak )
-        return -1;
+        return LSMASH_ERR_NAMELESS;
     if( !trak->edts
      || !trak->edts->elst )
     {
@@ -3306,7 +2954,7 @@ int lsmash_get_explicit_timeline_map( lsmash_root_t *root, uint32_t track_ID, ui
     }
     isom_elst_entry_t *elst = (isom_elst_entry_t *)lsmash_get_entry_data( trak->edts->elst->list, edit_number );
     if( !elst )
-        return -1;
+        return LSMASH_ERR_NAMELESS;
     edit->duration   = elst->segment_duration;
     edit->start_time = elst->media_time;
     edit->rate       = elst->media_rate;
@@ -3315,9 +2963,9 @@ int lsmash_get_explicit_timeline_map( lsmash_root_t *root, uint32_t track_ID, ui
 
 uint32_t lsmash_count_explicit_timeline_map( lsmash_root_t *root, uint32_t track_ID )
 {
-    if( !root )
-        return -1;
-    isom_trak_t *trak = isom_get_trak( root->file, track_ID );
+    if( isom_check_initializer_present( root ) < 0 )
+        return LSMASH_ERR_FUNCTION_PARAM;
+    isom_trak_t *trak = isom_get_trak( root->file->initializer, track_ID );
     if( !trak
      || !trak->edts
      || !trak->edts->elst
@@ -3330,13 +2978,13 @@ uint32_t lsmash_count_explicit_timeline_map( lsmash_root_t *root, uint32_t track
 
 int lsmash_update_media_modification_time( lsmash_root_t *root, uint32_t track_ID )
 {
-    if( !root )
-        return -1;
-    isom_trak_t *trak = isom_get_trak( root->file, track_ID );
+    if( isom_check_initializer_present( root ) < 0 )
+        return LSMASH_ERR_FUNCTION_PARAM;
+    isom_trak_t *trak = isom_get_trak( root->file->initializer, track_ID );
     if( !trak
      || !trak->mdia
      || !trak->mdia->mdhd )
-        return -1;
+        return LSMASH_ERR_NAMELESS;
     isom_mdhd_t *mdhd = trak->mdia->mdhd;
     mdhd->modification_time = isom_get_current_mp4time();
     /* overwrite strange creation_time */
@@ -3347,12 +2995,12 @@ int lsmash_update_media_modification_time( lsmash_root_t *root, uint32_t track_I
 
 int lsmash_update_track_modification_time( lsmash_root_t *root, uint32_t track_ID )
 {
-    if( !root )
-        return -1;
-    isom_trak_t *trak = isom_get_trak( root->file, track_ID );
+    if( isom_check_initializer_present( root ) < 0 )
+        return LSMASH_ERR_FUNCTION_PARAM;
+    isom_trak_t *trak = isom_get_trak( root->file->initializer, track_ID );
     if( !trak
      || !trak->tkhd )
-        return -1;
+        return LSMASH_ERR_NAMELESS;
     isom_tkhd_t *tkhd = trak->tkhd;
     tkhd->modification_time = isom_get_current_mp4time();
     /* overwrite strange creation_time */
@@ -3363,13 +3011,12 @@ int lsmash_update_track_modification_time( lsmash_root_t *root, uint32_t track_I
 
 int lsmash_update_movie_modification_time( lsmash_root_t *root )
 {
-    if( !root )
-        return -1;
-    lsmash_file_t *file = root->file;
-    if( !file
-     || !file->moov
+    if( isom_check_initializer_present( root ) < 0 )
+        return LSMASH_ERR_FUNCTION_PARAM;
+    lsmash_file_t *file = root->file->initializer;
+    if( !file->moov
      || !file->moov->mvhd )
-        return -1;
+        return LSMASH_ERR_INVALID_DATA;
     isom_mvhd_t *mvhd = file->moov->mvhd;
     mvhd->modification_time = isom_get_current_mp4time();
     /* overwrite strange creation_time */
@@ -3399,11 +3046,10 @@ lsmash_sample_t *lsmash_create_sample( uint32_t size )
 int lsmash_sample_alloc( lsmash_sample_t *sample, uint32_t size )
 {
     if( !sample )
-        return -1;
+        return LSMASH_ERR_FUNCTION_PARAM;
     if( size == 0 )
     {
-        if( sample->data )
-            lsmash_free( sample->data );
+        lsmash_free( sample->data );
         sample->data   = NULL;
         sample->length = 0;
         return 0;
@@ -3416,7 +3062,7 @@ int lsmash_sample_alloc( lsmash_sample_t *sample, uint32_t size )
     else
         data = lsmash_realloc( sample->data, size );
     if( !data )
-        return -1;
+        return LSMASH_ERR_MEMORY_ALLOC;
     sample->data   = data;
     sample->length = size;
     return 0;
@@ -3426,8 +3072,7 @@ void lsmash_delete_sample( lsmash_sample_t *sample )
 {
     if( !sample )
         return;
-    if( sample->data )
-        lsmash_free( sample->data );
+    lsmash_free( sample->data );
     lsmash_free( sample );
 }
 
@@ -3452,14 +3097,13 @@ void isom_remove_sample_pool( isom_sample_pool_t *pool )
 {
     if( !pool )
         return;
-    if( pool->data )
-        lsmash_free( pool->data );
+    lsmash_free( pool->data );
     lsmash_free( pool );
 }
 
 static uint32_t isom_add_size( isom_trak_t *trak, uint32_t sample_size )
 {
-    if( isom_add_stsz_entry( trak->mdia->minf->stbl, sample_size ) )
+    if( isom_add_stsz_entry( trak->mdia->minf->stbl, sample_size ) < 0 )
         return 0;
     return isom_get_sample_count( trak );
 }
@@ -3469,7 +3113,7 @@ static uint32_t isom_add_dts( isom_stbl_t *stbl, isom_timestamp_t *cache, uint64
     isom_stts_t *stts = stbl->stts;
     if( stts->list->entry_count == 0 )
     {
-        if( isom_add_stts_entry( stbl, dts ) )
+        if( isom_add_stts_entry( stbl, dts ) < 0 )
             return 0;
         cache->dts = dts;
         return dts;
@@ -3480,7 +3124,7 @@ static uint32_t isom_add_dts( isom_stbl_t *stbl, isom_timestamp_t *cache, uint64
     isom_stts_entry_t *data = (isom_stts_entry_t *)stts->list->tail->data;
     if( data->sample_delta == sample_delta )
         ++ data->sample_count;
-    else if( isom_add_stts_entry( stbl, sample_delta ) )
+    else if( isom_add_stts_entry( stbl, sample_delta ) < 0 )
         return 0;
     cache->dts = dts;
     return sample_delta;
@@ -3488,6 +3132,7 @@ static uint32_t isom_add_dts( isom_stbl_t *stbl, isom_timestamp_t *cache, uint64
 
 static int isom_add_cts( isom_stbl_t *stbl, isom_timestamp_t *cache, uint64_t cts )
 {
+    int err;
     isom_ctts_t *ctts = stbl->ctts;
     if( !ctts )
     {
@@ -3497,16 +3142,18 @@ static int isom_add_cts( isom_stbl_t *stbl, isom_timestamp_t *cache, uint64_t ct
             return 0;
         }
         /* Add ctts box and the first ctts entry. */
-        if( isom_add_ctts( stbl ) || isom_add_ctts_entry( stbl, 0 ) )
-            return -1;
+        if( !isom_add_ctts( stbl ) )
+            return LSMASH_ERR_NAMELESS;
+        if( (err = isom_add_ctts_entry( stbl, 0 )) < 0 )
+            return err;
         ctts = stbl->ctts;
         isom_ctts_entry_t *data = (isom_ctts_entry_t *)ctts->list->head->data;
         uint32_t sample_count = stbl->stsz->sample_count;
         if( sample_count != 1 )
         {
             data->sample_count = sample_count - 1;
-            if( isom_add_ctts_entry( stbl, cts - cache->dts ) )
-                return -1;
+            if( (err = isom_add_ctts_entry( stbl, cts - cache->dts )) < 0 )
+                return err;
         }
         else
             data->sample_offset = cts;
@@ -3514,13 +3161,13 @@ static int isom_add_cts( isom_stbl_t *stbl, isom_timestamp_t *cache, uint64_t ct
         return 0;
     }
     if( !ctts->list )
-        return -1;
+        return LSMASH_ERR_INVALID_DATA;
     isom_ctts_entry_t *data = (isom_ctts_entry_t *)ctts->list->tail->data;
     uint32_t sample_offset = cts - cache->dts;
     if( data->sample_offset == sample_offset )
         ++ data->sample_count;
-    else if( isom_add_ctts_entry( stbl, sample_offset ) )
-        return -1;
+    else if( (err = isom_add_ctts_entry( stbl, sample_offset )) < 0 )
+        return err;
     cache->cts = cts;
     return 0;
 }
@@ -3530,24 +3177,25 @@ static int isom_add_timestamp( isom_trak_t *trak, uint64_t dts, uint64_t cts )
     if( !trak->cache
      || !trak->mdia->minf->stbl->stts
      || !trak->mdia->minf->stbl->stts->list )
-        return -1;
+        return LSMASH_ERR_INVALID_DATA;
     lsmash_file_t *file = trak->file;
     if( file->isom_compatible && file->qt_compatible && (cts - dts) > INT32_MAX )
-        return -1;      /* sample_offset is not compatible. */
+        return LSMASH_ERR_INVALID_DATA; /* sample_offset is not compatible. */
     isom_stbl_t      *stbl     = trak->mdia->minf->stbl;
     isom_timestamp_t *ts_cache = &trak->cache->timestamp;
     uint32_t sample_count = isom_get_sample_count( trak );
     uint32_t sample_delta = sample_count > 1 ? isom_add_dts( stbl, ts_cache, dts ) : 0;
-    if( sample_count > 1 && !sample_delta )
-        return -1;
-    if( isom_add_cts( stbl, ts_cache, cts ) )
-        return -1;
+    if( sample_count > 1 && sample_delta == 0 )
+        return LSMASH_ERR_INVALID_DATA;
+    int err = isom_add_cts( stbl, ts_cache, cts );
+    if( err < 0 )
+        return err;
     if( (cts + ts_cache->ctd_shift) < dts )
     {
         if( (file->max_isom_version <  4 && !file->qt_compatible)   /* Negative sample offset is not supported. */
          || (file->max_isom_version >= 4 &&  file->qt_compatible)   /* ctts version 1 is not defined in QTFF. */
          || ((dts - cts) > INT32_MAX) )                             /* Overflow */
-            return -1;
+            return LSMASH_ERR_INVALID_DATA;
         ts_cache->ctd_shift = dts - cts;
         if( stbl->ctts->version == 0 && !file->qt_compatible )
             stbl->ctts->version = 1;
@@ -3569,10 +3217,11 @@ static int isom_add_sync_point( isom_trak_t *trak, uint32_t sample_number, lsmas
     {
         if( !cache->all_sync )
             return 0;
-        if( !stbl->stss && isom_add_stss( stbl ) )
-            return -1;
-        if( isom_add_stss_entry( stbl, 1 ) )    /* Declare here the first sample is a sync sample. */
-            return -1;
+        if( !stbl->stss && !isom_add_stss( stbl ) )
+            return LSMASH_ERR_NAMELESS;
+        int err = isom_add_stss_entry( stbl, 1 );
+        if( err < 0 )   /* Declare here the first sample is a sync sample. */
+            return err;
         cache->all_sync = 0;
         return 0;
     }
@@ -3585,8 +3234,8 @@ static int isom_add_sync_point( isom_trak_t *trak, uint32_t sample_number, lsmas
             cache->all_sync = 1;    /* Also the first sample is a sync sample. */
             return 0;
         }
-        if( isom_add_stss( stbl ) )
-            return -1;
+        if( !isom_add_stss( stbl ) )
+            return LSMASH_ERR_NAMELESS;
     }
     return isom_add_stss_entry( stbl, sample_number );
 }
@@ -3599,8 +3248,8 @@ static int isom_add_partial_sync( isom_trak_t *trak, uint32_t sample_number, lsm
         return 0;
     /* This sample is a partial sync sample. */
     isom_stbl_t *stbl = trak->mdia->minf->stbl;
-    if( !stbl->stps && isom_add_stps( stbl ) )
-        return -1;
+    if( !stbl->stps && !isom_add_stps( stbl ) )
+        return LSMASH_ERR_NAMELESS;
     return isom_add_stps_entry( stbl, sample_number );
 }
 
@@ -3608,21 +3257,32 @@ static int isom_add_dependency_type( isom_trak_t *trak, lsmash_sample_property_t
 {
     if( !trak->file->qt_compatible && !trak->file->avc_extensions )
         return 0;
-    uint8_t avc_extensions = trak->file->avc_extensions;
+    int compatibility = trak->file->avc_extensions && trak->file->qt_compatible ? 3
+                      : trak->file->qt_compatible                               ? 2
+                      : trak->file->avc_extensions                              ? 1
+                      :                                                           0;
     isom_stbl_t *stbl = trak->mdia->minf->stbl;
     if( stbl->sdtp )
-        return isom_add_sdtp_entry( (isom_box_t *)stbl, prop, avc_extensions );
-    if( !prop->allow_earlier && !prop->leading && !prop->independent && !prop->disposable && !prop->redundant )  /* no null check for prop */
+        return isom_add_sdtp_entry( (isom_box_t *)stbl, prop, compatibility );
+    /* no null check for prop */
+    if( !prop->allow_earlier
+     && !prop->leading
+     && !prop->independent
+     && !prop->disposable
+     && !prop->redundant )
         return 0;
-    if( isom_add_sdtp( (isom_box_t *)stbl ) )
-        return -1;
+    if( !isom_add_sdtp( (isom_box_t *)stbl ) )
+        return LSMASH_ERR_NAMELESS;
     uint32_t count = isom_get_sample_count( trak );
     /* fill past samples with ISOM_SAMPLE_*_UNKNOWN */
     lsmash_sample_property_t null_prop = { 0 };
     for( uint32_t i = 1; i < count; i++ )
-        if( isom_add_sdtp_entry( (isom_box_t *)stbl, &null_prop, avc_extensions ) )
-            return -1;
-    return isom_add_sdtp_entry( (isom_box_t *)stbl, prop, avc_extensions );
+    {
+        int err = isom_add_sdtp_entry( (isom_box_t *)stbl, &null_prop, compatibility );
+        if( err < 0 )
+            return err;
+    }
+    return isom_add_sdtp_entry( (isom_box_t *)stbl, prop, compatibility );
 }
 
 int isom_rap_grouping_established( isom_rap_group_t *group, int num_leading_samples_known, isom_sgpd_t *sgpd, int is_fragment )
@@ -3638,7 +3298,7 @@ int isom_rap_grouping_established( isom_rap_group_t *group, int num_leading_samp
     {
         isom_rap_entry_t *data = (isom_rap_entry_t *)entry->data;
         if( !data )
-            return -1;
+            return LSMASH_ERR_INVALID_DATA;
         if( rap->num_leading_samples_known == data->num_leading_samples_known
          && rap->num_leading_samples       == data->num_leading_samples )
         {
@@ -3670,34 +3330,38 @@ int isom_group_random_access( isom_box_t *parent, lsmash_sample_t *sample )
 {
     if( parent->file->max_isom_version < 6 )
         return 0;
-    isom_cache_t *cache;
     isom_sbgp_t  *sbgp;
     isom_sgpd_t  *sgpd;
+    isom_cache_t *cache;
     uint32_t      sample_count;
     int           is_fragment;
     if( lsmash_check_box_type_identical( parent->type, ISOM_BOX_TYPE_TRAK ) )
     {
         isom_trak_t *trak = (isom_trak_t *)parent;
-        cache = trak->cache;
         sbgp  = isom_get_sample_to_group         ( trak->mdia->minf->stbl, ISOM_GROUP_TYPE_RAP );
         sgpd  = isom_get_sample_group_description( trak->mdia->minf->stbl, ISOM_GROUP_TYPE_RAP );
+        cache = trak->cache;
         sample_count = isom_get_sample_count( trak );
         is_fragment  = 0;
     }
     else if( lsmash_check_box_type_identical( parent->type, ISOM_BOX_TYPE_TRAF ) )
     {
         isom_traf_t *traf = (isom_traf_t *)parent;
-        cache = traf->cache;
         sbgp  = isom_get_fragment_sample_to_group         ( traf, ISOM_GROUP_TYPE_RAP );
         sgpd  = isom_get_fragment_sample_group_description( traf, ISOM_GROUP_TYPE_RAP );
+        cache = traf->cache;
         sample_count = cache->fragment->sample_count + 1;
         is_fragment  = 1;
     }
     else
     {
         assert( 0 );
-        sbgp = NULL;
-        sgpd = NULL;
+        sbgp  = NULL;
+        sgpd  = NULL;
+        /* redundant initializations to suppress warnings from unclever compilers */
+        cache = NULL;
+        sample_count = 0;
+        is_fragment  = 0;
     }
     if( !sbgp || !sgpd )
         return 0;
@@ -3713,7 +3377,7 @@ int isom_group_random_access( isom_box_t *parent, lsmash_sample_t *sample )
         assert( sample_count == 1 );
         group = lsmash_malloc( sizeof(isom_rap_group_t) );
         if( !group )
-            return -1;
+            return LSMASH_ERR_MEMORY_ALLOC;
         if( is_rap )
         {
             group->random_access = isom_add_rap_group_entry( sgpd );
@@ -3728,13 +3392,14 @@ int isom_group_random_access( isom_box_t *parent, lsmash_sample_t *sample )
         if( !group->assignment )
         {
             lsmash_free( group );
-            return -1;
+            return LSMASH_ERR_MEMORY_ALLOC;
         }
         group->prev_assignment = NULL;
         group->is_prev_rap     = is_rap;
         cache->rap             = group;
         return 0;
     }
+    int err;
     if( group->is_prev_rap )
     {
         /* OK. here, the previous sample is a menber of 'rap '. */
@@ -3747,22 +3412,22 @@ int isom_group_random_access( isom_box_t *parent, lsmash_sample_t *sample )
             if( !group->assignment )
             {
                 lsmash_free( group );
-                return -1;
+                return LSMASH_ERR_MEMORY_ALLOC;
             }
         }
         else if( !LSMASH_IS_CLOSED_RAP( prop->ra_flags ) )
         {
             /* Create a new group since there is the possibility the next sample is a leading sample.
              * This sample is a member of 'rap ', so we set appropriate value on its group_description_index. */
-            if( isom_rap_grouping_established( group, 1, sgpd, is_fragment ) < 0 )
-                return -1;
+            if( (err = isom_rap_grouping_established( group, 1, sgpd, is_fragment )) < 0 )
+                return err;
             group->random_access   = isom_add_rap_group_entry( sgpd );
             group->prev_assignment = group->assignment;
             group->assignment      = isom_add_group_assignment_entry( sbgp, 1, sgpd->list->entry_count + (is_fragment ? 0x10000 : 0) );
             if( !group->assignment )
             {
                 lsmash_free( group );
-                return -1;
+                return LSMASH_ERR_MEMORY_ALLOC;
             }
         }
         else    /* The previous and current sample are a member of 'rap ', and the next sample must not be a leading sample. */
@@ -3772,15 +3437,15 @@ int isom_group_random_access( isom_box_t *parent, lsmash_sample_t *sample )
     {
         /* This sample is a member of 'rap ' and the previous sample isn't.
          * So we create a new group and set appropriate value on its group_description_index. */
-        if( isom_rap_grouping_established( group, 1, sgpd, is_fragment ) < 0 )
-            return -1;
+        if( (err = isom_rap_grouping_established( group, 1, sgpd, is_fragment )) < 0 )
+            return err;
         group->random_access   = isom_add_rap_group_entry( sgpd );
         group->prev_assignment = group->assignment;
         group->assignment      = isom_add_group_assignment_entry( sbgp, 1, sgpd->list->entry_count + (is_fragment ? 0x10000 : 0) );
         if( !group->assignment )
         {
             lsmash_free( group );
-            return -1;
+            return LSMASH_ERR_MEMORY_ALLOC;
         }
     }
     else    /* The previous and current sample aren't a member of 'rap '. */
@@ -3791,8 +3456,8 @@ int isom_group_random_access( isom_box_t *parent, lsmash_sample_t *sample )
         if( prop->leading == ISOM_SAMPLE_LEADING_UNKNOWN )
         {
             /* We can no longer know num_leading_samples in this group. */
-            if( isom_rap_grouping_established( group, 0, sgpd, is_fragment ) < 0 )
-                return -1;
+            if( (err = isom_rap_grouping_established( group, 0, sgpd, is_fragment )) < 0 )
+                return err;
         }
         else
         {
@@ -3800,8 +3465,8 @@ int isom_group_random_access( isom_box_t *parent, lsmash_sample_t *sample )
              || prop->leading == ISOM_SAMPLE_IS_DECODABLE_LEADING )
                 ++ group->random_access->num_leading_samples;
             /* no more consecutive leading samples in this group */
-            else if( isom_rap_grouping_established( group, 1, sgpd, is_fragment ) < 0 )
-                return -1;
+            else if( (err = isom_rap_grouping_established( group, 1, sgpd, is_fragment )) < 0 )
+                return err;
         }
     }
     group->is_prev_rap = is_rap;
@@ -3817,7 +3482,7 @@ static int isom_roll_grouping_established( isom_roll_group_t *group )
     {
         isom_roll_entry_t *data = (isom_roll_entry_t *)entry->data;
         if( !data )
-            return -1;
+            return LSMASH_ERR_INVALID_DATA;
         if( group->roll_distance == data->roll_distance )
         {
             /* The same description already exists.
@@ -3829,7 +3494,7 @@ static int isom_roll_grouping_established( isom_roll_group_t *group )
     }
     /* Add a new roll recovery description. */
     if( !isom_add_roll_group_entry( sgpd, group->roll_distance ) )
-        return -1;
+        return LSMASH_ERR_MEMORY_ALLOC;
     group->assignment->group_description_index = sgpd->list->entry_count + (group->is_fragment ? 0x10000 : 0);
     return 0;
 }
@@ -3844,7 +3509,7 @@ static int isom_deduplicate_roll_group( isom_sbgp_t *sbgp, lsmash_entry_list_t *
         isom_roll_group_t *group = (isom_roll_group_t *)entry->data;
         if( !group
          || !group->assignment )
-            return -1;
+            return LSMASH_ERR_INVALID_DATA;
         if( !group->delimited || group->described != ROLL_DISTANCE_DETERMINED )
             return 0;
         if( prev_assignment && prev_assignment->group_description_index == group->assignment->group_description_index )
@@ -3852,9 +3517,10 @@ static int isom_deduplicate_roll_group( isom_sbgp_t *sbgp, lsmash_entry_list_t *
             /* Merge the current group with the previous. */
             lsmash_entry_t *next_entry = entry->next;
             prev_assignment->sample_count += group->assignment->sample_count;
-            if( lsmash_remove_entry( sbgp->list, current_group_number, NULL )
-             || lsmash_remove_entry_direct( pool, entry, NULL ) )
-                return -1;
+            int err;
+            if( (err = lsmash_remove_entry( sbgp->list, current_group_number, NULL )) < 0
+             || (err = lsmash_remove_entry_direct( pool, entry, NULL ))               < 0 )
+                return err;
             entry = next_entry;
         }
         else
@@ -3874,30 +3540,32 @@ static int isom_clean_roll_pool( lsmash_entry_list_t *pool )
     {
         isom_roll_group_t *group = (isom_roll_group_t *)entry->data;
         if( !group )
-            return -1;
+            return LSMASH_ERR_INVALID_DATA;
         if( !group->delimited || group->described != ROLL_DISTANCE_DETERMINED )
             return 0;
-        if( lsmash_remove_entry_direct( pool, entry, NULL ) )
-            return -1;
+        int err = lsmash_remove_entry_direct( pool, entry, NULL );
+        if( err < 0 )
+            return err;
     }
     return 0;
 }
 
 static int isom_flush_roll_pool( isom_sbgp_t *sbgp, lsmash_entry_list_t *pool )
 {
+    int err;
     for( lsmash_entry_t *entry = pool->head; entry; entry = entry->next )
     {
         isom_roll_group_t *group = (isom_roll_group_t *)entry->data;
         if( !group )
-            return -1;
+            return LSMASH_ERR_INVALID_DATA;
         if( group->delimited
          && group->described == ROLL_DISTANCE_DETERMINED
          && group->roll_distance != 0
-         && isom_roll_grouping_established( group ) < 0 )
-            return -1;
+         && (err = isom_roll_grouping_established( group )) < 0 )
+            return err;
     }
-    if( isom_deduplicate_roll_group( sbgp, pool ) < 0 )
-        return -1;
+    if( (err = isom_deduplicate_roll_group( sbgp, pool )) < 0 )
+        return err;
     return isom_clean_roll_pool( pool );
 }
 
@@ -3907,7 +3575,7 @@ static int isom_all_recovery_described( isom_sbgp_t *sbgp, lsmash_entry_list_t *
     {
         isom_roll_group_t *group = (isom_roll_group_t *)entry->data;
         if( !group )
-            return -1;
+            return LSMASH_ERR_INVALID_DATA;
         group->described = ROLL_DISTANCE_DETERMINED;
     }
     return isom_flush_roll_pool( sbgp, pool );
@@ -3919,7 +3587,7 @@ int isom_all_recovery_completed( isom_sbgp_t *sbgp, lsmash_entry_list_t *pool )
     {
         isom_roll_group_t *group = (isom_roll_group_t *)entry->data;
         if( !group )
-            return -1;
+            return LSMASH_ERR_INVALID_DATA;
         group->described = ROLL_DISTANCE_DETERMINED;
         group->delimited = 1;
     }
@@ -3945,17 +3613,17 @@ int isom_group_roll_recovery( isom_box_t *parent, lsmash_sample_t *sample )
     if( !parent->file->avc_extensions
      && !parent->file->qt_compatible )
         return 0;
+    uint32_t sample_count;
+    int      is_fragment;
     isom_cache_t *cache;
-    isom_sbgp_t  *sbgp;
-    isom_sgpd_t  *sgpd;
-    uint32_t      sample_count;
-    int           is_fragment;
+    lsmash_entry_list_t *sbgp_list;
+    lsmash_entry_list_t *sgpd_list;
     if( lsmash_check_box_type_identical( parent->type, ISOM_BOX_TYPE_TRAK ) )
     {
         isom_trak_t *trak = (isom_trak_t *)parent;
         cache = trak->cache;
-        sbgp  = isom_get_sample_to_group         ( trak->mdia->minf->stbl, ISOM_GROUP_TYPE_ROLL );
-        sgpd  = isom_get_sample_group_description( trak->mdia->minf->stbl, ISOM_GROUP_TYPE_ROLL );
+        sbgp_list = &trak->mdia->minf->stbl->sbgp_list;
+        sgpd_list = &trak->mdia->minf->stbl->sgpd_list;
         sample_count = isom_get_sample_count( trak );
         is_fragment  = 0;
     }
@@ -3965,25 +3633,35 @@ int isom_group_roll_recovery( isom_box_t *parent, lsmash_sample_t *sample )
             return 0;
         isom_traf_t *traf = (isom_traf_t *)parent;
         cache = traf->cache;
-        sbgp  = isom_get_fragment_sample_to_group         ( traf, ISOM_GROUP_TYPE_ROLL );
-        sgpd  = isom_get_fragment_sample_group_description( traf, ISOM_GROUP_TYPE_ROLL );
+        sbgp_list = &traf->sbgp_list;
+        sgpd_list = &traf->sgpd_list;
         sample_count = cache->fragment->sample_count + 1;
         is_fragment  = 1;
     }
     else
     {
         assert( 0 );
-        sbgp = NULL;
-        sgpd = NULL;
+        return LSMASH_ERR_INVALID_DATA;
     }
-    if( !sbgp || !sgpd )
+    isom_sbgp_t *sbgp = isom_get_roll_recovery_sample_to_group         ( sbgp_list );
+    isom_sgpd_t *sgpd = isom_get_roll_recovery_sample_group_description( sgpd_list );
+    if( !sbgp || !sgpd || sbgp->grouping_type != sgpd->grouping_type )
         return 0;
+    /* Check if 'roll' -> 'prol' conversion is needed. */
+    if( cache->is_audio
+     && sbgp->grouping_type == ISOM_GROUP_TYPE_ROLL
+     && !(sample->prop.ra_flags & ISOM_SAMPLE_RANDOM_ACCESS_FLAG_SYNC) )
+    {
+        /* Since not every samples is a sync sample, change grouping_type into 'prol'. */
+        sbgp->grouping_type = ISOM_GROUP_TYPE_PROL;
+        sgpd->grouping_type = ISOM_GROUP_TYPE_PROL;
+    }
     lsmash_entry_list_t *pool = cache->roll.pool;
     if( !pool )
     {
         pool = lsmash_create_entry_list();
         if( !pool )
-            return -1;
+            return LSMASH_ERR_MEMORY_ALLOC;
         cache->roll.pool = pool;
     }
     lsmash_sample_property_t *prop  = &sample->prop;
@@ -4014,15 +3692,15 @@ int isom_group_roll_recovery( isom_box_t *parent, lsmash_sample_t *sample )
         /* Create a new group. */
         group = lsmash_malloc_zero( sizeof(isom_roll_group_t) );
         if( !group )
-            return -1;
+            return LSMASH_ERR_MEMORY_ALLOC;
         group->sgpd                   = sgpd;
         group->prev_is_recovery_start = is_recovery_start;
         group->is_fragment            = is_fragment;
         group->assignment             = isom_add_group_assignment_entry( sbgp, 1, 0 );
-        if( !group->assignment || lsmash_add_entry( pool, group ) )
+        if( !group->assignment || lsmash_add_entry( pool, group ) < 0 )
         {
             lsmash_free( group );
-            return -1;
+            return LSMASH_ERR_MEMORY_ALLOC;
         }
         if( is_recovery_start )
         {
@@ -4037,8 +3715,9 @@ int isom_group_roll_recovery( isom_box_t *parent, lsmash_sample_t *sample )
             {
                 /* a member of pre-roll group */
                 group->roll_distance = -prop->pre_roll.distance;
-                if( isom_roll_grouping_established( group ) < 0 )
-                    return -1;
+                int err = isom_roll_grouping_established( group );
+                if( err < 0 )
+                    return err;
             }
             else
                 /* a member of non-roll group */
@@ -4060,17 +3739,28 @@ int isom_group_roll_recovery( isom_box_t *parent, lsmash_sample_t *sample )
     {
         group = (isom_roll_group_t *)entry->data;
         if( !group )
-            return -1;
+            return LSMASH_ERR_INVALID_DATA;
         if( group->described == ROLL_DISTANCE_DETERMINED )
             continue;
         if( group->described == ROLL_DISTANCE_INITIALIZED )
         {
+            /* Let's consider the following picture sequence.
+             *   coded order : P[0] P[1] P[2] P[3] P[4] P[5]
+             *   DTS         :   0    1    2    3    4    5
+             *   CTS         :   2    4    3    6    7    5
+             * Here, P[0] conveys a recovery point SEI and P[3] is the recovery point.
+             * Correctness of decoded pictures is specified by recovery point in output order for both AVC and HEVC.
+             * Therefore, as follows,
+             *   output order : P[0] P[2] P[1] P[5]|P[3] P[4]
+             *                  ---(incorrect?)--->|
+             * there is no guarantee that P[5] is decoded and output correctly.
+             * From this, it can be said that the roll_distance of this sequence is equal to 5. */
             isom_roll_entry_t *post_roll = isom_get_roll_description( group );
             if( post_roll && post_roll->roll_distance > 0 )
             {
                 if( group->rp_cts > sample->cts )
                     /* Updated roll_distance for composition reordering. */
-                    ++ post_roll->roll_distance;
+                    post_roll->roll_distance = sample_count - group->first_sample;
                 if( ++ group->wait_and_see_count >= MAX_ROLL_WAIT_AND_SEE_COUNT )
                     group->described = ROLL_DISTANCE_DETERMINED;
             }
@@ -4123,19 +3813,21 @@ static int isom_add_chunk( isom_trak_t *trak, lsmash_sample_t *sample )
      || !trak->cache
      || !trak->mdia->mdhd
      ||  trak->mdia->mdhd->timescale == 0
+     || !trak->mdia->minf->dinf
+     || !trak->mdia->minf->dinf->dref
+     || !trak->mdia->minf->stbl->stsd
      || !trak->mdia->minf->stbl->stsc
      || !trak->mdia->minf->stbl->stsc->list )
-        return -1;
-    lsmash_file_t *file    = trak->file;
-    isom_chunk_t  *current = &trak->cache->chunk;
+        return LSMASH_ERR_INVALID_DATA;
+    isom_chunk_t *current = &trak->cache->chunk;
     if( !current->pool )
     {
         /* Very initial settings, just once per track */
         current->pool = isom_create_sample_pool( 0 );
         if( !current->pool )
-            return -1;
+            return LSMASH_ERR_MEMORY_ALLOC;
     }
-    if( !current->pool->sample_count )
+    if( current->pool->sample_count == 0 )
     {
         /* Cannot decide whether we should flush the current sample or not here yet. */
         current->chunk_number            += 1;
@@ -4144,29 +3836,31 @@ static int isom_add_chunk( isom_trak_t *trak, lsmash_sample_t *sample )
         return 0;
     }
     if( sample->dts < current->first_dts )
-        return -1;  /* easy error check. */
-    if( (file->max_chunk_duration >= ((double)(sample->dts - current->first_dts) / trak->mdia->mdhd->timescale))
-     && (file->max_chunk_size     >= current->pool->size + sample->length)
-     && (current->sample_description_index == sample->index) )
+        return LSMASH_ERR_INVALID_DATA; /* easy error check. */
+    isom_stbl_t   *stbl = trak->mdia->minf->stbl;
+    lsmash_file_t *file = isom_get_written_media_file( trak, current->sample_description_index );
+    if( (current->sample_description_index == sample->index)
+     && (file->max_chunk_duration >= ((double)(sample->dts - current->first_dts) / trak->mdia->mdhd->timescale))
+     && (file->max_chunk_size     >= current->pool->size + sample->length) )
         return 0;   /* No need to flush current cached chunk, the current sample must be put into that. */
     /* NOTE: chunk relative stuff must be pushed into file after a chunk is fully determined with its contents. */
     /* Now the current cached chunk is fixed, actually add the chunk relative properties to its file accordingly. */
-    isom_stbl_t       *stbl           = trak->mdia->minf->stbl;
     isom_stsc_entry_t *last_stsc_data = stbl->stsc->list->tail ? (isom_stsc_entry_t *)stbl->stsc->list->tail->data : NULL;
     /* Create a new chunk sequence in this track if needed. */
+    int err;
     if( (!last_stsc_data
       || current->pool->sample_count       != last_stsc_data->samples_per_chunk
       || current->sample_description_index != last_stsc_data->sample_description_index)
-     && isom_add_stsc_entry( stbl, current->chunk_number,
-                                   current->pool->sample_count,
-                                   current->sample_description_index ) )
-        return -1;
+     && (err = isom_add_stsc_entry( stbl, current->chunk_number,
+                                          current->pool->sample_count,
+                                          current->sample_description_index )) < 0 )
+        return err;
     /* Add a new chunk offset in this track. */
     uint64_t offset = file->size;
     if( file->fragment )
         offset += ISOM_BASEBOX_COMMON_SIZE + file->fragment->pool_size;
-    if( isom_add_stco_entry( stbl, offset ) )
-        return -1;
+    if( (err = isom_add_stco_entry( stbl, offset )) < 0 )
+        return err;
     /* Update and re-initialize cache, using the current sample */
     current->chunk_number            += 1;
     current->sample_description_index = sample->index;
@@ -4178,15 +3872,19 @@ static int isom_add_chunk( isom_trak_t *trak, lsmash_sample_t *sample )
 static int isom_write_pooled_samples( lsmash_file_t *file, isom_sample_pool_t *pool )
 {
     if( !file
-     || !file->mdat
      || !file->bs
-     || !file->bs->stream )
-        return -1;
+     || !file->bs->stream
+     || !(file->flags & LSMASH_FILE_MODE_WRITE)
+     || !(file->flags & LSMASH_FILE_MODE_MEDIA)
+     || ((file->flags & LSMASH_FILE_MODE_BOX) && !file->mdat) )
+        return LSMASH_ERR_INVALID_DATA;
     lsmash_bs_put_bytes( file->bs, pool->size, pool->data );
-    if( lsmash_bs_flush_buffer( file->bs ) )
-        return -1;
-    file->mdat->media_size  += pool->size;
-    file->size              += pool->size;
+    int err = lsmash_bs_flush_buffer( file->bs );
+    if( err < 0 )
+        return err;
+    if( file->mdat )
+        file->mdat->media_size += pool->size;
+    file->size += pool->size;
     pool->sample_count = 0;
     pool->size         = 0;
     return 0;
@@ -4194,6 +3892,7 @@ static int isom_write_pooled_samples( lsmash_file_t *file, isom_sample_pool_t *p
 
 int isom_update_sample_tables( isom_trak_t *trak, lsmash_sample_t *sample, uint32_t *samples_per_packet )
 {
+    int err;
     isom_audio_entry_t *audio = (isom_audio_entry_t *)lsmash_get_entry_data( &trak->mdia->minf->stbl->stsd->list, sample->index );
     if( (audio->manager & LSMASH_AUDIO_DESCRIPTION)
      && (audio->manager & LSMASH_QTFF_BASE)
@@ -4203,7 +3902,7 @@ int isom_update_sample_tables( isom_trak_t *trak, lsmash_sample_t *sample, uint3
         /* Add entries of the sample table for each uncompressed sample. */
         uint64_t sample_duration = trak->mdia->mdhd->timescale / (audio->samplerate >> 16);
         if( audio->samplesPerPacket == 0 || sample_duration == 0 )
-            return -1;
+            return LSMASH_ERR_INVALID_DATA;
         uint64_t sample_dts = sample->dts;
         uint64_t sample_cts = sample->cts;
         for( uint32_t i = 0; i < audio->samplesPerPacket; i++ )
@@ -4212,10 +3911,10 @@ int isom_update_sample_tables( isom_trak_t *trak, lsmash_sample_t *sample, uint3
              * This points to individual uncompressed audio samples, each one byte in size, within the compressed frames. */
             uint32_t sample_count = isom_add_size( trak, 1 );
             if( sample_count == 0 )
-                return -1;
+                return LSMASH_ERR_NAMELESS;
             /* Add a decoding timestamp and a composition timestamp. */
-            if( isom_add_timestamp( trak, sample_dts, sample_cts ) < 0 )
-                return -1;
+            if( (err = isom_add_timestamp( trak, sample_dts, sample_cts )) < 0 )
+                return err;
             sample_dts += sample_duration;
             sample_cts += sample_duration;
         }
@@ -4226,25 +3925,25 @@ int isom_update_sample_tables( isom_trak_t *trak, lsmash_sample_t *sample, uint3
         /* Add a sample_size and increment sample_count. */
         uint32_t sample_count = isom_add_size( trak, sample->length );
         if( sample_count == 0 )
-            return -1;
+            return LSMASH_ERR_NAMELESS;
         /* Add a decoding timestamp and a composition timestamp. */
-        if( isom_add_timestamp( trak, sample->dts, sample->cts ) < 0 )
-            return -1;
+        if( (err = isom_add_timestamp( trak, sample->dts, sample->cts )) < 0 )
+            return err;
         /* Add a sync point if needed. */
-        if( isom_add_sync_point( trak, sample_count, &sample->prop ) < 0 )
-            return -1;
+        if( (err = isom_add_sync_point( trak, sample_count, &sample->prop )) < 0 )
+            return err;
         /* Add a partial sync point if needed. */
-        if( isom_add_partial_sync( trak, sample_count, &sample->prop ) < 0 )
-            return -1;
+        if( (err = isom_add_partial_sync( trak, sample_count, &sample->prop )) < 0 )
+            return err;
         /* Add leading, independent, disposable and redundant information if needed. */
-        if( isom_add_dependency_type( trak, &sample->prop ) < 0 )
-            return -1;
+        if( (err = isom_add_dependency_type( trak, &sample->prop )) < 0 )
+            return err;
         /* Group samples into random access point type if needed. */
-        if( isom_group_random_access( (isom_box_t *)trak, sample ) < 0 )
-            return -1;
+        if( (err = isom_group_random_access( (isom_box_t *)trak, sample )) < 0 )
+            return err;
         /* Group samples into random access recovery point type if needed. */
-        if( isom_group_roll_recovery( (isom_box_t *)trak, sample ) < 0 )
-            return -1;
+        if( (err = isom_group_roll_recovery( (isom_box_t *)trak, sample )) < 0 )
+            return err;
         *samples_per_packet = 1;
     }
     /* Add a chunk if needed. */
@@ -4257,24 +3956,25 @@ static int isom_output_cached_chunk( isom_trak_t *trak )
     isom_stbl_t       *stbl           = trak->mdia->minf->stbl;
     isom_stsc_entry_t *last_stsc_data = stbl->stsc->list->tail ? (isom_stsc_entry_t *)stbl->stsc->list->tail->data : NULL;
     /* Create a new chunk sequence in this track if needed. */
+    int err;
     if( (!last_stsc_data
       || chunk->pool->sample_count       != last_stsc_data->samples_per_chunk
       || chunk->sample_description_index != last_stsc_data->sample_description_index)
-     && isom_add_stsc_entry( stbl, chunk->chunk_number,
-                                   chunk->pool->sample_count,
-                                   chunk->sample_description_index ) )
-        return -1;
-    lsmash_file_t *file = trak->file;
+     && (err = isom_add_stsc_entry( stbl, chunk->chunk_number,
+                                          chunk->pool->sample_count,
+                                          chunk->sample_description_index )) < 0 )
+        return err;
+    lsmash_file_t *file = isom_get_written_media_file( trak, chunk->sample_description_index );
     if( file->fragment )
     {
         /* Add a new chunk offset in this track. */
-        if( isom_add_stco_entry( stbl, file->size + ISOM_BASEBOX_COMMON_SIZE + file->fragment->pool_size ) )
-            return -1;
+        if( (err = isom_add_stco_entry( stbl, file->size + ISOM_BASEBOX_COMMON_SIZE + file->fragment->pool_size )) < 0 )
+            return err;
         return isom_append_fragment_track_run( file, chunk );
     }
     /* Add a new chunk offset in this track. */
-    if( isom_add_stco_entry( stbl, file->size ) )
-        return -1;
+    if( (err = isom_add_stco_entry( stbl, file->size )) < 0 )
+        return err;
     /* Output pooled samples in this track. */
     return isom_write_pooled_samples( file, chunk->pool );
 }
@@ -4291,7 +3991,7 @@ int isom_pool_sample( isom_sample_pool_t *pool, lsmash_sample_t *sample, uint32_
         else
             data = lsmash_realloc( pool->data, alloc );
         if( !data )
-            return -1;
+            return LSMASH_ERR_MEMORY_ALLOC;
         pool->data  = data;
         pool->alloc = alloc;
     }
@@ -4305,19 +4005,27 @@ int isom_pool_sample( isom_sample_pool_t *pool, lsmash_sample_t *sample, uint32_
 static int isom_append_sample_internal( isom_trak_t *trak, lsmash_sample_t *sample )
 {
     uint32_t samples_per_packet;
-    int flush = isom_update_sample_tables( trak, sample, &samples_per_packet );
-    if( flush < 0 )
-        return -1;
-    /* flush == 1 means pooled samples must be flushed. */
-    lsmash_file_t      *file         = trak->file;
+    int ret = isom_update_sample_tables( trak, sample, &samples_per_packet );
+    if( ret < 0 )
+        return ret;
+    /* ret == 1 means pooled samples must be flushed. */
     isom_sample_pool_t *current_pool = trak->cache->chunk.pool;
-    if( flush == 1 && isom_write_pooled_samples( file, current_pool ) )
-        return -1;
+    if( ret == 1 )
+    {
+        /* The sample_description_index in the cache is one of the next written chunk.
+         * Therefore, it cannot be referenced here. */
+        lsmash_entry_list_t *stsc_list      = trak->mdia->minf->stbl->stsc->list;
+        isom_stsc_entry_t   *last_stsc_data = (isom_stsc_entry_t *)stsc_list->tail->data;
+        lsmash_file_t       *file           = isom_get_written_media_file( trak, last_stsc_data->sample_description_index );
+        if( (ret = isom_write_pooled_samples( file, current_pool )) < 0 )
+            return ret;
+    }
     /* Arbitration system between tracks with extremely scattering dts.
      * Here, we check whether asynchronization between the tracks exceeds the tolerance.
      * If a track has too old "first DTS" in its cached chunk than current sample's DTS, then its pooled samples must be flushed.
      * We don't consider presentation of media since any edit can pick an arbitrary portion of media in track.
      * Note: you needn't read this loop until you grasp the basic handling of chunks. */
+    lsmash_file_t *file = trak->file;
     double tolerance = file->max_async_tolerance;
     for( lsmash_entry_t *entry = file->moov->trak_list.head; entry; entry = entry->next )
     {
@@ -4333,14 +4041,14 @@ static int isom_append_sample_internal( isom_trak_t *trak, lsmash_sample_t *samp
          || !other->mdia->minf->stbl
          || !other->mdia->minf->stbl->stsc
          || !other->mdia->minf->stbl->stsc->list )
-            return -1;
+            return LSMASH_ERR_INVALID_DATA;
         isom_chunk_t *chunk = &other->cache->chunk;
         if( !chunk->pool || chunk->pool->sample_count == 0 )
             continue;
         double diff = ((double)sample->dts      /  trak->mdia->mdhd->timescale)
                     - ((double)chunk->first_dts / other->mdia->mdhd->timescale);
-        if( diff > tolerance && isom_output_cached_chunk( other ) )
-            return -1;
+        if( diff > tolerance && (ret = isom_output_cached_chunk( other )) < 0 )
+            return ret;
         /* Note: we don't flush the cached chunk in the current track and the current sample here
          * even if the conditional expression of '-diff > tolerance' meets.
          * That's useless because appending a sample to another track would be a good equivalent.
@@ -4368,28 +4076,29 @@ static int isom_append_sample( lsmash_file_t *file, uint32_t track_ID, lsmash_sa
      || !trak->mdia->minf->stbl
      || !trak->mdia->minf->stbl->stsd
      || !trak->mdia->minf->stbl->stsc || !trak->mdia->minf->stbl->stsc->list )
-        return -1;
+        return LSMASH_ERR_NAMELESS;
     /* If there is no available Media Data Box to write samples, add and write a new one before any chunk offset is decided. */
+    int err;
     if( !file->mdat )
     {
-        if( isom_add_mdat( file ) )
-            return -1;
+        if( !isom_add_mdat( file ) )
+            return LSMASH_ERR_NAMELESS;
         file->mdat->manager |= LSMASH_PLACEHOLDER;
-        if( isom_write_box( file->bs, (isom_box_t *)file->mdat ) < 0 )
-            return -1;
+        if( (err = isom_write_box( file->bs, (isom_box_t *)file->mdat )) < 0 )
+            return err;
         assert( file->free );
         file->size += file->free->size + file->mdat->size;
     }
     isom_sample_entry_t *sample_entry = (isom_sample_entry_t *)lsmash_get_entry_data( &trak->mdia->minf->stbl->stsd->list, sample->index );
     if( !sample_entry )
-        return -1;
+        return LSMASH_ERR_NAMELESS;
     if( isom_is_lpcm_audio( sample_entry ) )
     {
         uint32_t frame_size = ((isom_audio_entry_t *)sample_entry)->constBytesPerAudioPacket;
         if( sample->length == frame_size )
             return isom_append_sample_internal( trak, sample );
         else if( sample->length < frame_size )
-            return -1;
+            return LSMASH_ERR_INVALID_DATA;
         /* Append samples splitted into each LPCMFrame. */
         uint64_t dts = sample->dts;
         uint64_t cts = sample->cts;
@@ -4397,16 +4106,16 @@ static int isom_append_sample( lsmash_file_t *file, uint32_t track_ID, lsmash_sa
         {
             lsmash_sample_t *lpcm_sample = lsmash_create_sample( frame_size );
             if( !lpcm_sample )
-                return -1;
+                return LSMASH_ERR_MEMORY_ALLOC;
             memcpy( lpcm_sample->data, sample->data + offset, frame_size );
             lpcm_sample->dts   = dts++;
             lpcm_sample->cts   = cts++;
             lpcm_sample->prop  = sample->prop;
             lpcm_sample->index = sample->index;
-            if( isom_append_sample_internal( trak, lpcm_sample ) )
+            if( (err = isom_append_sample_internal( trak, lpcm_sample )) < 0 )
             {
                 lsmash_delete_sample( lpcm_sample );
-                return -1;
+                return err;
             }
         }
         lsmash_delete_sample( sample );
@@ -4417,17 +4126,18 @@ static int isom_append_sample( lsmash_file_t *file, uint32_t track_ID, lsmash_sa
 
 static int isom_output_cache( isom_trak_t *trak )
 {
+    int err;
     isom_cache_t *cache = trak->cache;
     if( cache->chunk.pool
      && cache->chunk.pool->sample_count
-     && isom_output_cached_chunk( trak ) < 0 )
-        return -1;
+     && (err = isom_output_cached_chunk( trak )) < 0 )
+        return err;
     isom_stbl_t *stbl = trak->mdia->minf->stbl;
     for( lsmash_entry_t *entry = stbl->sgpd_list.head; entry; entry = entry->next )
     {
         isom_sgpd_t *sgpd = (isom_sgpd_t *)entry->data;
         if( !sgpd )
-            return -1;
+            return LSMASH_ERR_INVALID_DATA;
         switch( sgpd->grouping_type )
         {
             case ISOM_GROUP_TYPE_RAP :
@@ -4438,7 +4148,7 @@ static int isom_output_cache( isom_trak_t *trak )
                     if( stbl->file->fragment )
                         continue;
                     else
-                        return -1;
+                        return LSMASH_ERR_NAMELESS;
                 }
                 if( !group->random_access )
                     continue;
@@ -4446,16 +4156,19 @@ static int isom_output_cache( isom_trak_t *trak )
                 break;
             }
             case ISOM_GROUP_TYPE_ROLL :
+            case ISOM_GROUP_TYPE_PROL :
                 if( !cache->roll.pool )
                 {
                     if( stbl->file->fragment )
                         continue;
                     else
-                        return -1;
+                        return LSMASH_ERR_NAMELESS;
                 }
-                isom_sbgp_t *sbgp = isom_get_sample_to_group( stbl, ISOM_GROUP_TYPE_ROLL );
-                if( !sbgp || isom_all_recovery_completed( sbgp, cache->roll.pool ) < 0 )
-                    return -1;
+                isom_sbgp_t *sbgp = isom_get_roll_recovery_sample_to_group( &stbl->sbgp_list );
+                if( !sbgp )
+                    return LSMASH_ERR_NAMELESS;
+                if( (err = isom_all_recovery_completed( sbgp, cache->roll.pool )) < 0 )
+                    return err;
                 break;
             default :
                 break;
@@ -4466,12 +4179,14 @@ static int isom_output_cache( isom_trak_t *trak )
 
 int lsmash_flush_pooled_samples( lsmash_root_t *root, uint32_t track_ID, uint32_t last_sample_delta )
 {
-    if( !root || !root->file )
-        return -1;
+    if( isom_check_initializer_present( root ) < 0 )
+        return LSMASH_ERR_FUNCTION_PARAM;
     lsmash_file_t *file = root->file;
     if( file->fragment
      && file->fragment->movie )
         return isom_flush_fragment_pooled_samples( file, track_ID, last_sample_delta );
+    if( file != file->initializer )
+        return LSMASH_ERR_INVALID_DATA;
     isom_trak_t *trak = isom_get_trak( file, track_ID );
     if( !trak
      || !trak->cache
@@ -4480,37 +4195,46 @@ int lsmash_flush_pooled_samples( lsmash_root_t *root, uint32_t track_ID, uint32_
      || !trak->mdia->minf->stbl
      || !trak->mdia->minf->stbl->stsc
      || !trak->mdia->minf->stbl->stsc->list )
-        return -1;
-    if( isom_output_cache( trak ) < 0 )
-        return -1;
+        return LSMASH_ERR_NAMELESS;
+    int err = isom_output_cache( trak );
+    if( err < 0 )
+        return err;
     return lsmash_set_last_sample_delta( root, track_ID, last_sample_delta );
 }
 
 int lsmash_append_sample( lsmash_root_t *root, uint32_t track_ID, lsmash_sample_t *sample )
 {
-    if( !root )
-        return -1;
+    if( isom_check_initializer_present( root ) < 0
+     || track_ID == 0
+     || !sample
+     || !sample->data )
+        return LSMASH_ERR_FUNCTION_PARAM;
     lsmash_file_t *file = root->file;
     /* We think max_chunk_duration == 0, which means all samples will be cached on memory, should be prevented.
      * This means removal of a feature that we used to have, but anyway very alone chunk does not make sense. */
     if( !file
      || !file->bs
-     || !sample
-     || !sample->data
-     || track_ID                  == 0
+     || !(file->flags & LSMASH_FILE_MODE_BOX)
      || file->max_chunk_duration  == 0
      || file->max_async_tolerance == 0 )
-        return -1;
+        return LSMASH_ERR_NAMELESS;
     /* Write File Type Box here if it was not written yet. */
-    if( file->ftyp && !(file->ftyp->manager & LSMASH_WRITTEN_BOX) )
+    if( file->flags & LSMASH_FILE_MODE_INITIALIZATION )
     {
-        if( isom_write_box( file->bs, (isom_box_t *)file->ftyp ) )
-            return -1;
-        file->size += file->ftyp->size;
+        if( file->ftyp && !(file->ftyp->manager & LSMASH_WRITTEN_BOX) )
+        {
+            int err = isom_write_box( file->bs, (isom_box_t *)file->ftyp );
+            if( err < 0 )
+                return err;
+            file->size += file->ftyp->size;
+        }
     }
-    if( file->fragment
+    if( (file->flags & LSMASH_FILE_MODE_FRAGMENTED)
+     && file->fragment
      && file->fragment->pool )
         return isom_append_fragment_sample( file, track_ID, sample );
+    if( file != file->initializer )
+        return LSMASH_ERR_INVALID_DATA;
     return isom_append_sample( file, track_ID, sample );
 }
 
@@ -4518,48 +4242,46 @@ int lsmash_append_sample( lsmash_root_t *root, uint32_t track_ID, lsmash_sample_
 
 int lsmash_delete_explicit_timeline_map( lsmash_root_t *root, uint32_t track_ID )
 {
-    if( !root )
-        return -1;
-    isom_trak_t *trak = isom_get_trak( root->file, track_ID );
+    if( isom_check_initializer_present( root ) < 0 )
+        return LSMASH_ERR_FUNCTION_PARAM;
+    isom_trak_t *trak = isom_get_trak( root->file->initializer, track_ID );
     if( !trak )
-        return -1;
+        return LSMASH_ERR_NAMELESS;
     isom_remove_box_by_itself( trak->edts );
     return isom_update_tkhd_duration( trak );
 }
 
 void lsmash_delete_tyrant_chapter( lsmash_root_t *root )
 {
-    if( !root
-     || !root->file
-     || !root->file->moov
-     || !root->file->moov->udta )
+    if( isom_check_initializer_present( root ) < 0
+     || !root->file->initializer->moov
+     || !root->file->initializer->moov->udta )
         return;
     isom_remove_box_by_itself( root->file->moov->udta->chpl );
 }
 
 int lsmash_set_copyright( lsmash_root_t *root, uint32_t track_ID, uint16_t ISO_language, char *notice )
 {
-    if( !root )
-        return -1;
-    lsmash_file_t *file = root->file;
-    if( !file
-     || !file->moov
-     || !file->isom_compatible
+    if( isom_check_initializer_present( root ) < 0
      || (ISO_language && ISO_language < 0x800)
      || !notice )
-        return -1;
+        return LSMASH_ERR_FUNCTION_PARAM;
+    lsmash_file_t *file = root->file;
+    if( !file->moov
+     || !file->isom_compatible )
+        return LSMASH_ERR_NAMELESS;
     isom_udta_t *udta;
     if( track_ID )
     {
         isom_trak_t *trak = isom_get_trak( file, track_ID );
-        if( !trak || (!trak->udta && isom_add_udta( trak )) )
-            return -1;
+        if( !trak || (!trak->udta && !isom_add_udta( trak )) )
+            return LSMASH_ERR_NAMELESS;
         udta = trak->udta;
     }
     else
     {
-        if( !file->moov->udta && isom_add_udta( file->moov ) )
-            return -1;
+        if( !file->moov->udta && !isom_add_udta( file->moov ) )
+            return LSMASH_ERR_NAMELESS;
         udta = file->moov->udta;
     }
     assert( udta );
@@ -4567,10 +4289,10 @@ int lsmash_set_copyright( lsmash_root_t *root, uint32_t track_ID, uint16_t ISO_l
     {
         isom_cprt_t *cprt = (isom_cprt_t *)entry->data;
         if( !cprt || cprt->language == ISO_language )
-            return -1;
+            return LSMASH_ERR_NAMELESS;
     }
-    if( isom_add_cprt( udta ) )
-        return -1;
+    if( !isom_add_cprt( udta ) )
+        return LSMASH_ERR_NAMELESS;
     isom_cprt_t *cprt = (isom_cprt_t *)udta->cprt_list.tail->data;
     cprt->language      = ISO_language;
     cprt->notice_length = strlen( notice ) + 1;
