@@ -258,7 +258,7 @@ static void mp4sys_remove_descriptor_in_predefined_list( void *opaque_descriptor
     if( descriptor->parent )
     {
         lsmash_entry_list_t *list = (lsmash_entry_list_t *)(((int8_t *)descriptor->parent) + offset_of_list);
-        for( lsmash_entry_t *entry = list ? list->head : NULL; entry; entry = entry->next )
+        for( lsmash_entry_t *entry = list->head; entry; entry = entry->next )
             if( descriptor == entry->data )
             {
                 /* We don't free this descriptor here.
@@ -403,9 +403,9 @@ static int mp4sys_write_DecoderConfigDescriptor( lsmash_bs_t *bs, mp4sys_Decoder
 {
     lsmash_bs_put_byte( bs, dcd->objectTypeIndication );
     uint8_t temp;
-    temp  = (dcd->streamType << 2) & 0x3F;
-    temp |= (dcd->upStream   << 1) & 0x01;
-    temp |=  dcd->reserved         & 0x01;
+    temp  = (dcd->streamType & 0x3F) << 2;
+    temp |= (dcd->upStream   & 0x01) << 1;
+    temp |=  dcd->reserved   & 0x01;
     lsmash_bs_put_byte( bs, temp );
     lsmash_bs_put_be24( bs, dcd->bufferSizeDB );
     lsmash_bs_put_be32( bs, dcd->maxBitrate );
@@ -748,7 +748,6 @@ int mp4sys_to_InitialObjectDescriptor
     return 0;
 }
 
-#ifdef LSMASH_DEMUXER_ENABLED
 /*
     bufferSizeDB is byte unit, NOT bit unit.
     avgBitrate is 0 if VBR
@@ -1029,7 +1028,6 @@ int mp4sys_print_codec_specific( FILE *fp, lsmash_file_t *file, isom_box_t *box,
     mp4sys_print_descriptor( fp, (mp4sys_descriptor_t *)esds->ES, indent );
     return 0;
 }
-#endif /* LSMASH_DEMUXER_ENABLED */
 
 mp4sys_descriptor_t *mp4sys_get_descriptor( lsmash_bs_t *bs, void *parent );
 

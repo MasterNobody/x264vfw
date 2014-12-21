@@ -1,7 +1,7 @@
 /*****************************************************************************
- * fragment.h
+ * id.c
  *****************************************************************************
- * Copyright (C) 2011-2014 L-SMASH project
+ * Copyright (C) 2014 L-SMASH project
  *
  * Authors: Yusuke Nakamura <muken.the.vfrmaniac@gmail.com>
  *
@@ -20,35 +20,9 @@
 
 /* This file is available under an ISC license. */
 
-int isom_finish_final_fragment_movie
-(
-    lsmash_file_t        *file,
-    lsmash_adhoc_remux_t *remux
-);
+/****************************************************************************
+ * CODEC identifiers
+ ****************************************************************************/
 
-int isom_set_fragment_last_duration
-(
-    isom_traf_t *traf,
-    uint32_t     last_duration
-);
-
-int isom_append_fragment_track_run
-(
-    lsmash_file_t *file,
-    isom_chunk_t  *chunk
-);
-
-int isom_flush_fragment_pooled_samples
-(
-    lsmash_file_t *file,
-    uint32_t       track_ID,
-    uint32_t       last_sample_duration
-);
-
-int isom_append_fragment_sample
-(
-    lsmash_file_t       *file,
-    isom_trak_t         *trak,
-    lsmash_sample_t     *sample,
-    isom_sample_entry_t *sample_entry
-);
+#define LSMASH_INITIALIZE_CODEC_ID_HERE
+#include "lsmash.h"

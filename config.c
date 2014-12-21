@@ -1608,8 +1608,8 @@ static void help(char *buffer, int longhelp)
     H2( "      --aq-mode <integer>     AQ method [%d]\r\n"
         "                                  - 0: Disabled\r\n"
         "                                  - 1: Variance AQ (complexity mask)\r\n"
-        "                                  - 2: Auto-variance AQ (experimental)\r\n"
-        "                                  - 3: Auto-variance AQ modification\r\n", defaults->rc.i_aq_mode );
+        "                                  - 2: Auto-variance AQ\r\n"
+        "                                  - 3: Auto-variance AQ with bias to dark scenes\r\n", defaults->rc.i_aq_mode );
     H1( "      --aq-strength <float>   Reduces blocking and blurring in flat and\r\n"
         "                              textured areas. [%.1f]\r\n", defaults->rc.f_aq_strength );
     H1( "\r\n" );

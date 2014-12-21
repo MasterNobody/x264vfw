@@ -1878,6 +1878,7 @@ struct lsmash_file_tag
         lsmash_entry_list_t     *print;
         lsmash_entry_list_t     *timeline;
         lsmash_file_t           *initializer;
+        struct importer_tag     *importer;
         uint64_t  fragment_count;           /* the number of movie fragments we created */
         double    max_chunk_duration;       /* max duration per chunk in seconds */
         double    max_async_tolerance;      /* max tolerance, in seconds, for amount of interleaving asynchronization between tracks */
@@ -2493,16 +2494,47 @@ isom_sbgp_t *isom_get_roll_recovery_sample_to_group( lsmash_entry_list_t *list )
 isom_sgpd_t *isom_get_fragment_sample_group_description( isom_traf_t *traf, uint32_t grouping_type );
 isom_sbgp_t *isom_get_fragment_sample_to_group( isom_traf_t *traf, uint32_t grouping_type );
 
+isom_trak_t *isom_track_create( lsmash_file_t *file, lsmash_media_type media_type );
+isom_moov_t *isom_movie_create( lsmash_file_t *file );
+
 isom_dcr_ps_entry_t *isom_create_ps_entry( uint8_t *ps, uint32_t ps_size );
 void isom_remove_dcr_ps( isom_dcr_ps_entry_t *ps );
 
 int isom_setup_handler_reference( isom_hdlr_t *hdlr, uint32_t media_type );
 int isom_setup_iods( isom_moov_t *moov );
 
-uint32_t isom_get_sample_count( isom_trak_t *trak );
-isom_sample_pool_t *isom_create_sample_pool( uint64_t size );
-int isom_update_sample_tables( isom_trak_t *trak, lsmash_sample_t *sample, uint32_t *samples_per_packet );
-int isom_pool_sample( isom_sample_pool_t *pool, lsmash_sample_t *sample, uint32_t samples_per_packet );
+uint32_t isom_get_sample_count
+(
+    isom_trak_t *trak
+);
+
+isom_sample_pool_t *isom_create_sample_pool
+(
+    uint64_t size
+);
+
+int isom_update_sample_tables
+(
+    isom_trak_t         *trak,
+    lsmash_sample_t     *sample,
+    uint32_t            *samples_per_packet,
+    isom_sample_entry_t *sample_entry
+);
+
+int isom_pool_sample
+(
+    isom_sample_pool_t *pool,
+    lsmash_sample_t    *sample,
+    uint32_t            samples_per_packet
+);
+
+int isom_append_sample_by_type
+(
+    void                *track,
+    lsmash_sample_t     *sample,
+    isom_sample_entry_t *sample_entry,
+    int (*func_append_sample)( void *, lsmash_sample_t *, isom_sample_entry_t * )
+);
 
 int isom_add_sample_grouping( isom_box_t *parent, isom_grouping_type grouping_type );
 int isom_group_random_access( isom_box_t *parent, lsmash_sample_t *sample );

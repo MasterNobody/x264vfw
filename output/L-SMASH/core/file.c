@@ -22,11 +22,19 @@
 
 #include "common/internal.h" /* must be placed first */
 
+/* for _setmode() */
+#ifdef _WIN32
+#include <io.h>
+#endif
+
 #include <string.h>
+#include <fcntl.h>
 
 #include "box.h"
 #include "read.h"
 #include "fragment.h"
+
+#include "importer/importer.h"
 
 static void isom_clear_compat_flags
 (
@@ -306,7 +314,7 @@ static int isom_set_brands
 {
     if( brand_count > 50 )
         return LSMASH_ERR_FUNCTION_PARAM;   /* We support setting brands up to 50. */
-    if( major_brand == 0 || brand_count == 0 )
+    if( major_brand == 0 && (!brands || brand_count == 0 || brands[0] == 0) )
     {
         if( file->flags & LSMASH_FILE_MODE_INITIALIZATION )
         {
@@ -337,6 +345,14 @@ static int isom_set_brands
         }
         return 0;
     }
+    else if( major_brand == 0 )
+    {
+        major_brand = brands[0];
+        lsmash_log( NULL, LSMASH_LOG_WARNING,
+                    "major_brand is not specified. Use the first brand in the compatible brand list as major_brand.\n" );
+    }
+    else if( !brands )
+        brand_count = 0;
     isom_ftyp_t *ftyp;
     if( file->flags & LSMASH_FILE_MODE_INITIALIZATION )
     {
@@ -425,15 +441,18 @@ int lsmash_open_file
                   | LSMASH_FILE_MODE_INITIALIZATION
                   | LSMASH_FILE_MODE_MEDIA;
     }
-#ifdef LSMASH_DEMUXER_ENABLED
     else if( open_mode == 1 )
     {
         memcpy( mode, "rb", 3 );
         file_mode = LSMASH_FILE_MODE_READ;
     }
-#endif
     if( file_mode == 0 )
         return LSMASH_ERR_FUNCTION_PARAM;
+#ifdef _WIN32
+    _setmode( _fileno( stdin ),  _O_BINARY );
+    _setmode( _fileno( stdout ), _O_BINARY );
+    _setmode( _fileno( stderr ), _O_BINARY );
+#endif
     FILE *stream   = NULL;
     int   seekable = 1;
     if( !strcmp( filename, "-" ) )
@@ -539,21 +558,8 @@ lsmash_file_t *lsmash_set_file
                                    param->brands, param->brand_count ) < 0 )
             goto fail;
         /* Create the movie header if the initialization of the streams is required. */
-        if( file->flags & LSMASH_FILE_MODE_INITIALIZATION )
-        {
-            if( !isom_add_moov( file )
-             || !isom_add_mvhd( file->moov ) )
-                goto fail;
-            /* Default Movie Header Box. */
-            isom_mvhd_t *mvhd = file->moov->mvhd;
-            mvhd->rate          = 0x00010000;
-            mvhd->volume        = 0x0100;
-            mvhd->matrix[0]     = 0x00010000;
-            mvhd->matrix[4]     = 0x00010000;
-            mvhd->matrix[8]     = 0x40000000;
-            mvhd->next_track_ID = 1;
-            file->initializer = file;
-        }
+        if( (file->flags & LSMASH_FILE_MODE_INITIALIZATION) && !isom_movie_create( file ) )
+            goto fail;
     }
     if( !root->file )
         root->file = file;
@@ -569,7 +575,6 @@ int64_t lsmash_read_file
     lsmash_file_parameters_t *param
 )
 {
-#ifdef LSMASH_DEMUXER_ENABLED
     if( !file )
         return (int64_t)LSMASH_ERR_FUNCTION_PARAM;
     if( !file->bs )
@@ -577,19 +582,12 @@ int64_t lsmash_read_file
     int64_t ret = LSMASH_ERR_NAMELESS;
     if( file->flags & (LSMASH_FILE_MODE_READ | LSMASH_FILE_MODE_DUMP) )
     {
-        /* Get the file size if seekable when reading. */
-        if( !file->bs->unseekable )
-        {
-            ret = lsmash_bs_read_seek( file->bs, 0, SEEK_END );
-            if( ret < 0 )
-                return ret;
-            file->bs->written = ret;
-            lsmash_bs_read_seek( file->bs, 0, SEEK_SET );
-        }
-        else
-            ret = 0;
-        /* Read whole boxes. */
-        ret = isom_read_file( file );
+        importer_t *importer = lsmash_importer_alloc();
+        if( !importer )
+            return (int64_t)LSMASH_ERR_MEMORY_ALLOC;
+        file->importer = importer;
+        lsmash_importer_set_file( importer, file );
+        ret = lsmash_importer_find( importer, "ISOBMFF/QTFF", !file->bs->unseekable );
         if( ret < 0 )
             return ret;
         if( param )
@@ -622,9 +620,6 @@ int64_t lsmash_read_file
         }
     }
     return ret;
-#else
-    return (int64_t)LSMASH_ERR_NAMELESS;
-#endif
 }
 
 int lsmash_activate_file

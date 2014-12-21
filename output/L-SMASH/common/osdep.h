@@ -27,9 +27,20 @@
 #define _FILE_OFFSET_BITS 64
 #define _LARGEFILE_SOURCE
 
-#ifdef __MINGW32__
+#if defined( _MSC_VER )
+#define lsmash_fseek _fseeki64
+#define lsmash_ftell _ftelli64
+#elif defined( __MINGW32__ )
 #define lsmash_fseek fseeko64
 #define lsmash_ftell ftello64
+#else
+#define lsmash_fseek fseeko
+#define lsmash_ftell ftello
+#endif
+
+#ifdef _MSC_VER
+#define inline __inline
+#define _CRT_SECURE_NO_WARNINGS
 #endif
 
 #ifdef _WIN32

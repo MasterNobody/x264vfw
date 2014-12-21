@@ -23,10 +23,23 @@
 #ifndef LSMASH_H
 #define LSMASH_H
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include <stddef.h>
 #include <stdint.h>
 
 #define PRIVATE     /* If this declaration is placed at a variable, any user shall NOT use it. */
+
+/**************************************************************************************
+ * Handle windows dll imports. The user must define this before including this header.
+ **************************************************************************************/
+#ifdef LSMASH_API_IMPORTS
+#define LSMASH_API __declspec(dllimport)
+#else
+#define LSMASH_API
+#endif
 
 #define LSMASH_4CC( a, b, c, d ) (((a)<<24) | ((b)<<16) | ((c)<<8) | (d))
 
@@ -34,8 +47,8 @@
  * Version
  ****************************************************************************/
 #define LSMASH_VERSION_MAJOR  2
-#define LSMASH_VERSION_MINOR  4
-#define LSMASH_VERSION_MICRO  1
+#define LSMASH_VERSION_MINOR  6
+#define LSMASH_VERSION_MICRO  0
 
 #define LSMASH_VERSION_INT( a, b, c ) (((a) << 16) | ((b) << 8) | (c))
 
@@ -67,7 +80,10 @@ typedef struct lsmash_root_tag lsmash_root_t;
  *
  * Return the address of an allocated ROOT if successful.
  * Return NULL otherwise. */
-lsmash_root_t *lsmash_create_root( void );
+lsmash_root_t *lsmash_create_root
+(
+    void
+);
 
 /* Deallocate a given ROOT. */
 void lsmash_destroy_root
@@ -475,7 +491,7 @@ typedef struct
 
 #define LSMASH_BOX_TYPE_INITIALIZER { 0x00000000, { 0x00000000, { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 } } }
 #define LSMASH_BOX_TYPE_UNSPECIFIED static_lsmash_box_type_unspecified
-static const lsmash_box_type_t static_lsmash_box_type_unspecified = LSMASH_BOX_TYPE_INITIALIZER;
+LSMASH_API extern const lsmash_box_type_t static_lsmash_box_type_unspecified;
 
 /* Return extended box type that consists of combination of given FourCC and 12-byte ID. */
 lsmash_extended_box_type_t lsmash_form_extended_box_type
@@ -493,8 +509,15 @@ lsmash_box_type_t lsmash_form_box_type
 
 #define LSMASH_ISO_BOX_TYPE_INITIALIZER( x )  { x, { x, { 0x00, 0x11, 0x00, 0x10, 0x80, 0x00, 0x00, 0xAA, 0x00, 0x38, 0x9B, 0x71 } } }
 #define LSMASH_QTFF_BOX_TYPE_INITIALIZER( x ) { x, { x, { 0x0F, 0x11, 0x4D, 0xA5, 0xBF, 0x4E, 0xF2, 0xC4, 0x8C, 0x6A, 0xA1, 0x1E } } }
-lsmash_box_type_t lsmash_form_iso_box_type( lsmash_compact_box_type_t type );
-lsmash_box_type_t lsmash_form_qtff_box_type( lsmash_compact_box_type_t type );
+lsmash_box_type_t lsmash_form_iso_box_type
+(
+    lsmash_compact_box_type_t type
+);
+
+lsmash_box_type_t lsmash_form_qtff_box_type
+(
+    lsmash_compact_box_type_t type
+);
 
 /* precedence of the box position
  * Box with higher value will precede physically other boxes with lower one.
@@ -649,10 +672,17 @@ typedef lsmash_box_type_t lsmash_codec_type_t;
 #define LSMASH_CODEC_TYPE_INITIALIZER LSMASH_BOX_TYPE_INITIALIZER
 #define LSMASH_CODEC_TYPE_UNSPECIFIED LSMASH_BOX_TYPE_UNSPECIFIED
 
+#ifndef LSMASH_INITIALIZE_CODEC_ID_HERE
 #define DEFINE_ISOM_CODEC_TYPE( BOX_TYPE_NAME, BOX_TYPE_FOURCC ) \
-    static const lsmash_codec_type_t BOX_TYPE_NAME = LSMASH_ISO_BOX_TYPE_INITIALIZER( BOX_TYPE_FOURCC )
+    LSMASH_API extern const lsmash_codec_type_t BOX_TYPE_NAME
 #define DEFINE_QTFF_CODEC_TYPE( BOX_TYPE_NAME, BOX_TYPE_FOURCC ) \
-    static const lsmash_codec_type_t BOX_TYPE_NAME = LSMASH_QTFF_BOX_TYPE_INITIALIZER( BOX_TYPE_FOURCC )
+    LSMASH_API extern const lsmash_codec_type_t BOX_TYPE_NAME
+#else
+#define DEFINE_ISOM_CODEC_TYPE( BOX_TYPE_NAME, BOX_TYPE_FOURCC ) \
+    const lsmash_codec_type_t BOX_TYPE_NAME = LSMASH_ISO_BOX_TYPE_INITIALIZER( BOX_TYPE_FOURCC )
+#define DEFINE_QTFF_CODEC_TYPE( BOX_TYPE_NAME, BOX_TYPE_FOURCC ) \
+    const lsmash_codec_type_t BOX_TYPE_NAME = LSMASH_QTFF_BOX_TYPE_INITIALIZER( BOX_TYPE_FOURCC )
+#endif
 
 /* Audio CODEC identifiers */
 DEFINE_ISOM_CODEC_TYPE( ISOM_CODEC_TYPE_AC_3_AUDIO,  LSMASH_4CC( 'a', 'c', '-', '3' ) );    /* AC-3 audio */
@@ -854,7 +884,11 @@ DEFINE_QTFF_CODEC_TYPE( LSMASH_CODEC_TYPE_RAW,       LSMASH_4CC( 'r', 'a', 'w', 
  *
  * Return 1 if the both CODEC identifiers are identical.
  * Return 0 otherwise. */
-int lsmash_check_codec_type_identical( lsmash_codec_type_t a, lsmash_codec_type_t b );
+int lsmash_check_codec_type_identical
+(
+    lsmash_codec_type_t a,
+    lsmash_codec_type_t b
+);
 
 /****************************************************************************
  * Summary of Stream Configuration
@@ -2313,7 +2347,6 @@ int lsmash_create_fragment_empty_duration
     uint32_t       duration
 );
 
-#ifdef LSMASH_DEMUXER_ENABLED
 /****************************************************************************
  * Dump / Print
  ****************************************************************************/
@@ -2595,7 +2628,6 @@ void lsmash_sort_timestamps_composition_order
 (
     lsmash_media_ts_list_t *ts_list
 );
-#endif
 
 /****************************************************************************
  * Tools for creating CODEC Specific Information Extensions (Magic Cookies)
@@ -4059,5 +4091,9 @@ int lsmash_convert_ansi_to_utf8
 #endif
 
 #undef PRIVATE
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

@@ -20,8 +20,6 @@
 
 /* This file is available under an ISC license. */
 
-#ifdef LSMASH_DEMUXER_ENABLED
-
 #include "common/internal.h" /* must be placed first */
 
 #include <stdlib.h>
@@ -383,8 +381,7 @@ static int isom_print_styp( FILE *fp, lsmash_file_t *file, isom_box_t *box, int 
 {
     /* Print 'valid' if this box is the first box in a file. */
     int valid;
-    if( file
-     && file->print
+    if( file->print
      && file->print->head
      && file->print->head->data )
         valid = (box == ((isom_print_entry_t *)file->print->head->data)->box);
@@ -532,7 +529,7 @@ static int isom_print_tkhd( FILE *fp, lsmash_file_t *file, isom_box_t *box, int 
     lsmash_ifprintf( fp, indent, "modification_time = %s", isom_mp4time2utc( tkhd->modification_time ) );
     lsmash_ifprintf( fp, indent, "track_ID = %"PRIu32"\n", tkhd->track_ID );
     lsmash_ifprintf( fp, indent, "reserved = 0x%08"PRIx32"\n", tkhd->reserved1 );
-    if( file && file->moov && file->moov->mvhd )
+    if( file->moov && file->moov->mvhd )
         isom_ifprintf_duration( fp, indent, "duration", tkhd->duration, file->moov->mvhd->timescale );
     else
         isom_ifprintf_duration( fp, indent, "duration", tkhd->duration, 0 );
@@ -651,7 +648,9 @@ static int isom_print_hdlr( FILE *fp, lsmash_file_t *file, isom_box_t *box, int 
 {
     isom_hdlr_t *hdlr = (isom_hdlr_t *)box;
     int indent = level;
-    char str[hdlr->componentName_length + 1];
+    char *str = lsmash_malloc( hdlr->componentName_length + 1 );
+    if( !str )
+        return LSMASH_ERR_MEMORY_ALLOC;
     memcpy( str, hdlr->componentName, hdlr->componentName_length );
     str[hdlr->componentName_length] = 0;
     isom_print_box_common( fp, indent++, box, "Handler Reference Box" );
@@ -676,6 +675,7 @@ static int isom_print_hdlr( FILE *fp, lsmash_file_t *file, isom_box_t *box, int 
         lsmash_ifprintf( fp, indent, "reserved = 0x%08"PRIx32"\n", hdlr->componentFlagsMask );
         lsmash_ifprintf( fp, indent, "name = %s\n", str );
     }
+    lsmash_free( str );
     return 0;
 }
 
@@ -1640,7 +1640,7 @@ static int isom_print_chpl( FILE *fp, lsmash_file_t *file, isom_box_t *box, int 
     uint32_t timescale;
     if( !chpl->version )
     {
-        if( !file || !file->moov || !file->moov->mvhd )
+        if( !file->moov || !file->moov->mvhd )
             return LSMASH_ERR_INVALID_DATA;
         timescale = file->moov->mvhd->timescale;
     }
@@ -1707,10 +1707,13 @@ static int isom_print_keys( FILE *fp, lsmash_file_t *file, isom_box_t *box, int 
         lsmash_ifprintf( fp, indent, "key_size = %"PRIu32"\n", data->key_size );
         lsmash_ifprintf( fp, indent, "key_namespace = %s\n", isom_4cc2str( data->key_namespace ) );
         uint32_t value_length = data->key_size - 8;
-        char str[value_length + 1];
+        char *str = lsmash_malloc( value_length + 1 );
+        if( !str )
+            return LSMASH_ERR_MEMORY_ALLOC;
         memcpy( str, data->key_value, value_length );
         str[value_length] = 0;
         lsmash_ifprintf( fp, indent--, "key_value = %s\n", str );
+        lsmash_free( str );
     }
     return 0;
 }
@@ -1803,12 +1806,16 @@ static int isom_print_metaitem( FILE *fp, lsmash_file_t *file, isom_box_t *box, 
         name = "Unknown";
     uint32_t name_length = strlen( name );
     uint32_t display_name_length = name_length + 20;
-    char display_name[display_name_length + 1];
+    char *display_name = lsmash_malloc( display_name_length + 1 );
+    if( !display_name )
+        return LSMASH_ERR_MEMORY_ALLOC;
     memcpy( display_name, "Metadata Item Box (", 19 );
     memcpy( display_name + 19, name, name_length );
     display_name[display_name_length - 1] = ')';
     display_name[display_name_length] = 0;
-    return isom_print_simple( fp, box, level, display_name );
+    int ret = isom_print_simple( fp, box, level, display_name );
+    lsmash_free( display_name );
+    return ret;
 }
 
 static int isom_print_name( FILE *fp, lsmash_file_t *file, isom_box_t *box, int level )
@@ -1816,10 +1823,13 @@ static int isom_print_name( FILE *fp, lsmash_file_t *file, isom_box_t *box, int 
     isom_name_t *name = (isom_name_t *)box;
     int indent = level;
     isom_print_box_common( fp, indent++, box, "Name Box" );
-    char str[name->name_length + 1];
+    char *str = lsmash_malloc( name->name_length + 1 );
+    if( !str )
+        return LSMASH_ERR_MEMORY_ALLOC;
     memcpy( str, name->name, name->name_length );
     str[name->name_length] = 0;
     lsmash_ifprintf( fp, indent, "name = %s\n", str );
+    lsmash_free( str );
     return 0;
 }
 
@@ -1828,10 +1838,13 @@ static int isom_print_mean( FILE *fp, lsmash_file_t *file, isom_box_t *box, int 
     isom_mean_t *mean = (isom_mean_t *)box;
     int indent = level;
     isom_print_box_common( fp, indent++, box, "Mean Box" );
-    char str[mean->meaning_string_length + 1];
+    char *str = lsmash_malloc( mean->meaning_string_length + 1 );
+    if( !str )
+        return LSMASH_ERR_MEMORY_ALLOC;
     memcpy( str, mean->meaning_string, mean->meaning_string_length );
     str[mean->meaning_string_length] = 0;
     lsmash_ifprintf( fp, indent, "meaning_string = %s\n", str );
+    lsmash_free( str );
     return 0;
 }
 
@@ -1845,7 +1858,7 @@ static int isom_print_data( FILE *fp, lsmash_file_t *file, isom_box_t *box, int 
     {
         uint32_t type_set_indicator = data->reserved >> 8;
         uint32_t well_known_type = ((data->reserved << 16) | (data->type_set_identifier << 8) | data->type_code) & 0xffffff;
-        char *well_known_type_name;
+        char *well_known_type_name = "Unknown";
         static const struct
         {
             uint32_t type;
@@ -1875,8 +1888,6 @@ static int isom_print_data( FILE *fp, lsmash_file_t *file, isom_box_t *box, int 
                 well_known_type_name = well_known_type_table[table_index].name;
                 break;
             }
-        if( well_known_type_table[table_index].type == UINT32_MAX )
-            well_known_type_name = "Unknown";
         lsmash_ifprintf( fp, indent, "type_set_indicator = %"PRIu8"\n", type_set_indicator );
         lsmash_ifprintf( fp, indent, "well_known_type = %"PRIu32" (%s)\n", well_known_type, well_known_type_name );
         lsmash_ifprintf( fp, indent, "locale_indicator = %"PRIu32"\n", data->the_locale );
@@ -1888,10 +1899,13 @@ static int isom_print_data( FILE *fp, lsmash_file_t *file, isom_box_t *box, int 
         if( well_known_type == 1 )
         {
             /* UTF-8 without any count or null terminator */
-            char str[data->value_length + 1];
+            char *str = lsmash_malloc( data->value_length + 1 );
+            if( !str )
+                return LSMASH_ERR_MEMORY_ALLOC;
             memcpy( str, data->value, data->value_length );
             str[data->value_length] = 0;
             lsmash_ifprintf( fp, indent, "value = %s\n", str );
+            lsmash_free( str );
         }
         else if( well_known_type == 13 || well_known_type == 14 || well_known_type == 27 )
             lsmash_ifprintf( fp, indent, "value = (binary data)\n" );
@@ -1923,7 +1937,7 @@ static int isom_print_data( FILE *fp, lsmash_file_t *file, isom_box_t *box, int 
     }
     else
     {
-        char *basic_data_type_name;
+        char *basic_data_type_name = "Unknown";
         static const struct
         {
             uint32_t type;
@@ -1959,8 +1973,6 @@ static int isom_print_data( FILE *fp, lsmash_file_t *file, isom_box_t *box, int 
                 basic_data_type_name = basic_data_type_table[table_index].name;
                 break;
             }
-        if( basic_data_type_table[table_index].type == UINT32_MAX )
-            basic_data_type_name = "Unknown";
         lsmash_ifprintf( fp, indent, "reserved = %"PRIu16"\n", data->reserved );
         lsmash_ifprintf( fp, indent, "type_set_identifier = %"PRIu8"%s\n",
                          data->type_set_identifier,
@@ -2006,7 +2018,7 @@ static int isom_print_data( FILE *fp, lsmash_file_t *file, isom_box_t *box, int 
         {
             /* RIAA-PA (RIAA Parental advisory) 8-bit integer */
             lsmash_ifprintf( fp, indent, "value = %"PRIu8, data->value[0] );
-            if( (signed)data->value[0] == -1 )
+            if( data->value[0] == (uint8_t)-1 )
                 fprintf( fp, " (no)" );
             else if( data->value[0] == 1 )
                 fprintf( fp, " (yes)" );
@@ -2019,10 +2031,13 @@ static int isom_print_data( FILE *fp, lsmash_file_t *file, isom_box_t *box, int 
               || data->type_code == 25 )
         {
             /* String */
-            char str[data->value_length + 1];
+            char *str = lsmash_malloc( data->value_length + 1 );
+            if( !str )
+                return LSMASH_ERR_MEMORY_ALLOC;
             memcpy( str, data->value, data->value_length );
             str[data->value_length] = 0;
             lsmash_ifprintf( fp, indent, "value = %s\n", str );
+            lsmash_free( str );
         }
         else
             goto show_in_binary;
@@ -2106,12 +2121,15 @@ static int isom_print_cprt( FILE *fp, lsmash_file_t *file, isom_box_t *box, int 
 {
     isom_cprt_t *cprt = (isom_cprt_t *)box;
     int indent = level;
-    char str[cprt->notice_length + 1];
+    char *str = lsmash_malloc( cprt->notice_length + 1 );
+    if( !str )
+        return LSMASH_ERR_MEMORY_ALLOC;
     memcpy( str, cprt->notice, cprt->notice_length );
     str[cprt->notice_length] = 0;
     isom_print_box_common( fp, indent++, box, "Copyright Box" );
     lsmash_ifprintf( fp, indent, "language = %s\n", isom_unpack_iso_language( cprt->language ) );
     lsmash_ifprintf( fp, indent, "notice = %s\n", str );
+    lsmash_free( str );
     return 0;
 }
 
@@ -2125,7 +2143,7 @@ static int isom_print_mehd( FILE *fp, lsmash_file_t *file, isom_box_t *box, int 
     isom_mehd_t *mehd = (isom_mehd_t *)box;
     int indent = level;
     isom_print_box_common( fp, indent++, box, "Movie Extends Header Box" );
-    if( file && file->moov && file->moov->mvhd )
+    if( file->moov && file->moov->mvhd )
         isom_ifprintf_duration( fp, indent, "fragment_duration", mehd->fragment_duration, file->moov->mvhd->timescale );
     else
         isom_ifprintf_duration( fp, indent, "fragment_duration", mehd->fragment_duration, 0 );
@@ -2310,7 +2328,11 @@ int lsmash_print_movie( lsmash_root_t *root, const char *filename )
     if( !strcmp( filename, "-" ) )
         destination = stdout;
     else
+    {
         destination = lsmash_fopen( filename, "wb" );
+        if( !destination )
+            return LSMASH_ERR_NAMELESS;
+    }
     fprintf( destination, "[File]\n" );
     fprintf( destination, "    size = %"PRIu64"\n", file->size );
     for( lsmash_entry_t *entry = file->print->head; entry; entry = entry->next )
@@ -2682,5 +2704,3 @@ void isom_remove_print_funcs( lsmash_file_t *file )
     lsmash_remove_list( file->print, isom_remove_print_func );
     file->print = NULL;
 }
-
-#endif /* LSMASH_DEMUXER_ENABLED */

@@ -498,15 +498,16 @@ static int isom_construct_global_specific_header( lsmash_codec_specific_t *dst, 
     uint8_t *data = src->data.unstructured;
     uint64_t size = LSMASH_GET_BE32( data );
     data += ISOM_BASEBOX_COMMON_SIZE;
-    global->header_size = size - ISOM_BASEBOX_COMMON_SIZE;
     if( size == 1 )
     {
         size = LSMASH_GET_BE64( data );
         data += 8;
-        global->header_size -= 8;
     }
     if( size != src->size )
         return LSMASH_ERR_INVALID_DATA;
+    global->header_size = size - ISOM_BASEBOX_COMMON_SIZE;
+    if( data != src->data.unstructured + ISOM_BASEBOX_COMMON_SIZE )
+        global->header_size -= 8;   /* largesize */
     if( global->header_size )
     {
         global->header_data = lsmash_memdup( data, global->header_size );
@@ -631,6 +632,8 @@ lsmash_codec_specific_t *lsmash_convert_codec_specific_format( lsmash_codec_spec
     if( format == specific->format )
         return isom_duplicate_codec_specific_data( specific );
     lsmash_codec_specific_t *dst = lsmash_create_codec_specific_data( specific->type, format );
+    if( !dst )
+        return NULL;
     if( format == LSMASH_CODEC_SPECIFIC_FORMAT_UNSTRUCTURED )
         /* structured -> unstructured */
         switch( specific->type )
@@ -1979,7 +1982,7 @@ static void isom_set_samplerate_division_of_media_timescale( isom_audio_entry_t 
         uint32_t orig_timescale = ((isom_mdia_t *)audio->parent->parent->parent->parent)->mdhd->timescale;
         uint32_t timescale      = orig_timescale;
         uint32_t i              = 2;
-        while( timescale > UINT16_MAX && timescale > 1 && i <= UINT32_MAX )
+        while( timescale > UINT16_MAX && timescale > 1 )
         {
             if( timescale % i == 0 )
                 timescale /= i;
@@ -2302,7 +2305,10 @@ lsmash_summary_t *isom_create_video_summary_from_description( isom_sample_entry_
         {
             isom_qt_color_table_t *src_ct = &visual->color_table;
             if( !src_ct->array )
+            {
+                lsmash_destroy_codec_specific_data( specific );
                 goto fail;
+            }
             uint16_t element_count = LSMASH_MIN( src_ct->size + 1, 256 );
             lsmash_qt_color_table_t *dst_ct = &data->color_table;
             dst_ct->seed  = src_ct->seed;
@@ -2699,11 +2705,6 @@ lsmash_summary_t *isom_create_audio_summary_from_description( isom_sample_entry_
                                 for( uint32_t i = 0; i < chan->numberChannelDescriptions; i++ )
                                 {
                                     isom_channel_description_t *channelDescriptions = (isom_channel_description_t *)(&chan->channelDescriptions[i]);
-                                    if( !channelDescriptions )
-                                    {
-                                        lsmash_bs_cleanup( bs );
-                                        goto fail;
-                                    }
                                     lsmash_bs_put_be32( bs, channelDescriptions->channelLabel );
                                     lsmash_bs_put_be32( bs, channelDescriptions->channelFlags );
                                     lsmash_bs_put_be32( bs, channelDescriptions->coordinates[0] );
@@ -2759,6 +2760,7 @@ lsmash_summary_t *isom_create_audio_summary_from_description( isom_sample_entry_
                     lsmash_codec_specific_t *specific = lsmash_create_codec_specific_data( type, LSMASH_CODEC_SPECIFIC_FORMAT_UNSTRUCTURED );
                     if( !specific )
                     {
+                        lsmash_free( box_data );
                         lsmash_bs_cleanup( bs );
                         goto fail;
                     }

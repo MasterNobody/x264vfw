@@ -248,7 +248,7 @@ static mp4a_GASpecificConfig_t* mp4a_create_GASpecificConfig( uint8_t samplingFr
     case MP4A_AUDIO_OBJECT_TYPE_TwinVQ:
         gasc->extensionFlag = 0;
         break;
-    /* currently never occures. */
+#if 0 /* intentional dead code */
     case MP4A_AUDIO_OBJECT_TYPE_ER_AAC_LC:
     case MP4A_AUDIO_OBJECT_TYPE_ER_AAC_LTP:
     case MP4A_AUDIO_OBJECT_TYPE_ER_AAC_scalable:
@@ -257,6 +257,7 @@ static mp4a_GASpecificConfig_t* mp4a_create_GASpecificConfig( uint8_t samplingFr
     case MP4A_AUDIO_OBJECT_TYPE_ER_AAC_LD:
         gasc->extensionFlag = 1;
         break;
+#endif
     default:
         gasc->extensionFlag = 0;
         break;
@@ -560,6 +561,7 @@ static int mp4a_get_MPEG_1_2_SpecificConfig( lsmash_bits_t *bits, mp4a_AudioSpec
     mp4a_MPEG_1_2_SpecificConfig_t *mpeg_1_2_sc = (mp4a_MPEG_1_2_SpecificConfig_t *)lsmash_malloc_zero( sizeof(mp4a_MPEG_1_2_SpecificConfig_t) );
     if( !mpeg_1_2_sc )
         return LSMASH_ERR_MEMORY_ALLOC;
+    asc->deepAudioSpecificConfig = mpeg_1_2_sc;
     mpeg_1_2_sc->extension = lsmash_bits_get( bits, 1 );
     return 0;
 }
@@ -611,7 +613,7 @@ static mp4a_AudioSpecificConfig_t *mp4a_get_AudioSpecificConfig( uint8_t *dsi_pa
     }
     mp4a_AudioSpecificConfig_t *asc = (mp4a_AudioSpecificConfig_t *)lsmash_malloc_zero( sizeof(mp4a_AudioSpecificConfig_t) );
     if( !asc )
-        return NULL;
+        goto fail;
     asc->audioObjectType = lsmash_bits_get( bits, 5 );
     if( asc->audioObjectType == 31 )
         asc->extensionAudioObjectType = asc->audioObjectType += 1 + lsmash_bits_get( bits, 6 );
@@ -768,7 +770,6 @@ uint8_t *mp4a_export_AudioSpecificConfig( lsmash_mp4a_AudioObjectType aot,
     return data;
 }
 
-#ifdef LSMASH_DEMUXER_ENABLED
 static void mp4a_print_GASpecificConfig( FILE *fp, mp4a_AudioSpecificConfig_t *asc, int indent )
 {
     mp4a_GASpecificConfig_t *gasc = (mp4a_GASpecificConfig_t *)asc->deepAudioSpecificConfig;
@@ -936,7 +937,6 @@ void mp4a_print_AudioSpecificConfig( FILE *fp, uint8_t *dsi_payload, uint32_t ds
         }
     mp4a_remove_AudioSpecificConfig( asc );
 }
-#endif /* LSMASH_DEMUXER_ENABLED */
 
 /***************************************************************************
     audioProfileLevelIndication
