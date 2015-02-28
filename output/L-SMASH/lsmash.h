@@ -1,7 +1,7 @@
 /*****************************************************************************
  * lsmash.h:
  *****************************************************************************
- * Copyright (C) 2010-2014 L-SMASH project
+ * Copyright (C) 2010-2015 L-SMASH project
  *
  * Authors: Yusuke Nakamura <muken.the.vfrmaniac@gmail.com>
  *
@@ -47,7 +47,7 @@ extern "C" {
  * Version
  ****************************************************************************/
 #define LSMASH_VERSION_MAJOR  2
-#define LSMASH_VERSION_MINOR  6
+#define LSMASH_VERSION_MINOR  8
 #define LSMASH_VERSION_MICRO  0
 
 #define LSMASH_VERSION_INT( a, b, c ) (((a) << 16) | ((b) << 8) | (c))
@@ -796,6 +796,7 @@ DEFINE_QTFF_CODEC_TYPE( QT_CODEC_TYPE_APCN_VIDEO,    LSMASH_4CC( 'a', 'p', 'c', 
 DEFINE_QTFF_CODEC_TYPE( QT_CODEC_TYPE_APCS_VIDEO,    LSMASH_4CC( 'a', 'p', 'c', 's' ) );    /* Apple ProRes 422 LT */
 DEFINE_QTFF_CODEC_TYPE( QT_CODEC_TYPE_APCO_VIDEO,    LSMASH_4CC( 'a', 'p', 'c', 'o' ) );    /* Apple ProRes 422 Proxy */
 DEFINE_QTFF_CODEC_TYPE( QT_CODEC_TYPE_AP4H_VIDEO,    LSMASH_4CC( 'a', 'p', '4', 'h' ) );    /* Apple ProRes 4444 */
+DEFINE_QTFF_CODEC_TYPE( QT_CODEC_TYPE_AP4X_VIDEO,    LSMASH_4CC( 'a', 'p', '4', 'x' ) );    /* Apple ProRes 4444 XQ */
 DEFINE_QTFF_CODEC_TYPE( QT_CODEC_TYPE_CIVD_VIDEO,    LSMASH_4CC( 'c', 'i', 'v', 'd' ) );    /* Cinepak Video */
 DEFINE_QTFF_CODEC_TYPE( QT_CODEC_TYPE_DRAC_VIDEO,    LSMASH_4CC( 'd', 'r', 'a', 'c' ) );    /* Dirac Video Coder */
 DEFINE_QTFF_CODEC_TYPE( QT_CODEC_TYPE_DVC_VIDEO,     LSMASH_4CC( 'd', 'v', 'c', ' ' ) );    /* DV NTSC format */
@@ -828,6 +829,7 @@ DEFINE_QTFF_CODEC_TYPE( QT_CODEC_TYPE_ULY0_VIDEO,    LSMASH_4CC( 'U', 'L', 'Y', 
 DEFINE_QTFF_CODEC_TYPE( QT_CODEC_TYPE_ULY2_VIDEO,    LSMASH_4CC( 'U', 'L', 'Y', '2' ) );    /* Ut Video YCbCr (BT.601) 4:2:2 8bit limited */
 DEFINE_QTFF_CODEC_TYPE( QT_CODEC_TYPE_ULH0_VIDEO,    LSMASH_4CC( 'U', 'L', 'H', '0' ) );    /* Ut Video YCbCr (BT.709) 4:2:0 8bit limited */
 DEFINE_QTFF_CODEC_TYPE( QT_CODEC_TYPE_ULH2_VIDEO,    LSMASH_4CC( 'U', 'L', 'H', '2' ) );    /* Ut Video YCbCr (BT.709) 4:2:2 8bit limited */
+DEFINE_QTFF_CODEC_TYPE( QT_CODEC_TYPE_UQY2_VIDEO,    LSMASH_4CC( 'U', 'Q', 'Y', '2' ) );    /* Ut Video Pro YCbCr 4:2:2 10bit */
 DEFINE_QTFF_CODEC_TYPE( QT_CODEC_TYPE_V210_VIDEO,    LSMASH_4CC( 'v', '2', '1', '0' ) );    /* Uncompressed Y'CbCr, 10-bit-per-component 4:2:2
                                                                                              *      |Cb0(10)|Y'0(10)|Cr0(10)|XX(2)|
                                                                                              *      |Y'1(10)|Cb1(10)|Y'2(10)|XX(2)|

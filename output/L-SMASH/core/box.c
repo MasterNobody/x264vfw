@@ -1,7 +1,7 @@
 /*****************************************************************************
  * box.c:
  *****************************************************************************
- * Copyright (C) 2012-2014 L-SMASH project
+ * Copyright (C) 2012-2015 L-SMASH project
  *
  * Authors: Yusuke Nakamura <muken.the.vfrmaniac@gmail.com>
  *
@@ -788,6 +788,7 @@ void isom_remove_sample_description( isom_sample_entry_t *sample )
         ADD_DESCRIPTION_REMOVER_TABLE_ELEMENT( QT_CODEC_TYPE_APCS_VIDEO, isom_remove_visual_description );
         ADD_DESCRIPTION_REMOVER_TABLE_ELEMENT( QT_CODEC_TYPE_APCO_VIDEO, isom_remove_visual_description );
         ADD_DESCRIPTION_REMOVER_TABLE_ELEMENT( QT_CODEC_TYPE_AP4H_VIDEO, isom_remove_visual_description );
+        ADD_DESCRIPTION_REMOVER_TABLE_ELEMENT( QT_CODEC_TYPE_AP4X_VIDEO, isom_remove_visual_description );
         ADD_DESCRIPTION_REMOVER_TABLE_ELEMENT( QT_CODEC_TYPE_CIVD_VIDEO, isom_remove_visual_description );
         ADD_DESCRIPTION_REMOVER_TABLE_ELEMENT( QT_CODEC_TYPE_DRAC_VIDEO, isom_remove_visual_description );
         ADD_DESCRIPTION_REMOVER_TABLE_ELEMENT( QT_CODEC_TYPE_DVC_VIDEO,  isom_remove_visual_description );
@@ -819,6 +820,7 @@ void isom_remove_sample_description( isom_sample_entry_t *sample )
         ADD_DESCRIPTION_REMOVER_TABLE_ELEMENT( QT_CODEC_TYPE_ULY0_VIDEO, isom_remove_visual_description );
         ADD_DESCRIPTION_REMOVER_TABLE_ELEMENT( QT_CODEC_TYPE_ULH2_VIDEO, isom_remove_visual_description );
         ADD_DESCRIPTION_REMOVER_TABLE_ELEMENT( QT_CODEC_TYPE_ULH0_VIDEO, isom_remove_visual_description );
+        ADD_DESCRIPTION_REMOVER_TABLE_ELEMENT( QT_CODEC_TYPE_UQY2_VIDEO, isom_remove_visual_description );
         ADD_DESCRIPTION_REMOVER_TABLE_ELEMENT( QT_CODEC_TYPE_V210_VIDEO, isom_remove_visual_description );
         ADD_DESCRIPTION_REMOVER_TABLE_ELEMENT( QT_CODEC_TYPE_V216_VIDEO, isom_remove_visual_description );
         ADD_DESCRIPTION_REMOVER_TABLE_ELEMENT( QT_CODEC_TYPE_V308_VIDEO, isom_remove_visual_description );

@@ -1,7 +1,7 @@
 /*****************************************************************************
  * config.c: configuration dialog
  *****************************************************************************
- * Copyright (C) 2003-2014 x264vfw project
+ * Copyright (C) 2003-2015 x264vfw project
  *
  * Authors: Justin Clay
  *          Laurent Aimar <fenrir@via.ecp.fr>
@@ -1585,7 +1585,9 @@ static void help(char *buffer, int longhelp)
         "                                  - 2: row alternation - L and R are interlaced by row\r\n"
         "                                  - 3: side by side - L is on the left, R on the right\r\n"
         "                                  - 4: top bottom - L is on top, R on bottom\r\n"
-        "                                  - 5: frame alternation - one view per frame\r\n" );
+        "                                  - 5: frame alternation - one view per frame\r\n"
+        "                                  - 6: mono - 2D frame without any frame packing\r\n"
+        "                                  - 7: tile format - L is on top-left, R split across\r\n" );
     H0( "\r\n" );
     H0( "Ratecontrol:\r\n" );
     H0( "\r\n" );

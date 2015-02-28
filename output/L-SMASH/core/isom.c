@@ -1,7 +1,7 @@
 /*****************************************************************************
  * isom.c:
  *****************************************************************************
- * Copyright (C) 2010-2014 L-SMASH project
+ * Copyright (C) 2010-2015 L-SMASH project
  *
  * Authors: Yusuke Nakamura <muken.the.vfrmaniac@gmail.com>
  * Contributors: Takashi Hirata <silverfilain@gmail.com>
@@ -221,6 +221,7 @@ typedef void (*opaque_func_t)( void );
         ADD_DESCRIPTION_SETUP_TABLE_ELEMENT( QT_CODEC_TYPE_APCS_VIDEO, isom_setup_visual_description );
         ADD_DESCRIPTION_SETUP_TABLE_ELEMENT( QT_CODEC_TYPE_APCO_VIDEO, isom_setup_visual_description );
         ADD_DESCRIPTION_SETUP_TABLE_ELEMENT( QT_CODEC_TYPE_AP4H_VIDEO, isom_setup_visual_description );
+        ADD_DESCRIPTION_SETUP_TABLE_ELEMENT( QT_CODEC_TYPE_AP4X_VIDEO, isom_setup_visual_description );
         ADD_DESCRIPTION_SETUP_TABLE_ELEMENT( QT_CODEC_TYPE_DVC_VIDEO,  isom_setup_visual_description );
         ADD_DESCRIPTION_SETUP_TABLE_ELEMENT( QT_CODEC_TYPE_DVCP_VIDEO, isom_setup_visual_description );
         ADD_DESCRIPTION_SETUP_TABLE_ELEMENT( QT_CODEC_TYPE_DVPP_VIDEO, isom_setup_visual_description );
@@ -238,6 +239,7 @@ typedef void (*opaque_func_t)( void );
         ADD_DESCRIPTION_SETUP_TABLE_ELEMENT( QT_CODEC_TYPE_ULY0_VIDEO, isom_setup_visual_description );
         ADD_DESCRIPTION_SETUP_TABLE_ELEMENT( QT_CODEC_TYPE_ULH2_VIDEO, isom_setup_visual_description );
         ADD_DESCRIPTION_SETUP_TABLE_ELEMENT( QT_CODEC_TYPE_ULH0_VIDEO, isom_setup_visual_description );
+        ADD_DESCRIPTION_SETUP_TABLE_ELEMENT( QT_CODEC_TYPE_UQY2_VIDEO, isom_setup_visual_description );
         ADD_DESCRIPTION_SETUP_TABLE_ELEMENT( QT_CODEC_TYPE_V210_VIDEO, isom_setup_visual_description );
         ADD_DESCRIPTION_SETUP_TABLE_ELEMENT( QT_CODEC_TYPE_V216_VIDEO, isom_setup_visual_description );
         ADD_DESCRIPTION_SETUP_TABLE_ELEMENT( QT_CODEC_TYPE_V308_VIDEO, isom_setup_visual_description );

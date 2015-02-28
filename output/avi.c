@@ -1,7 +1,7 @@
 /*****************************************************************************
  * avi.c: avi muxer (using libavformat)
  *****************************************************************************
- * Copyright (C) 2010-2014 x264 project
+ * Copyright (C) 2010-2015 x264 project
  *
  * Authors: Anton Mitrofanov <BugMaster@narod.ru>
  *

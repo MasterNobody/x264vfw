@@ -1,7 +1,7 @@
 /*****************************************************************************
  * print.c:
  *****************************************************************************
- * Copyright (C) 2010-2014 L-SMASH project
+ * Copyright (C) 2010-2015 L-SMASH project
  *
  * Authors: Yusuke Nakamura <muken.the.vfrmaniac@gmail.com>
  *
@@ -47,7 +47,7 @@ static void isom_ifprintf_duration( FILE *fp, int indent, char *field_name, uint
         return;
     }
     int dur = duration / timescale;
-    int hour = (dur / 3600) % 24;
+    int hour =  dur / 3600;
     int min  = (dur /   60) % 60;
     int sec  =  dur         % 60;
     int ms   = ((double)duration / timescale - (hour * 3600 + min * 60 + sec)) * 1e3 + 0.5;
@@ -2420,6 +2420,7 @@ static isom_print_box_t isom_select_print_func( isom_box_t *box )
                 ADD_PRINT_DESCRIPTION_TABLE_ELEMENT( QT_CODEC_TYPE_APCS_VIDEO,   isom_print_visual_description );
                 ADD_PRINT_DESCRIPTION_TABLE_ELEMENT( QT_CODEC_TYPE_APCO_VIDEO,   isom_print_visual_description );
                 ADD_PRINT_DESCRIPTION_TABLE_ELEMENT( QT_CODEC_TYPE_AP4H_VIDEO,   isom_print_visual_description );
+                ADD_PRINT_DESCRIPTION_TABLE_ELEMENT( QT_CODEC_TYPE_AP4X_VIDEO,   isom_print_visual_description );
                 ADD_PRINT_DESCRIPTION_TABLE_ELEMENT( QT_CODEC_TYPE_CIVD_VIDEO,   isom_print_visual_description );
                 ADD_PRINT_DESCRIPTION_TABLE_ELEMENT( QT_CODEC_TYPE_DRAC_VIDEO,   isom_print_visual_description );
                 ADD_PRINT_DESCRIPTION_TABLE_ELEMENT( QT_CODEC_TYPE_DVC_VIDEO,    isom_print_visual_description );
@@ -2451,6 +2452,7 @@ static isom_print_box_t isom_select_print_func( isom_box_t *box )
                 ADD_PRINT_DESCRIPTION_TABLE_ELEMENT( QT_CODEC_TYPE_ULY0_VIDEO,   isom_print_visual_description );
                 ADD_PRINT_DESCRIPTION_TABLE_ELEMENT( QT_CODEC_TYPE_ULH2_VIDEO,   isom_print_visual_description );
                 ADD_PRINT_DESCRIPTION_TABLE_ELEMENT( QT_CODEC_TYPE_ULH0_VIDEO,   isom_print_visual_description );
+                ADD_PRINT_DESCRIPTION_TABLE_ELEMENT( QT_CODEC_TYPE_UQY2_VIDEO,   isom_print_visual_description );
                 ADD_PRINT_DESCRIPTION_TABLE_ELEMENT( QT_CODEC_TYPE_V210_VIDEO,   isom_print_visual_description );
                 ADD_PRINT_DESCRIPTION_TABLE_ELEMENT( QT_CODEC_TYPE_V216_VIDEO,   isom_print_visual_description );
                 ADD_PRINT_DESCRIPTION_TABLE_ELEMENT( QT_CODEC_TYPE_V308_VIDEO,   isom_print_visual_description );

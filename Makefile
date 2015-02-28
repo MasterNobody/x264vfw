@@ -71,7 +71,7 @@ endif
 
 -include config.mak
 
-ifeq ($(ARCH),X86_64)
+ifeq ($(SYS_ARCH),X86_64)
 # Dll to build
 DLL = x264vfw64.dll
 
