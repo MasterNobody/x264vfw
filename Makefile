@@ -91,16 +91,6 @@ INST_NSI = x264vfw.nsi
 INST_EXE = x264vfw.exe
 endif
 
-# cross-prefix
-ifeq ($(CROSS_PREFIX)x,x)
-CROSS_PREFIX = $(shell echo "$(RANLIB)" | grep 'ranlib$$' | sed -e 's/ranlib$$//')
-endif
-
-# Alias
-ifeq ($(WINDRES)x,x)
-WINDRES = $(CROSS_PREFIX)windres
-endif
-
 ##############################################################################
 # CFLAGS
 ##############################################################################
@@ -151,7 +141,8 @@ SRCS_LSMASH = common/alloc.c common/bits.c common/bytes.c common/list.c \
               common/multibuf.c common/osdep.c common/utils.c \
               codecs/a52.c codecs/alac.c codecs/description.c codecs/dts.c \
               codecs/h264.c codecs/hevc.c codecs/id.c codecs/mp4sys.c \
-              codecs/mp4a.c codecs/vc1.c codecs/wma.c \
+              codecs/mp4a.c codecs/mp4v.c codecs/nalu.c codecs/qt_wfex.c \
+              codecs/vc1.c codecs/wma.c \
               importer/a52_imp.c importer/adts_imp.c importer/als_imp.c \
               importer/amr_imp.c importer/dts_imp.c importer/importer.c \
               importer/isobm_imp.c importer/mp3_imp.c importer/nalu_imp.c \
@@ -202,7 +193,7 @@ endif
 %.obj: %.rc
 	@echo " W: $(@D)/$(<F)"
 	@mkdir -p "$(DIR_BUILD)/$(@D)"
-	@$(WINDRES) $(RESFLAGS) \
+	@$(RC) $(RESFLAGS) \
 	--input-format=rc \
 	--output-format=coff \
 	-o "$(DIR_BUILD)/$@" $<

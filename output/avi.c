@@ -1,7 +1,7 @@
 /*****************************************************************************
  * avi.c: avi muxer (using libavformat)
  *****************************************************************************
- * Copyright (C) 2010-2015 x264 project
+ * Copyright (C) 2010-2016 x264 project
  *
  * Authors: Anton Mitrofanov <BugMaster@narod.ru>
  *
@@ -76,7 +76,7 @@ static int open_file( char *psz_filename, hnd_t *p_handle, cli_output_opt_t *opt
     *p_handle = NULL;
 
     int b_regular = strcmp( psz_filename, "-" );
-    b_regular = b_regular && x264_is_regular_file_path( psz_filename );
+    b_regular = b_regular && x264vfw_is_regular_file_path( psz_filename );
     if( b_regular )
     {
         FILE *fh = x264vfw_fopen( psz_filename, "wb" );
@@ -85,7 +85,7 @@ static int open_file( char *psz_filename, hnd_t *p_handle, cli_output_opt_t *opt
             x264vfw_cli_log( opt->p_private, "avi", X264_LOG_ERROR, "cannot open output file `%s'.\n", psz_filename );
             return -1;
         }
-        b_regular = x264_is_regular_file( fh );
+        b_regular = x264vfw_is_regular_file( fh );
         fclose( fh );
     }
 

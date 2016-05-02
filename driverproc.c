@@ -1,7 +1,7 @@
 /*****************************************************************************
  * driverproc.c: vfw wrapper
  *****************************************************************************
- * Copyright (C) 2003-2015 x264vfw project
+ * Copyright (C) 2003-2016 x264vfw project
  *
  * Authors: Justin Clay
  *          Laurent Aimar <fenrir@via.ecp.fr>

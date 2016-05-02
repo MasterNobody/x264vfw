@@ -1,7 +1,7 @@
 /*****************************************************************************
  * mp4_lsmash.c: mp4 muxer using L-SMASH
  *****************************************************************************
- * Copyright (C) 2003-2015 x264 project
+ * Copyright (C) 2003-2016 x264 project
  *
  * Authors: Laurent Aimar <fenrir@via.ecp.fr>
  *          Loren Merritt <lorenm@u.washington.edu>
@@ -170,12 +170,12 @@ static int open_file( char *psz_filename, hnd_t *p_handle, cli_output_opt_t *opt
     *p_handle = NULL;
 
     int b_regular = strcmp( psz_filename, "-" );
-    b_regular = b_regular && x264_is_regular_file_path( psz_filename );
+    b_regular = b_regular && x264vfw_is_regular_file_path( psz_filename );
     if( b_regular )
     {
         FILE *fh = x264vfw_fopen( psz_filename, "wb" );
         MP4_FAIL_IF_ERR_EX1( !fh, "cannot open output file `%s'.\n", psz_filename );
-        b_regular = x264_is_regular_file( fh );
+        b_regular = x264vfw_is_regular_file( fh );
         fclose( fh );
     }
 

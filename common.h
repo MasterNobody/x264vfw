@@ -1,7 +1,7 @@
 /*****************************************************************************
  * common.h: misc common functions
  *****************************************************************************
- * Copyright (C) 2010-2015 x264vfw project
+ * Copyright (C) 2010-2016 x264vfw project
  *
  * Authors: Anton Mitrofanov <BugMaster@narod.ru>
  *
@@ -45,20 +45,34 @@
 #include <inttypes.h>
 #endif
 
+#ifdef _MSC_VER
+#define inline __inline
+#define strcasecmp _stricmp
+#define strncasecmp _strnicmp
+#define strtok_r strtok_s
+#define S_ISREG(x) (((x) & S_IFMT) == S_IFREG)
+#if _MSC_VER < 1900
+#define snprintf _snprintf
+#endif
+#else
+#include <strings.h>
+#endif
+
 #if defined(__GNUC__) && (__GNUC__ > 3 || __GNUC__ == 3 && __GNUC_MINOR__ > 0)
 #define UNUSED __attribute__((unused))
 #define ALWAYS_INLINE __attribute__((always_inline)) inline
 #define NOINLINE __attribute__((noinline))
 #define MAY_ALIAS __attribute__((may_alias))
-#define x264_constant_p(x) __builtin_constant_p(x)
-#define x264_nonconstant_p(x) (!__builtin_constant_p(x))
 #else
-#define UNUSED
+#ifdef _MSC_VER
+#define ALWAYS_INLINE __forceinline
+#define NOINLINE __declspec(noinline)
+#else
 #define ALWAYS_INLINE inline
 #define NOINLINE
+#endif
+#define UNUSED
 #define MAY_ALIAS
-#define x264_constant_p(x) 0
-#define x264_nonconstant_p(x) 0
 #endif
 
 #if defined(__GNUC__) && (__GNUC__ > 4 || __GNUC__ == 4 && __GNUC_MINOR__>1)
@@ -82,7 +96,7 @@
 #define endian_fix32(x) (x)
 #define endian_fix16(x) (x)
 #else
-#if defined(__GNUC__) && HAVE_MMX
+#if HAVE_X86_INLINE_ASM && HAVE_MMX
 static ALWAYS_INLINE uint32_t endian_fix32( uint32_t x )
 {
     asm("bswap %0":"+r"(x));
@@ -100,7 +114,7 @@ static ALWAYS_INLINE uint32_t endian_fix32( uint32_t x )
     return (x<<24) + ((x<<8)&0xff0000) + ((x>>8)&0xff00) + (x>>24);
 }
 #endif
-#if defined(__GNUC__) && ARCH_X86_64
+#if HAVE_X86_INLINE_ASM && ARCH_X86_64
 static ALWAYS_INLINE uint64_t endian_fix64( uint64_t x )
 {
     asm("bswap %0":"+r"(x));
@@ -121,22 +135,6 @@ static ALWAYS_INLINE uint16_t endian_fix16( uint16_t x )
     return (x<<8)|(x>>8);
 }
 #endif
-
-static inline uint8_t x264_is_regular_file( FILE *filehandle )
-{
-    struct stat file_stat;
-    if( fstat( fileno( filehandle ), &file_stat ) )
-        return -1;
-    return S_ISREG( file_stat.st_mode );
-}
-
-static inline uint8_t x264_is_regular_file_path( const char *filename )
-{
-    struct stat file_stat;
-    if( stat( filename, &file_stat ) )
-        return -1;
-    return S_ISREG( file_stat.st_mode );
-}
 
 #if X264VFW_DEBUG_OUTPUT
 #define DPRINTF_BUF_SZ 2048

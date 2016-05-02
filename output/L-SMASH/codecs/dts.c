@@ -920,16 +920,23 @@ static int dts_parse_exss_xll( dts_info_t *info, uint64_t *bits_pos, dts_audio_a
                 }
             }
         }
+        int full_bandwidth;
         int nNumFreqBands;
         if( nFs > 96000 )
         {
-            if( dts_bits_get( bits, 1, bits_pos ) )                                             /* bXtraFreqBands                 (1) */
-                nNumFreqBands = nFs > 192000 ? 4 : 2;
-            else
-                nNumFreqBands = nFs > 192000 ? 2 : 1;
+            /* When bXtraFreqBands is equal to 0, only one-half of the original bandwidth is preserved and, thus, the number
+             * of frequency bands is also one-half of the number in the case where full bandwidth is preserved. Apparently,
+             * nSmplInSeg is the number of samples in a segment per one frequency band when full bandwidth is preserved.
+             * Because of this, to get the correct number of samples per frame, multiply the result by 2 when bXtraFreqBands
+             * is equal to 0. */
+            full_bandwidth = dts_bits_get( bits, 1, bits_pos );                                 /* bXtraFreqBands                 (1) */
+            nNumFreqBands  = (1 + full_bandwidth) << (nFs > 192000);
         }
         else
-            nNumFreqBands = 1;
+        {
+            full_bandwidth = 1;
+            nNumFreqBands  = 1;
+        }
         uint32_t nSmplInSeg_nChSet;
         if( nChSet == 0 )
         {
@@ -943,7 +950,7 @@ static int dts_parse_exss_xll( dts_info_t *info, uint64_t *bits_pos, dts_audio_a
         {
             xll->sampling_frequency = nFs;
             uint32_t samples_per_band_in_frame = nSegmentsInFrame * nSmplInSeg_nChSet;
-            xll->frame_duration = samples_per_band_in_frame * nNumFreqBands;
+            xll->frame_duration = samples_per_band_in_frame * nNumFreqBands * (2 - full_bandwidth);
         }
         dts_bits_get( bits, nChSetHeaderSize * 8 - (*bits_pos - xll_pos), bits_pos );   /* Skip the remaining bits in Channel Set Sub-Header. */
     }
@@ -1705,5 +1712,27 @@ int dts_print_codec_specific( FILE *fp, lsmash_file_t *file, isom_box_t *box, in
         lsmash_ifprintf( fp, indent, "LBRDurationMod = 0 (no LBR duration modifier)\n" );
     lsmash_ifprintf( fp, indent, "ReservedBoxPresent = %s\n", ReservedBoxPresent ? "1 (ReservedBox present)" : "0 (no ReservedBox)" );
     lsmash_ifprintf( fp, indent, "Reserved = 0x%02"PRIx8"\n", Reserved );
+    return 0;
+}
+
+int dts_update_bitrate( isom_stbl_t *stbl, isom_mdhd_t *mdhd, uint32_t sample_description_index )
+{
+    isom_audio_entry_t *dts_audio = (isom_audio_entry_t *)lsmash_get_entry_data( &stbl->stsd->list, sample_description_index );
+    if( !dts_audio )
+        return LSMASH_ERR_INVALID_DATA;
+    isom_box_t *ext = isom_get_extension_box( &dts_audio->extensions, ISOM_BOX_TYPE_DDTS );
+    if( !(ext && (ext->manager & LSMASH_BINARY_CODED_BOX) && ext->binary && ext->size >= 28) )
+        return LSMASH_ERR_INVALID_DATA;
+    uint32_t bufferSizeDB;
+    uint32_t maxBitrate;
+    uint32_t avgBitrate;
+    int err = isom_calculate_bitrate_description( stbl, mdhd, &bufferSizeDB, &maxBitrate, &avgBitrate, sample_description_index );
+    if( err < 0 )
+        return err;
+    if( !isom_is_variable_size( stbl ) )
+        maxBitrate = avgBitrate;
+    uint8_t *exdata = ext->binary + 12;
+    LSMASH_SET_BE32( &exdata[0], maxBitrate );
+    LSMASH_SET_BE32( &exdata[4], avgBitrate );
     return 0;
 }

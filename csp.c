@@ -1,7 +1,7 @@
 /*****************************************************************************
  * csp.c: colorspace conversion functions
  *****************************************************************************
- * Copyright (C) 2004-2015 x264vfw project
+ * Copyright (C) 2004-2016 x264vfw project
  *
  * Authors: Laurent Aimar <fenrir@via.ecp.fr>
  *          Anton Mitrofanov <BugMaster@narod.ru>
