@@ -1,7 +1,7 @@
 /*****************************************************************************
  * mp4_lsmash.c: mp4 muxer using L-SMASH
  *****************************************************************************
- * Copyright (C) 2003-2016 x264 project
+ * Copyright (C) 2003-2017 x264 project
  *
  * Authors: Laurent Aimar <fenrir@via.ecp.fr>
  *          Loren Merritt <lorenm@u.washington.edu>
@@ -36,34 +36,46 @@
 #define MP4_LOG_INFO( ... )                 x264vfw_cli_log( p_mp4->opt.p_private, "mp4", X264_LOG_INFO, __VA_ARGS__ )
 
 #define MP4_FAIL_IF_ERR( cond, ... )\
-if( cond )\
+do\
 {\
-    MP4_LOG_ERROR( __VA_ARGS__ );\
-    return -1;\
-}
+    if( cond )\
+    {\
+        MP4_LOG_ERROR( __VA_ARGS__ );\
+        return -1;\
+    }\
+} while( 0 )
 
 /* For close_file() */
 #define MP4_LOG_IF_ERR( cond, ... )\
-if( cond )\
+do\
 {\
-    MP4_LOG_ERROR( __VA_ARGS__ );\
-}
+    if( cond )\
+    {\
+        MP4_LOG_ERROR( __VA_ARGS__ );\
+    }\
+} while( 0 )
 
 /* For open_file() */
 #define MP4_FAIL_IF_ERR_EX1( cond, ... )\
-if( cond )\
+do\
 {\
-    x264vfw_cli_log( opt->p_private, "mp4", X264_LOG_ERROR, __VA_ARGS__ );\
-    return -1;\
-}
+    if( cond )\
+    {\
+        x264vfw_cli_log( opt->p_private, "mp4", X264_LOG_ERROR, __VA_ARGS__ );\
+        return -1;\
+    }\
+} while( 0 )
 
 #define MP4_FAIL_IF_ERR_EX2( cond, ... )\
-if( cond )\
+do\
 {\
-    remove_mp4_hnd( p_mp4 );\
-    x264vfw_cli_log( opt->p_private, "mp4", X264_LOG_ERROR, __VA_ARGS__ );\
-    return -1;\
-}
+    if( cond )\
+    {\
+        remove_mp4_hnd( p_mp4 );\
+        x264vfw_cli_log( opt->p_private, "mp4", X264_LOG_ERROR, __VA_ARGS__ );\
+        return -1;\
+    }\
+} while( 0 )
 
 /*******************/
 

@@ -1,7 +1,7 @@
 /*****************************************************************************
- * hevc.c:
+ * hevc.c
  *****************************************************************************
- * Copyright (C) 2013-2015 L-SMASH project
+ * Copyright (C) 2013-2017 L-SMASH project
  *
  * Authors: Yusuke Nakamura <muken.the.vfrmaniac@gmail.com>
  *
@@ -2671,7 +2671,9 @@ int hevc_move_pending_hvcC_param
     info->hvcC_param.parameter_arrays = parameter_arrays;
     /* No pending hvcC. */
     lsmash_destroy_hevc_parameter_arrays( &info->hvcC_param_next );
+    uint8_t lengthSizeMinusOne = info->hvcC_param_next.lengthSizeMinusOne;
     memset( &info->hvcC_param_next, 0, sizeof(lsmash_hevc_specific_parameters_t) );
+    info->hvcC_param_next.lengthSizeMinusOne = lengthSizeMinusOne;
     info->hvcC_pending = 0;
     return 0;
 }
@@ -2960,7 +2962,7 @@ int hevc_print_codec_specific
     int            level
 )
 {
-    assert( fp && file && box && (box->manager & LSMASH_BINARY_CODED_BOX) );
+    assert( box->manager & LSMASH_BINARY_CODED_BOX );
     int indent = level;
     lsmash_ifprintf( fp, indent++, "[%s: HEVC Configuration Box]\n", isom_4cc2str( box->type.fourcc ) );
     lsmash_ifprintf( fp, indent, "position = %"PRIu64"\n", box->pos );
@@ -3039,6 +3041,8 @@ int hevc_print_codec_specific
         {
             uint16_t nalUnitLength = lsmash_bs_get_be16( bs );
             lsmash_bs_skip_bytes( bs, nalUnitLength );
+            lsmash_ifprintf( fp, array_indent, "nalUnit[%"PRIu16"]\n", j );
+            lsmash_ifprintf( fp, array_indent + 1, "nalUnitLength = %"PRIu16"\n", nalUnitLength );
         }
     }
     lsmash_bs_cleanup( bs );

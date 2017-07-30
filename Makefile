@@ -27,10 +27,12 @@ ifeq ($(FFMPEG_NAME)x,x)
 ifneq ($(wildcard $(DIR_CUR)/../ffmpeg/*)x,x)
 FFMPEG_DIR = $(DIR_CUR)/../ffmpeg
 FFMPEG_NAME = ffmpeg
+FFMPEG_BUILD_DIR = $(FFMPEG_DIR)/ffbuild
 else
 ifneq ($(wildcard $(DIR_CUR)/../libav/*)x,x)
 FFMPEG_DIR = $(DIR_CUR)/../libav
 FFMPEG_NAME = libav
+FFMPEG_BUILD_DIR = $(FFMPEG_DIR)/avbuild
 endif
 endif
 else
@@ -57,8 +59,9 @@ ifneq ($(wildcard $(X264_DIR)/config.mak)x,x)
 $(info $() Copy config.mak from $(X264_DIR))
 $(shell cat "$(X264_DIR)/config.mak" | awk '/^ *\w+ *=/' > "$(DIR_CUR)/config.mak")
 ifeq ($(HAVE_FFMPEG),yes)
-$(info $() Append config.mak from $(FFMPEG_DIR))
-$(shell cat "$(FFMPEG_DIR)/config.mak" | awk '/^ *EXTRALIBS *=/' >> "$(DIR_CUR)/config.mak")
+$(info $() Append config.mak from $(FFMPEG_BUILD_DIR))
+$(shell cat "$(FFMPEG_BUILD_DIR)/config.mak" | awk '/^ *EXTRALIBS *=/' >> "$(DIR_CUR)/config.mak")
+$(shell cat "$(FFMPEG_BUILD_DIR)/config.mak" | awk '/^ *EXTRALIBS-.*=/' >> "$(DIR_CUR)/config.mak")
 endif
 endif
 endif
@@ -115,10 +118,12 @@ RESFLAGS += -DHAVE_FFMPEG
 RESFLAGS += "-DFFMPEG_LOGO=$(FFMPEG_NAME).bmp"
 CFLAGS += -DHAVE_FFMPEG
 CFLAGS += "-I$(FFMPEG_DIR)"
-VFW_LDFLAGS += "-L$(FFMPEG_DIR)/libavformat" -lavformat
-VFW_LDFLAGS += "-L$(FFMPEG_DIR)/libavcodec" -lavcodec
-VFW_LDFLAGS += "-L$(FFMPEG_DIR)/libavutil" -lavutil
-VFW_LDFLAGS += "-L$(FFMPEG_DIR)/libswscale" -lswscale
+VFW_LDFLAGS += "-L$(FFMPEG_DIR)/libavformat" -lavformat $(EXTRALIBS-avformat)
+VFW_LDFLAGS += "-L$(FFMPEG_DIR)/libavcodec" -lavcodec $(EXTRALIBS-avcodec)
+#VFW_LDFLAGS += "-L$(FFMPEG_DIR)/libswresample" -lswresample $(EXTRALIBS-swresample)
+#VFW_LDFLAGS += "-L$(FFMPEG_DIR)/libavresample" -lavresample $(EXTRALIBS-avresample)
+VFW_LDFLAGS += "-L$(FFMPEG_DIR)/libswscale" -lswscale $(EXTRALIBS-swscale)
+VFW_LDFLAGS += "-L$(FFMPEG_DIR)/libavutil" -lavutil $(EXTRALIBS-avutil)
 VFW_LDFLAGS += $(EXTRALIBS)
 endif
 
@@ -147,9 +152,10 @@ SRCS_LSMASH = common/alloc.c common/bits.c common/bytes.c common/list.c \
               importer/amr_imp.c importer/dts_imp.c importer/importer.c \
               importer/isobm_imp.c importer/mp3_imp.c importer/nalu_imp.c \
               importer/vc1_imp.c importer/wave_imp.c \
-              core/box.c core/chapter.c core/file.c core/fragment.c \
-              core/isom.c core/meta.c core/print.c core/read.c \
-              core/summary.c core/timeline.c core/write.c
+              core/box.c core/box_default.c core/box_type.c core/chapter.c \
+              core/file.c core/fragment.c core/isom.c core/meta.c \
+              core/print.c core/read.c core/summary.c core/timeline.c \
+              core/write.c
 
 CFLAGS += -Ioutput/L-SMASH
 

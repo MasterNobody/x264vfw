@@ -1,7 +1,7 @@
 /*****************************************************************************
- * h264.c:
+ * h264.c
  *****************************************************************************
- * Copyright (C) 2012-2015 L-SMASH project
+ * Copyright (C) 2012-2017 L-SMASH project
  *
  * Authors: Yusuke Nakamura <muken.the.vfrmaniac@gmail.com>
  *
@@ -2205,7 +2205,9 @@ int h264_move_pending_avcC_param
     info->avcC_param.parameter_sets = parameter_sets;
     /* No pending avcC. */
     lsmash_destroy_h264_parameter_sets( &info->avcC_param_next );
+    uint8_t lengthSizeMinusOne = info->avcC_param_next.lengthSizeMinusOne;
     memset( &info->avcC_param_next, 0, sizeof(lsmash_h264_specific_parameters_t) );
+    info->avcC_param_next.lengthSizeMinusOne = lengthSizeMinusOne;
     info->avcC_pending = 0;
     return 0;
 }
@@ -2423,7 +2425,7 @@ int h264_print_codec_specific
     int            level
 )
 {
-    assert( fp && file && box && (box->manager & LSMASH_BINARY_CODED_BOX) );
+    assert( box->manager & LSMASH_BINARY_CODED_BOX );
     int indent = level;
     lsmash_ifprintf( fp, indent++, "[%s: AVC Configuration Box]\n", isom_4cc2str( box->type.fourcc ) );
     lsmash_ifprintf( fp, indent, "position = %"PRIu64"\n", box->pos );
@@ -2534,7 +2536,7 @@ int h264_print_bitrate
     int            level
 )
 {
-    assert( fp && file && box );
+    assert( fp && LSMASH_IS_EXISTING_BOX( file ) && LSMASH_IS_EXISTING_BOX( box ) );
     int indent = level;
     lsmash_ifprintf( fp, indent++, "[%s: MPEG-4 Bit Rate Box]\n", isom_4cc2str( box->type.fourcc ) );
     lsmash_ifprintf( fp, indent, "position = %"PRIu64"\n", box->pos );

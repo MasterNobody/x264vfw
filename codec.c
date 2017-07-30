@@ -1,7 +1,7 @@
 /*****************************************************************************
  * codec.c: main encoding/decoding functions
  *****************************************************************************
- * Copyright (C) 2003-2016 x264vfw project
+ * Copyright (C) 2003-2017 x264vfw project
  *
  * Authors: Justin Clay
  *          Laurent Aimar <fenrir@via.ecp.fr>
@@ -83,7 +83,10 @@ const named_int_t x264vfw_level_table[COUNT_LEVEL] =
     { "4.2",  42 },
     { "5.0",  50 },
     { "5.1",  51 },
-    { "5.2",  52 }
+    { "5.2",  52 },
+    { "6.0",  60 },
+    { "6.1",  61 },
+    { "6.2",  62 }
 };
 
 typedef enum
@@ -413,9 +416,9 @@ static enum AVPixelFormat csp_to_pix_fmt(int i_csp)
     }
 }
 
-static int x264vfw_picture_fill(AVPicture *picture, uint8_t *ptr, enum AVPixelFormat pix_fmt, int width, int height)
+static int x264vfw_picture_fill(VFWPicture *picture, uint8_t *ptr, enum AVPixelFormat pix_fmt, int width, int height)
 {
-    memset(picture, 0, sizeof(AVPicture));
+    memset(picture, 0, sizeof(VFWPicture));
 
     switch (pix_fmt)
     {
@@ -500,11 +503,11 @@ static int x264vfw_picture_fill(AVPicture *picture, uint8_t *ptr, enum AVPixelFo
 
 static int x264vfw_picture_get_size(enum AVPixelFormat pix_fmt, int width, int height)
 {
-    AVPicture dummy_pict;
+    VFWPicture dummy_pict;
     return x264vfw_picture_fill(&dummy_pict, NULL, pix_fmt, width, height);
 }
 
-static int x264vfw_picture_vflip(AVPicture *picture, enum AVPixelFormat pix_fmt, int width, int height)
+static int x264vfw_picture_vflip(VFWPicture *picture, enum AVPixelFormat pix_fmt, int width, int height)
 {
     switch (pix_fmt)
     {
@@ -652,7 +655,7 @@ LRESULT x264vfw_compress_query(CODEC *codec, BITMAPINFO *lpbiInput, BITMAPINFO *
 void x264vfw_log_create(CODEC *codec)
 {
     x264vfw_log_destroy(codec);
-    if (codec->config.i_log_level > 0)
+    if (codec->config.i_log_level > X264VFW_LOG_NONE)
         codec->hCons = CreateDialogW(x264vfw_hInst, MAKEINTRESOURCEW(IDD_LOG), GetDesktopWindow(), x264vfw_callback_log);
 }
 
@@ -1552,8 +1555,8 @@ LRESULT x264vfw_compress_begin(CODEC *codec, BITMAPINFO *lpbiInput, BITMAPINFO *
     param.pf_log = x264vfw_log_callback;
     param.p_log_private = codec;
     param.i_log_level = config->i_log_level - 1;
-    param.analyse.b_psnr = config->i_encoding_type > 0 && config->i_log_level >= 3 && config->b_psnr;
-    param.analyse.b_ssim = config->i_encoding_type > 0 && config->i_log_level >= 3 && config->b_ssim;
+    param.analyse.b_psnr = config->i_encoding_type > 0 && config->i_log_level >= X264VFW_LOG_INFO && config->b_psnr;
+    param.analyse.b_ssim = config->i_encoding_type > 0 && config->i_log_level >= X264VFW_LOG_INFO && config->b_ssim;
     param.cpu = config->b_no_asm ? 0 : param.cpu;
 
     /* Parse extra command line options */
@@ -1842,10 +1845,14 @@ LRESULT x264vfw_compress_end(CODEC *codec)
             int got_picture;
 
             /* Flush delayed frames */
-            x264vfw_log(codec, X264_LOG_DEBUG, "flush delayed frames\n");
-            while (x264_encoder_delayed_frames(codec->h))
-                if (encode_frame(codec, NULL, &pic_out, NULL, 0, &got_picture) < 0)
-                    break;
+            if (x264_encoder_delayed_frames(codec->h))
+            {
+                x264vfw_log(codec, X264_LOG_DEBUG, "flush delayed frames\n");
+                do {
+                    if (encode_frame(codec, NULL, &pic_out, NULL, 0, &got_picture) < 0)
+                        break;
+                } while (x264_encoder_delayed_frames(codec->h));
+            }
         }
         x264_encoder_close(codec->h);
         codec->h = NULL;
@@ -2008,7 +2015,7 @@ LRESULT x264vfw_decompress_begin(CODEC *codec, BITMAPINFO *lpbiInput, BITMAPINFO
     if (!codec->decoder_frame)
     {
         x264vfw_log(codec, X264_LOG_DEBUG, "av_frame_alloc failed\n");
-        av_freep(&codec->decoder_context);
+        avcodec_free_context(&codec->decoder_context);
         return ICERR_ERROR;
     }
 
@@ -2040,7 +2047,7 @@ LRESULT x264vfw_decompress_begin(CODEC *codec, BITMAPINFO *lpbiInput, BITMAPINFO
     if (avcodec_open2(codec->decoder_context, codec->decoder, NULL) < 0)
     {
         x264vfw_log(codec, X264_LOG_DEBUG, "avcodec_open failed\n");
-        av_freep(&codec->decoder_context);
+        avcodec_free_context(&codec->decoder_context);
         av_frame_free(&codec->decoder_frame);
         av_freep(&codec->decoder_extradata);
         return ICERR_ERROR;
@@ -2121,6 +2128,12 @@ static struct SwsContext *x264vfw_init_sws_context(CODEC *codec, int dst_width, 
         case AVCOL_SPC_SMPTE240M:
             coefficients = sws_getCoefficients(SWS_CS_SMPTE240M);
             break;
+#ifdef SWS_CS_BT2020
+        case AVCOL_SPC_BT2020_NCL:
+        case AVCOL_SPC_BT2020_CL:
+            coefficients = sws_getCoefficients(SWS_CS_BT2020);
+            break;
+#endif
         default:
             coefficients = sws_getCoefficients(SWS_CS_DEFAULT);
             break;
@@ -2142,8 +2155,8 @@ LRESULT x264vfw_decompress(CODEC *codec, ICDECOMPRESS *icd)
 {
     BITMAPINFOHEADER *inhdr = icd->lpbiInput;
     DWORD neededsize = inhdr->biSizeImage + FF_INPUT_BUFFER_PADDING_SIZE;
-    int len, got_picture;
-    AVPicture picture;
+    int ret, got_picture;
+    VFWPicture picture;
     int picture_size;
 
     got_picture = 0;
@@ -2207,12 +2220,22 @@ LRESULT x264vfw_decompress(CODEC *codec, ICDECOMPRESS *icd)
             }
         }
 
-        len = avcodec_decode_video2(codec->decoder_context, codec->decoder_frame, &got_picture, &codec->decoder_pkt);
-        if (len < 0)
+        ret = avcodec_send_packet(codec->decoder_context, &codec->decoder_pkt);
+        if (ret < 0)
         {
-            x264vfw_log(codec, X264_LOG_DEBUG, "avcodec_decode_video2 failed\n");
+            x264vfw_log(codec, X264_LOG_DEBUG, "avcodec_send_packet failed\n");
             return ICERR_ERROR;
         }
+        ret = avcodec_receive_frame(codec->decoder_context, codec->decoder_frame);
+        if (ret == AVERROR(EAGAIN) || ret == AVERROR_EOF)
+            got_picture = 0;
+        else if (ret < 0)
+        {
+            x264vfw_log(codec, X264_LOG_DEBUG, "avcodec_receive_frame failed\n");
+            return ICERR_ERROR;
+        }
+        else
+            got_picture = 1;
 #if X264VFW_USE_VIRTUALDUB_HACK
     }
 #endif
@@ -2275,9 +2298,7 @@ LRESULT x264vfw_decompress(CODEC *codec, ICDECOMPRESS *icd)
 LRESULT x264vfw_decompress_end(CODEC *codec)
 {
     codec->decoder_is_avc = 0;
-    if (codec->decoder_context)
-        avcodec_close(codec->decoder_context);
-    av_freep(&codec->decoder_context);
+    avcodec_free_context(&codec->decoder_context);
     av_frame_free(&codec->decoder_frame);
     av_freep(&codec->decoder_extradata);
     av_freep(&codec->decoder_buf);

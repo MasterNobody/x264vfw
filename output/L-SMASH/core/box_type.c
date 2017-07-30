@@ -1,7 +1,7 @@
 /*****************************************************************************
- * file.h
+ * box_type.c
  *****************************************************************************
- * Copyright (C) 2014-2017 L-SMASH project
+ * Copyright (C) 2017 L-SMASH project
  *
  * Authors: Yusuke Nakamura <muken.the.vfrmaniac@gmail.com>
  *
@@ -20,24 +20,8 @@
 
 /* This file is available under an ISC license. */
 
-int isom_check_compatibility
-(
-    lsmash_file_t *file
-);
+#include "common/internal.h" /* must be placed first */
 
-int isom_check_mandatory_boxes
-(
-    lsmash_file_t *file
-);
-
-int isom_rearrange_data
-(
-    lsmash_file_t        *file,
-    lsmash_adhoc_remux_t *remux,
-    uint8_t              *buf[2],
-    size_t                read_num,
-    size_t                size,
-    uint64_t              read_pos,
-    uint64_t              write_pos,
-    uint64_t              file_size
-);
+/* Box types */
+#define LSMASH_INITIALIZE_BOX_TYPE_HERE
+#include "box_type.h"

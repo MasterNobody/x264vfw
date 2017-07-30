@@ -1,7 +1,7 @@
 /*****************************************************************************
  * config.c: configuration dialog
  *****************************************************************************
- * Copyright (C) 2003-2016 x264vfw project
+ * Copyright (C) 2003-2017 x264vfw project
  *
  * Authors: Justin Clay
  *          Laurent Aimar <fenrir@via.ecp.fr>
@@ -124,7 +124,7 @@ static const reg_int_t reg_int_table[] =
     { "sar_width",       &reg.i_sar_width,       1,   1,  9999                 },
     { "sar_height",      &reg.i_sar_height,      1,   1,  9999                 },
     /* Debug */
-    { "log_level",       &reg.i_log_level,       2,   0,  4                    },
+    { "log_level",       &reg.i_log_level,       2,   0,  4                    }, /* X264VFW_LOG_WARNING */
     { "psnr",            &reg.b_psnr,            1,   0,  1                    },
     { "ssim",            &reg.b_ssim,            1,   0,  1                    },
     { "no_asm",          &reg.b_no_asm,          0,   0,  1                    },
@@ -364,8 +364,8 @@ static void dlg_enable_items(CONFIG_DATA *cfg_data)
     EnableWindow(GetDlgItem(hMainDlg, IDC_OUTPUT_FILE), config->i_output_mode == 1);
     EnableWindow(GetDlgItem(hMainDlg, IDC_OUTPUT_BROWSE), config->i_output_mode == 1);
     /* Debug */
-    EnableWindow(GetDlgItem(hMainDlg, IDC_PSNR), config->i_encoding_type > 0 && config->i_log_level >= 3);
-    EnableWindow(GetDlgItem(hMainDlg, IDC_SSIM), config->i_encoding_type > 0 && config->i_log_level >= 3);
+    EnableWindow(GetDlgItem(hMainDlg, IDC_PSNR), config->i_encoding_type > 0 && config->i_log_level >= X264VFW_LOG_INFO);
+    EnableWindow(GetDlgItem(hMainDlg, IDC_SSIM), config->i_encoding_type > 0 && config->i_log_level >= X264VFW_LOG_INFO);
 }
 
 static void dlg_update_items(CONFIG_DATA *cfg_data)
@@ -1401,8 +1401,8 @@ static char *stringify_names(char *buf, const char * const names[])
 static void help(char *buffer, int longhelp)
 {
 #define H0(...) do { sprintf(buffer, __VA_ARGS__); buffer += strlen(buffer); } while (0)
-#define H1(...) if (longhelp>=1) do { sprintf(buffer, __VA_ARGS__); buffer += strlen(buffer); } while (0)
-#define H2(...) if (longhelp==2) do { sprintf(buffer, __VA_ARGS__); buffer += strlen(buffer); } while (0)
+#define H1(...) if (longhelp >= 1) do { sprintf(buffer, __VA_ARGS__); buffer += strlen(buffer); } while (0)
+#define H2(...) if (longhelp == 2) do { sprintf(buffer, __VA_ARGS__); buffer += strlen(buffer); } while (0)
     char buf[50];
     x264_param_t defaults_value;
     x264_param_t *defaults = &defaults_value;
@@ -1480,8 +1480,8 @@ static void help(char *buffer, int longhelp)
         "                                  - medium:\r\n"
         "                                    Default settings apply.\r\n"
         "                                  - slow:\r\n"
-        "                                    --b-adapt 2 --direct auto --me umh\r\n"
-        "                                    --rc-lookahead 50 --ref 5 --subme 8\r\n"
+        "                                    --direct auto --rc-lookahead 50 --ref 5\r\n"
+        "                                    --subme 8 --trellis 2\r\n"
         "                                  - slower:\r\n"
         "                                    --b-adapt 2 --direct auto --me umh\r\n"
         "                                    --partitions all --rc-lookahead 60\r\n"
@@ -1512,7 +1512,7 @@ static void help(char *buffer, int longhelp)
         "                                  - grain (psy tuning):\r\n"
         "                                    --aq-strength 0.5 --no-dct-decimate\r\n"
         "                                    --deadzone-inter 6 --deadzone-intra 6\r\n"
-        "                                    --deblock -2:-2 --ipratio 1.1 \r\n"
+        "                                    --deblock -2:-2 --ipratio 1.1\r\n"
         "                                    --pbratio 1.1 --psy-rd <unset>:0.25\r\n"
         "                                    --qcomp 0.8\r\n"
         "                                  - stillimage (psy tuning):\r\n"
@@ -1715,17 +1715,19 @@ static void help(char *buffer, int longhelp)
         "                                  - %s\r\n", x264vfw_range_names[0], stringify_names( buf, x264vfw_range_names ) );
     H2( "      --colorprim <string>    Specify color primaries [\"%s\"]\r\n"
         "                                  - undef, bt709, bt470m, bt470bg, smpte170m,\r\n"
-        "                                    smpte240m, film, bt2020\r\n",
+        "                                    smpte240m, film, bt2020, smpte428,\r\n"
+        "                                    smpte431, smpte432\r\n",
                                        strtable_lookup( x264_colorprim_names, defaults->vui.i_colorprim ) );
     H2( "      --transfer <string>     Specify transfer characteristics [\"%s\"]\r\n"
         "                                  - undef, bt709, bt470m, bt470bg, smpte170m,\r\n"
         "                                    smpte240m, linear, log100, log316,\r\n"
         "                                    iec61966-2-4, bt1361e, iec61966-2-1,\r\n"
-        "                                    bt2020-10, bt2020-12\r\n",
+        "                                    bt2020-10, bt2020-12, smpte2084, smpte428\r\n",
                                        strtable_lookup( x264_transfer_names, defaults->vui.i_transfer ) );
     H2( "      --colormatrix <string>  Specify color matrix setting [\"%s\"]\r\n"
         "                                  - undef, bt709, fcc, bt470bg, smpte170m,\r\n"
-        "                                    smpte240m, GBR, YCgCo, bt2020nc, bt2020c\r\n",
+        "                                    smpte240m, GBR, YCgCo, bt2020nc, bt2020c,\r\n"
+        "                                    smpte2085\r\n",
                                        strtable_lookup( x264_colmatrix_names, defaults->vui.i_colmatrix ) );
     H2( "      --chromaloc <integer>   Specify chroma sample location (0 to 5) [%d]\r\n",
                                        defaults->vui.i_chroma_loc );

@@ -1,7 +1,7 @@
 /*****************************************************************************
- * dts.h:
+ * dts.h
  *****************************************************************************
- * Copyright (C) 2012-2015 L-SMASH project
+ * Copyright (C) 2012-2017 L-SMASH project
  *
  * Authors: Yusuke Nakamura <muken.the.vfrmaniac@gmail.com>
  *
@@ -59,6 +59,7 @@ typedef struct
     uint8_t  pcm_resolution;
     uint8_t  stereo_downmix;
     uint8_t  lower_planes;      /* CL, LL and RL */
+    uint8_t  dtsx_extension_present;
 } dts_xll_info_t;
 
 typedef struct

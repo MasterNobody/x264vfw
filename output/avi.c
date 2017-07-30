@@ -1,7 +1,7 @@
 /*****************************************************************************
  * avi.c: avi muxer (using libavformat)
  *****************************************************************************
- * Copyright (C) 2010-2016 x264 project
+ * Copyright (C) 2010-2017 x264 project
  *
  * Authors: Anton Mitrofanov <BugMaster@narod.ru>
  *
@@ -34,6 +34,9 @@ typedef struct
     uint8_t *data;
     unsigned d_max;
     unsigned d_cur;
+    AVRational time_base;
+    int b_repeat_headers;
+    int b_header_written;
 } avi_hnd_t;
 
 static int close_file( hnd_t handle, int64_t largest_pts, int64_t second_largest_pts )
@@ -49,13 +52,8 @@ static int close_file( hnd_t handle, int64_t largest_pts, int64_t second_largest
         h->data = NULL;
     }
 
-    if( h->mux_fc && h->video_stm )
-    {
+    if( h->b_header_written )
         av_write_trailer( h->mux_fc );
-        av_freep( &h->video_stm->codec->extradata );
-        av_freep( &h->video_stm->codec );
-        av_freep( &h->video_stm );
-    }
 
     if( h->mux_fc && h->mux_fc->pb )
     {
@@ -64,7 +62,10 @@ static int close_file( hnd_t handle, int64_t largest_pts, int64_t second_largest
     }
 
     if( h->mux_fc )
-        av_freep( &h->mux_fc );
+    {
+        avformat_free_context( h->mux_fc );
+        h->mux_fc = NULL;
+    }
 
     free( h );
 
@@ -102,6 +103,9 @@ static int open_file( char *psz_filename, hnd_t *p_handle, cli_output_opt_t *opt
     memcpy( &h->opt, opt, sizeof(cli_output_opt_t) );
 
     av_register_all();
+#ifdef AVSTREAM_INIT_IN_INIT_OUTPUT // Only FFmpeg supports this API
+    avformat_alloc_output_context2( &h->mux_fc, NULL, "avi", psz_filename );
+#else
     AVOutputFormat *mux_fmt = av_guess_format( "avi", NULL, NULL );
     if( !mux_fmt )
     {
@@ -110,14 +114,18 @@ static int open_file( char *psz_filename, hnd_t *p_handle, cli_output_opt_t *opt
     }
 
     h->mux_fc = avformat_alloc_context();
+    if( h->mux_fc )
+    {
+        h->mux_fc->oformat = mux_fmt;
+        memset( h->mux_fc->filename, 0, sizeof(h->mux_fc->filename) );
+        snprintf( h->mux_fc->filename, sizeof(h->mux_fc->filename) - 1, "%s", psz_filename );
+    }
+#endif
     if( !h->mux_fc )
     {
         close_file( h, 0, 0 );
         return -1;
     }
-    h->mux_fc->oformat = mux_fmt;
-    memset( h->mux_fc->filename, 0, sizeof(h->mux_fc->filename) );
-    snprintf( h->mux_fc->filename, sizeof(h->mux_fc->filename) - 1, "%s", psz_filename );
 
     if( avio_open( &h->mux_fc->pb, psz_filename, AVIO_FLAG_WRITE ) < 0 )
     {
@@ -133,7 +141,6 @@ static int open_file( char *psz_filename, hnd_t *p_handle, cli_output_opt_t *opt
 static int set_param( hnd_t handle, x264_param_t *p_param )
 {
     avi_hnd_t *h = handle;
-    AVCodecContext *c;
 
     if( !h->mux_fc || h->video_stm )
         return -1;
@@ -142,22 +149,24 @@ static int set_param( hnd_t handle, x264_param_t *p_param )
     if( !h->video_stm )
         return -1;
 
-    c = h->video_stm->codec;
-    c->flags |= p_param->b_repeat_headers ? 0 : CODEC_FLAG_GLOBAL_HEADER;
-    c->time_base.num = p_param->i_timebase_num;
-    c->time_base.den = p_param->i_timebase_den;
-    c->width = p_param->i_width;
-    c->height = p_param->i_height;
-    c->pix_fmt = AV_PIX_FMT_NONE; //not used
+    AVCodecParameters *c = h->video_stm->codecpar;
     c->codec_type = AVMEDIA_TYPE_VIDEO;
     c->codec_id = AV_CODEC_ID_H264;
-    c->codec_tag = MKTAG('H','2','6','4');
+    //c->codec_tag = MKTAG('H','2','6','4');
+    c->width = p_param->i_width;
+    c->height = p_param->i_height;
 
-    h->video_stm->time_base.num = p_param->i_timebase_num;
-    h->video_stm->time_base.den = p_param->i_timebase_den;
+    h->time_base.num = p_param->i_timebase_num;
+    h->time_base.den = p_param->i_timebase_den;
+    h->video_stm->time_base = h->time_base;
 
-    if( !(c->flags & CODEC_FLAG_GLOBAL_HEADER) && avformat_write_header( h->mux_fc, NULL ) )
-        return -1;
+    h->b_repeat_headers = p_param->b_repeat_headers;
+    if( h->b_repeat_headers )
+    {
+        if( avformat_write_header( h->mux_fc, NULL ) < 0 )
+            return -1;
+        h->b_header_written = 1;
+    }
 
     return 0;
 }
@@ -191,15 +200,14 @@ static int write_buffer( avi_hnd_t *h, uint8_t *p_nalu, int i_size )
 static int write_headers( hnd_t handle, x264_nal_t *p_nal )
 {
     avi_hnd_t *h = handle;
-    AVCodecContext *c;
     int i_size = p_nal[0].i_payload + p_nal[1].i_payload + p_nal[2].i_payload;
 
     if( !h->mux_fc || !h->video_stm )
         return -1;
 
-    c = h->video_stm->codec;
-    if( c->flags & CODEC_FLAG_GLOBAL_HEADER )
+    if( !h->b_repeat_headers )
     {
+        AVCodecParameters *c = h->video_stm->codecpar;
         c->extradata_size = i_size - p_nal[2].i_payload;
         av_freep( &c->extradata );
         c->extradata = av_malloc( c->extradata_size );
@@ -210,8 +218,9 @@ static int write_headers( hnd_t handle, x264_nal_t *p_nal )
         /* Write the SEI as part of the first frame */
         if( write_buffer( h, p_nal[2].p_payload, p_nal[2].i_payload ) < 0 )
             return -1;
-        if( avformat_write_header( h->mux_fc, NULL ) )
+        if( avformat_write_header( h->mux_fc, NULL ) < 0 )
             return -1;
+        h->b_header_written = 1;
     }
     else
         if( write_buffer( h, p_nal[0].p_payload, i_size ) < 0 )
@@ -243,8 +252,9 @@ static int write_frame( hnd_t handle, uint8_t *p_nalu, int i_size, x264_picture_
         pkt.data = p_nalu;
         pkt.size = i_size;
     }
-    pkt.pts = av_rescale_q( p_picture->i_pts, h->video_stm->codec->time_base, h->video_stm->time_base );
-    pkt.dts = av_rescale_q( p_picture->i_dts, h->video_stm->codec->time_base, h->video_stm->time_base );
+    pkt.pts = p_picture->i_pts;
+    pkt.dts = p_picture->i_dts;
+    av_packet_rescale_ts( &pkt, h->time_base, h->video_stm->time_base );
     if( av_interleaved_write_frame( h->mux_fc, &pkt ) )
         return -1;
 

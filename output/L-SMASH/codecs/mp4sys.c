@@ -1,7 +1,7 @@
 /*****************************************************************************
- * mp4sys.c:
+ * mp4sys.c
  *****************************************************************************
- * Copyright (C) 2010-2015 L-SMASH project
+ * Copyright (C) 2010-2017 L-SMASH project
  *
  * Authors: Takashi Hirata <silverfilain@gmail.com>
  *          Yusuke Nakamura <muken.the.vfrmaniac@gmail.com>
@@ -1017,7 +1017,7 @@ void mp4sys_print_descriptor( FILE *fp, mp4sys_descriptor_t *descriptor, int ind
 
 int mp4sys_print_codec_specific( FILE *fp, lsmash_file_t *file, isom_box_t *box, int level )
 {
-    assert( fp && file && box && !(box->manager & LSMASH_BINARY_CODED_BOX) );
+    assert( !(box->manager & LSMASH_BINARY_CODED_BOX) );
     isom_esds_t *esds = (isom_esds_t *)box;
     int indent = level;
     lsmash_ifprintf( fp, indent++, "[%s: Elemental Stream Descriptor Box]\n", isom_4cc2str( esds->type.fourcc ) );
@@ -1269,6 +1269,7 @@ mp4sys_descriptor_t *mp4sys_get_descriptor( lsmash_bs_t *bs, void *parent )
 {
     mp4sys_descriptor_head_t header;
     mp4sys_get_descriptor_header( bs, &header );
+    uint64_t end_pos = header.size + lsmash_bs_count( bs );
     mp4sys_descriptor_t *desc;
     switch( header.tag )
     {
@@ -1301,6 +1302,23 @@ mp4sys_descriptor_t *mp4sys_get_descriptor( lsmash_bs_t *bs, void *parent )
                 desc->header = header;
             }
             break;
+    }
+    /* Skip extra bytes if present. */
+    uint64_t skip_bytes = end_pos - lsmash_bs_count( bs );
+    if( skip_bytes )
+    {
+        fprintf( stderr, "[MPEG-4 Systems Descriptor Tag = 0x%02"PRIx8"] has more bytes than expected: %"PRId64"\n", header.tag, skip_bytes );
+        if( !bs->unseekable )
+        {
+            /* The stream is seekable. So, skip by seeking the stream. */
+            uint64_t start = lsmash_bs_get_stream_pos( bs );
+            lsmash_bs_read_seek( bs, skip_bytes, SEEK_CUR );
+            uint64_t end   = lsmash_bs_get_stream_pos( bs );
+            bs->buffer.count += end - start;
+        }
+        else
+            /* The stream is unseekable. So, skip by reading the stream. */
+            lsmash_bs_skip_bytes_64( bs, skip_bytes );
     }
     return desc;
 }

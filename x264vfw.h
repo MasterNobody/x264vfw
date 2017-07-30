@@ -1,7 +1,7 @@
 /*****************************************************************************
  * x264vfw.h: x264vfw main header
  *****************************************************************************
- * Copyright (C) 2003-2016 x264vfw project
+ * Copyright (C) 2003-2017 x264vfw project
  *
  * Authors: Justin Clay
  *          Laurent Aimar <fenrir@via.ecp.fr>
@@ -34,6 +34,10 @@
 #include <libavutil/avutil.h>
 #include <libavutil/opt.h>
 #include <libswscale/swscale.h>
+
+#if !defined(FF_INPUT_BUFFER_PADDING_SIZE) && defined(AV_INPUT_BUFFER_PADDING_SIZE)
+#define FF_INPUT_BUFFER_PADDING_SIZE AV_INPUT_BUFFER_PADDING_SIZE
+#endif
 #endif
 
 #include "csp.h"
@@ -72,7 +76,7 @@
 #define MAX_QUANT   51
 #define MAX_BITRATE 999999
 
-#define MAX_STATS_PATH   (MAX_PATH - 5) /* -5 because x264 add ".temp" for temp file */
+#define MAX_STATS_PATH   (MAX_PATH - 5) /* -5 because x264 adds ".temp" for the temp file */
 #define MAX_STATS_SIZE   X264_MAX(MAX_STATS_PATH, MAX_PATH)
 #define MAX_OUTPUT_PATH  MAX_PATH
 #define MAX_OUTPUT_SIZE  X264_MAX(MAX_OUTPUT_PATH, MAX_PATH)
@@ -81,9 +85,18 @@
 #define COUNT_PRESET     10
 #define COUNT_TUNE       7
 #define COUNT_PROFILE    7
-#define COUNT_LEVEL      18
+#define COUNT_LEVEL      21
 #define COUNT_COLORSPACE 6
 #define COUNT_FOURCC     7
+
+/* Log level */
+/* Use only with direct access to the CONFIG.i_log_level */
+/* Otherwise use X264_LOG_* values */
+#define X264VFW_LOG_NONE    0
+#define X264VFW_LOG_ERROR   1
+#define X264VFW_LOG_WARNING 2
+#define X264VFW_LOG_INFO    3
+#define X264VFW_LOG_DEBUG   4
 
 /* Types */
 typedef struct
@@ -161,6 +174,11 @@ typedef struct
     int b_dlg_updated;
     int b_save;
 } CONFIG_DATA;
+
+typedef struct {
+    uint8_t *data[4];
+    int linesize[4];
+} VFWPicture;
 
 /* CODEC: VFW codec instance */
 typedef struct
